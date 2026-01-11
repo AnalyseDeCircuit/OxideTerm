@@ -29,6 +29,27 @@ pub struct SshConfig {
     /// Terminal rows
     #[serde(default = "default_rows")]
     pub rows: u32,
+    
+    /// Optional proxy chain for jump hosts (ProxyJump)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_chain: Option<Vec<ProxyHopConfig>>,
+}
+
+/// Configuration for a single proxy hop
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyHopConfig {
+    /// Jump host address
+    pub host: String,
+    
+    /// Jump host port (default: 22)
+    #[serde(default = "default_port")]
+    pub port: u16,
+    
+    /// Username for the jump host
+    pub username: String,
+    
+    /// Authentication method for the jump host
+    pub auth: AuthMethod,
 }
 
 /// Authentication methods supported
@@ -76,6 +97,7 @@ impl Default for SshConfig {
             timeout_secs: 30,
             cols: 80,
             rows: 24,
+            proxy_chain: None,
         }
     }
 }

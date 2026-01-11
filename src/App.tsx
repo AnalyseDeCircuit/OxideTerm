@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { 
-  TitleBar, 
   Sidebar, 
   ConnectModal, 
   TabBar, 
@@ -93,12 +92,6 @@ function App() {
       className="flex flex-col h-screen w-screen overflow-hidden"
       style={{ background: 'var(--color-base)' }}
     >
-      {/* Custom Title Bar */}
-      <TitleBar 
-        title="OxideTerm"
-        subtitle={activeSession ? `${activeSession.config.username}@${activeSession.config.host}` : undefined}
-      />
-
       {/* Main Content Area */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
@@ -159,22 +152,24 @@ function App() {
 function WelcomeScreen({ onNewConnection }: { onNewConnection: () => void }) {
   return (
     <div 
-      className="flex flex-col items-center justify-center h-full text-center p-8"
+      className="flex flex-col items-center justify-center h-full text-center px-8 py-12"
       style={{ background: 'var(--color-base)' }}
     >
-      {/* Logo */}
-      <div className="relative mb-8">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue to-mauve flex items-center justify-center shadow-glow">
-          <span className="text-4xl">⚡</span>
+      {/* Logo - Refined with soft outer glow */}
+      <div className="relative mb-10">
+        {/* Outer glow layer */}
+        <div className="absolute -inset-10 bg-gradient-to-r from-blue/15 via-mauve/10 to-blue/15 rounded-full blur-3xl opacity-70" />
+        {/* Icon container */}
+        <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-blue/15 to-mauve/15 border border-white/[0.06] flex items-center justify-center backdrop-blur-sm shadow-lg">
+          <span className="text-2xl">⚡</span>
         </div>
-        <div className="absolute -inset-4 bg-blue/10 rounded-3xl blur-xl -z-10" />
       </div>
       
       {/* Title */}
-      <h1 className="text-3xl font-bold text-text mb-2 tracking-tight">
+      <h1 className="text-2xl font-semibold text-text mb-3 tracking-tight">
         Welcome to OxideTerm
       </h1>
-      <p className="text-subtext-0 mb-8 max-w-md leading-relaxed">
+      <p className="text-sm text-overlay-1 mb-8 max-w-xs leading-relaxed">
         A high-performance SSH terminal built with Rust.
         <br />
         Zero-latency • GPU-accelerated • Secure by design.
@@ -183,28 +178,32 @@ function WelcomeScreen({ onNewConnection }: { onNewConnection: () => void }) {
       {/* CTA Button */}
       <button
         onClick={onNewConnection}
-        className="btn btn-primary text-base px-6 py-2.5 shadow-glow-sm"
+        className="btn-primary px-6 py-2.5 rounded-xl text-sm font-medium"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
         </svg>
         New Connection
       </button>
       
-      {/* Feature Pills */}
-      <div className="mt-12 flex flex-wrap justify-center gap-3">
+      {/* Feature Pills - Demoted visual weight */}
+      <div className="mt-10 flex flex-wrap justify-center gap-2">
         <FeaturePill icon="🚀" label="Zero Latency" />
         <FeaturePill icon="🎨" label="GPU Accelerated" />
-        <FeaturePill icon="🔒" label="Keychain Integration" />
-        <FeaturePill icon="📁" label="SFTP Support" />
+        <FeaturePill icon="🔒" label="Keychain" />
+        <FeaturePill icon="📁" label="SFTP" />
       </div>
       
-      {/* Keyboard Shortcuts Hint */}
-      <div className="mt-8 text-xs text-overlay-0">
-        <span className="px-1.5 py-0.5 bg-surface-0/50 rounded text-overlay-1 font-mono">⌘T</span>
-        <span className="mx-2">New Connection</span>
-        <span className="px-1.5 py-0.5 bg-surface-0/50 rounded text-overlay-1 font-mono">⌘B</span>
-        <span className="mx-2">Toggle Sidebar</span>
+      {/* Keyboard Shortcuts Hint - Refined kbd style */}
+      <div className="mt-8 flex items-center justify-center gap-8 text-[11px] text-overlay-0/70">
+        <div className="flex items-center gap-2">
+          <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">⌘T</kbd>
+          <span>New Connection</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">⌘B</kbd>
+          <span>Toggle Sidebar</span>
+        </div>
       </div>
     </div>
   );
@@ -212,8 +211,8 @@ function WelcomeScreen({ onNewConnection }: { onNewConnection: () => void }) {
 
 function FeaturePill({ icon, label }: { icon: string; label: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-0/50 rounded-full text-sm text-subtext-1">
-      <span>{icon}</span>
+    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.02] rounded-full text-xs text-overlay-0/70">
+      <span className="opacity-70">{icon}</span>
       <span>{label}</span>
     </div>
   );

@@ -1,0 +1,310 @@
+//! Local Port Forwarding
+//!
+//! Forwards connections from a local port to a remote host:port through SSH.
+//! Example: Forward local:8888 -> remote_jupyter:8888
+
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use russh::client::Handle;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
+
+use crate::ssh::{ClientHandler, SshError};
+
+/// Local port forwarding configuration
+#[derive(Debug, Clone)]
+pub struct LocalForward {
+    /// Local address to bind to (e.g., "127.0.0.1:8888")
+    pub local_addr: String,
+    /// Remote host to connect to through SSH (e.g., "localhost")
+    pub remote_host: String,
+    /// Remote port to connect to
+    pub remote_port: u16,
+    /// Description for UI display
+    pub description: Option<String>,
+}
+
+impl LocalForward {
+    /// Create a new local port forward
+    pub fn new(local_addr: impl Into<String>, remote_host: impl Into<String>, remote_port: u16) -> Self {
+        Self {
+            local_addr: local_addr.into(),
+            remote_host: remote_host.into(),
+            remote_port,
+            description: None,
+        }
+    }
+
+    /// Create a Jupyter notebook forward (common HPC use case)
+    pub fn jupyter(local_port: u16, remote_port: u16) -> Self {
+        Self {
+            local_addr: format!("127.0.0.1:{}", local_port),
+            remote_host: "localhost".into(),
+            remote_port,
+            description: Some(format!("Jupyter Notebook (port {})", remote_port)),
+        }
+    }
+
+    /// Create a TensorBoard forward (common ML use case)
+    pub fn tensorboard(local_port: u16, remote_port: u16) -> Self {
+        Self {
+            local_addr: format!("127.0.0.1:{}", local_port),
+            remote_host: "localhost".into(),
+            remote_port,
+            description: Some(format!("TensorBoard (port {})", remote_port)),
+        }
+    }
+
+    /// Set description
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+}
+
+/// Handle to a running local port forward
+pub struct LocalForwardHandle {
+    /// Forward configuration
+    pub config: LocalForward,
+    /// Actual bound address (may differ from requested if port was 0)
+    pub bound_addr: SocketAddr,
+    /// Flag to stop the forwarding loop
+    running: Arc<AtomicBool>,
+    /// Channel to signal stop
+    stop_tx: mpsc::Sender<()>,
+}
+
+impl LocalForwardHandle {
+    /// Stop the port forwarding
+    pub async fn stop(&self) {
+        info!("Stopping local port forward on {}", self.bound_addr);
+        self.running.store(false, Ordering::SeqCst);
+        let _ = self.stop_tx.send(()).await;
+    }
+
+    /// Check if the forward is still running
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+}
+
+/// Start local port forwarding
+/// 
+/// This function spawns a background task that:
+/// 1. Listens on the local address
+/// 2. For each incoming connection, opens a direct-tcpip channel through SSH
+/// 3. Bridges data between the local socket and the SSH channel
+pub async fn start_local_forward(
+    ssh_handle: Arc<Handle<ClientHandler>>,
+    config: LocalForward,
+) -> Result<LocalForwardHandle, SshError> {
+    // Bind to local address
+    let listener = TcpListener::bind(&config.local_addr).await.map_err(|e| {
+        SshError::ConnectionFailed(format!(
+            "Failed to bind to {}: {}",
+            config.local_addr, e
+        ))
+    })?;
+
+    let bound_addr = listener.local_addr().map_err(|e| {
+        SshError::ConnectionFailed(format!("Failed to get bound address: {}", e))
+    })?;
+
+    info!(
+        "Started local port forward: {} -> {}:{}",
+        bound_addr, config.remote_host, config.remote_port
+    );
+
+    let running = Arc::new(AtomicBool::new(true));
+    let running_clone = running.clone();
+    let (stop_tx, mut stop_rx) = mpsc::channel::<()>(1);
+
+    let remote_host = config.remote_host.clone();
+    let remote_port = config.remote_port;
+
+    // Spawn the forwarding task
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // Handle stop signal
+                _ = stop_rx.recv() => {
+                    info!("Local port forward stopped by request");
+                    break;
+                }
+                
+                // Accept new connections
+                accept_result = listener.accept() => {
+                    match accept_result {
+                        Ok((stream, peer_addr)) => {
+                            if !running_clone.load(Ordering::SeqCst) {
+                                break;
+                            }
+                            
+                            debug!("Accepted connection from {} for forward", peer_addr);
+                            
+                            // Clone for the connection handler
+                            let ssh_handle_clone = ssh_handle.clone();
+                            let remote_host_clone = remote_host.clone();
+                            
+                            // Spawn a task to handle this connection
+                            tokio::spawn(async move {
+                                if let Err(e) = handle_forward_connection(
+                                    ssh_handle_clone,
+                                    stream,
+                                    &remote_host_clone,
+                                    remote_port,
+                                ).await {
+                                    warn!("Forward connection error: {}", e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            error!("Accept error: {}", e);
+                            // Small delay before retrying
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                    }
+                }
+            }
+        }
+        
+        running_clone.store(false, Ordering::SeqCst);
+        info!("Local port forward task exited");
+    });
+
+    Ok(LocalForwardHandle {
+        config,
+        bound_addr,
+        running,
+        stop_tx,
+    })
+}
+
+/// Handle a single forwarded connection
+async fn handle_forward_connection(
+    ssh_handle: Arc<Handle<ClientHandler>>,
+    mut local_stream: TcpStream,
+    remote_host: &str,
+    remote_port: u16,
+) -> Result<(), SshError> {
+    // Open direct-tcpip channel to remote
+    let channel = ssh_handle
+        .channel_open_direct_tcpip(
+            remote_host,
+            remote_port as u32,
+            "127.0.0.1",
+            0,
+        )
+        .await
+        .map_err(|e| {
+            SshError::ConnectionFailed(format!(
+                "Failed to open channel to {}:{}: {}",
+                remote_host, remote_port, e
+            ))
+        })?;
+
+    debug!("Opened channel for forward to {}:{}", remote_host, remote_port);
+
+    // Bridge the connection
+    // We need to handle data in both directions
+    let (mut local_read, mut local_write) = local_stream.split();
+    
+    // Create a wrapper to handle the channel I/O
+    let channel = Arc::new(tokio::sync::Mutex::new(channel));
+    let channel_for_read = channel.clone();
+    let channel_for_write = channel.clone();
+
+    // Local -> Remote task
+    let local_to_remote = async {
+        let mut buf = vec![0u8; 32768];
+        loop {
+            match local_read.read(&mut buf).await {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    let mut ch = channel_for_write.lock().await;
+                    if let Err(e) = ch.data(&buf[..n]).await {
+                        debug!("Channel write error: {}", e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    debug!("Local read error: {}", e);
+                    break;
+                }
+            }
+        }
+        // Signal EOF to remote
+        let mut ch = channel_for_write.lock().await;
+        let _ = ch.eof().await;
+    };
+
+    // Remote -> Local task
+    let remote_to_local = async {
+        loop {
+            let mut ch = channel_for_read.lock().await;
+            match ch.wait().await {
+                Some(russh::ChannelMsg::Data { data }) => {
+                    drop(ch); // Release lock before writing
+                    if let Err(e) = local_write.write_all(&data).await {
+                        debug!("Local write error: {}", e);
+                        break;
+                    }
+                }
+                Some(russh::ChannelMsg::Eof) => {
+                    debug!("Channel EOF received");
+                    break;
+                }
+                Some(russh::ChannelMsg::Close) => {
+                    debug!("Channel closed");
+                    break;
+                }
+                None => {
+                    debug!("Channel ended");
+                    break;
+                }
+                _ => continue,
+            }
+        }
+    };
+
+    // Run both directions concurrently
+    tokio::select! {
+        _ = local_to_remote => {}
+        _ = remote_to_local => {}
+    }
+
+    // Close the channel
+    {
+        let mut ch = channel.lock().await;
+        let _ = ch.close().await;
+    }
+
+    debug!("Forward connection closed");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jupyter_forward() {
+        let forward = LocalForward::jupyter(8888, 8888);
+        assert_eq!(forward.local_addr, "127.0.0.1:8888");
+        assert_eq!(forward.remote_host, "localhost");
+        assert_eq!(forward.remote_port, 8888);
+        assert!(forward.description.unwrap().contains("Jupyter"));
+    }
+
+    #[test]
+    fn test_tensorboard_forward() {
+        let forward = LocalForward::tensorboard(6006, 6006);
+        assert_eq!(forward.local_addr, "127.0.0.1:6006");
+        assert_eq!(forward.remote_port, 6006);
+        assert!(forward.description.unwrap().contains("TensorBoard"));
+    }
+}

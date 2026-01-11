@@ -12,7 +12,7 @@
  * - Dynamic theme switching
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -174,10 +174,60 @@ function TerminalInstance({ session, isVisible, onContextMenu }: TerminalInstanc
   const containerRef = useRef<HTMLDivElement>(null);
   const wsConnectedRef = useRef(false);
   
-  // Get terminal config
-  const terminalConfig = useTerminalConfig(state => state.getXtermOptions());
+  // Get terminal config - use shallow comparison to avoid infinite loop
+  // getXtermOptions() returns a new object every call, so we select primitive values instead
   const themeId = useTerminalConfig(state => state.themeId);
+  const fontFamily = useTerminalConfig(state => state.fontFamily);
+  const fontSize = useTerminalConfig(state => state.fontSize);
+  const lineHeight = useTerminalConfig(state => state.lineHeight);
+  const letterSpacing = useTerminalConfig(state => state.letterSpacing);
+  const cursorBlink = useTerminalConfig(state => state.cursorBlink);
+  const cursorStyle = useTerminalConfig(state => state.cursorStyle);
+  const cursorWidth = useTerminalConfig(state => state.cursorWidth);
+  const scrollback = useTerminalConfig(state => state.scrollback);
   const linkHandler = useTerminalConfig(state => state.linkHandler);
+  const getTheme = useTerminalConfig(state => state.getTheme);
+  
+  // Memoize terminal config to avoid re-creating object on every render
+  const terminalConfig = useMemo(() => {
+    const theme = getTheme();
+    return {
+      theme: {
+        background: theme.background,
+        foreground: theme.foreground,
+        cursor: theme.cursor,
+        cursorAccent: theme.cursorAccent,
+        selectionBackground: theme.selectionBackground,
+        selectionForeground: theme.selectionForeground,
+        selectionInactiveBackground: theme.selectionInactiveBackground,
+        black: theme.black,
+        red: theme.red,
+        green: theme.green,
+        yellow: theme.yellow,
+        blue: theme.blue,
+        magenta: theme.magenta,
+        cyan: theme.cyan,
+        white: theme.white,
+        brightBlack: theme.brightBlack,
+        brightRed: theme.brightRed,
+        brightGreen: theme.brightGreen,
+        brightYellow: theme.brightYellow,
+        brightBlue: theme.brightBlue,
+        brightMagenta: theme.brightMagenta,
+        brightCyan: theme.brightCyan,
+        brightWhite: theme.brightWhite,
+      },
+      fontFamily,
+      fontSize,
+      lineHeight,
+      letterSpacing,
+      cursorBlink,
+      cursorStyle,
+      cursorWidth,
+      scrollback,
+      allowProposedApi: true,
+    };
+  }, [themeId, fontFamily, fontSize, lineHeight, letterSpacing, cursorBlink, cursorStyle, cursorWidth, scrollback, getTheme]);
   
   // Get store action directly to avoid dependency issues
   const updateSession = useSessionStore(state => state.updateSession);

@@ -7,11 +7,13 @@ pub mod bridge;
 pub mod commands;
 pub mod session;
 pub mod config;
+pub mod forwarding;
 
 use std::sync::Arc;
 use bridge::BridgeManager;
 use session::SessionRegistry;
 use commands::config::ConfigState;
+use commands::HealthRegistry;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -31,11 +33,19 @@ pub fn run() {
 
     // Create shared session registry
     let registry = Arc::new(SessionRegistry::new());
+    
+    // Create forwarding registry
+    let forwarding_registry = commands::ForwardingRegistry::new();
+    
+    // Create health registry
+    let health_registry = HealthRegistry::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(BridgeManager::new())
         .manage(registry)
+        .manage(forwarding_registry)
+        .manage(health_registry)
         .setup(|app| {
             // Initialize config state asynchronously
             let handle = app.handle().clone();
@@ -77,6 +87,19 @@ pub fn run() {
             commands::config::get_ssh_config_path,
             commands::config::create_group,
             commands::config::delete_group,
+            // Port forwarding commands
+            commands::create_port_forward,
+            commands::stop_port_forward,
+            commands::list_port_forwards,
+            commands::forward_jupyter,
+            commands::forward_tensorboard,
+            commands::stop_all_forwards,
+            // Health check commands
+            commands::get_connection_health,
+            commands::get_quick_health,
+            commands::get_all_health_status,
+            commands::get_health_for_display,
+            commands::simulate_health_response,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

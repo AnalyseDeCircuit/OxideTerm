@@ -1,14 +1,98 @@
-//! SSH Config Parser
+//! SSH Config Parser (Enhanced for HPC)
 //!
 //! Parses ~/.ssh/config to import existing SSH hosts.
-//! Supports common directives: Host, HostName, User, Port, IdentityFile
+//! Supports:
+//! - Basic: Host, HostName, User, Port, IdentityFile
+//! - ProxyJump: Multi-hop jump hosts
+//! - Port Forwarding: LocalForward, RemoteForward, DynamicForward
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
+use serde::{Serialize, Deserialize};
 
-/// A parsed SSH config host entry
-#[derive(Debug, Clone, Default)]
+/// Port forwarding rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortForwardRule {
+    /// Local bind address (default: localhost)
+    pub bind_address: String,
+    /// Local port
+    pub local_port: u16,
+    /// Remote host
+    pub remote_host: String,
+    /// Remote port
+    pub remote_port: u16,
+}
+
+impl PortForwardRule {
+    /// Parse from SSH config format: "[bind_address:]port host:hostport"
+    pub fn parse(value: &str) -> Option<Self> {
+        let parts: Vec<&str> = value.split_whitespace().collect();
+        if parts.len() != 2 {
+            return None;
+        }
+        
+        // Parse local part: [bind_address:]port
+        let (bind_address, local_port) = if parts[0].contains(':') {
+            let local_parts: Vec<&str> = parts[0].rsplitn(2, ':').collect();
+            if local_parts.len() == 2 {
+                (local_parts[1].to_string(), local_parts[0].parse().ok()?)
+            } else {
+                return None;
+            }
+        } else {
+            ("localhost".to_string(), parts[0].parse().ok()?)
+        };
+        
+        // Parse remote part: host:hostport
+        let remote_parts: Vec<&str> = parts[1].rsplitn(2, ':').collect();
+        if remote_parts.len() != 2 {
+            return None;
+        }
+        
+        Some(PortForwardRule {
+            bind_address,
+            local_port,
+            remote_host: remote_parts[1].to_string(),
+            remote_port: remote_parts[0].parse().ok()?,
+        })
+    }
+}
+
+/// Proxy jump host (for ProxyJump directive)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyJumpHost {
+    /// Username (optional, inherits from main config if not specified)
+    pub user: Option<String>,
+    /// Hostname
+    pub host: String,
+    /// Port (default: 22)
+    pub port: u16,
+}
+
+impl ProxyJumpHost {
+    /// Parse from SSH config format: "[user@]host[:port]"
+    pub fn parse(value: &str) -> Option<Self> {
+        let (user, host_port) = if value.contains('@') {
+            let parts: Vec<&str> = value.splitn(2, '@').collect();
+            (Some(parts[0].to_string()), parts[1])
+        } else {
+            (None, value)
+        };
+        
+        let (host, port) = if host_port.contains(':') {
+            let parts: Vec<&str> = host_port.rsplitn(2, ':').collect();
+            (parts[1].to_string(), parts[0].parse().unwrap_or(22))
+        } else {
+            (host_port.to_string(), 22)
+        };
+        
+        Some(ProxyJumpHost { user, host, port })
+    }
+}
+
+/// A parsed SSH config host entry (Enhanced)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SshConfigHost {
     /// Host alias (the pattern after "Host")
     pub alias: String,
@@ -20,7 +104,27 @@ pub struct SshConfigHost {
     pub port: Option<u16>,
     /// Identity file path (IdentityFile directive)
     pub identity_file: Option<String>,
+    
+    /// ProxyJump chain (parsed from ProxyJump directive)
+    #[serde(default)]
+    pub proxy_jump: Vec<ProxyJumpHost>,
+    
+    /// ProxyCommand (alternative to ProxyJump)
+    pub proxy_command: Option<String>,
+    
+    /// Local port forwards
+    #[serde(default)]
+    pub local_forwards: Vec<PortForwardRule>,
+    
+    /// Remote port forwards
+    #[serde(default)]
+    pub remote_forwards: Vec<PortForwardRule>,
+    
+    /// Dynamic forward port (SOCKS proxy)
+    pub dynamic_forward: Option<u16>,
+    
     /// Other directives we don't directly use
+    #[serde(default)]
     pub other: HashMap<String, String>,
 }
 
@@ -38,6 +142,35 @@ impl SshConfigHost {
     /// Check if this is a wildcard pattern
     pub fn is_wildcard(&self) -> bool {
         self.alias.contains('*') || self.alias.contains('?')
+    }
+    
+    /// Check if this host requires a proxy jump
+    pub fn has_proxy_jump(&self) -> bool {
+        !self.proxy_jump.is_empty()
+    }
+    
+    /// Check if this host has any port forwards configured
+    pub fn has_port_forwards(&self) -> bool {
+        !self.local_forwards.is_empty() 
+            || !self.remote_forwards.is_empty() 
+            || self.dynamic_forward.is_some()
+    }
+    
+    /// Get proxy jump chain description (for UI display)
+    pub fn proxy_jump_description(&self) -> Option<String> {
+        if self.proxy_jump.is_empty() {
+            return None;
+        }
+        
+        let hops: Vec<String> = self.proxy_jump.iter().map(|hop| {
+            if let Some(ref user) = hop.user {
+                format!("{}@{}:{}", user, hop.host, hop.port)
+            } else {
+                format!("{}:{}", hop.host, hop.port)
+            }
+        }).collect();
+        
+        Some(hops.join(" → "))
     }
 }
 
@@ -146,9 +279,42 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
                     };
                     host.identity_file = Some(expanded);
                 }
-                // Store other useful directives
-                "proxycommand" | "proxyjump" | "localforward" | "remoteforward" => {
-                    host.other.insert(key.to_string(), value.to_string());
+                // ProxyJump: can be comma-separated for multi-hop
+                "proxyjump" => {
+                    if value.to_lowercase() != "none" {
+                        for jump in value.split(',') {
+                            if let Some(proxy_host) = ProxyJumpHost::parse(jump.trim()) {
+                                host.proxy_jump.push(proxy_host);
+                            }
+                        }
+                    }
+                }
+                // ProxyCommand (alternative to ProxyJump)
+                "proxycommand" => {
+                    if value.to_lowercase() != "none" {
+                        host.proxy_command = Some(value.to_string());
+                    }
+                }
+                // LocalForward: [bind_address:]port host:hostport
+                "localforward" => {
+                    if let Some(rule) = PortForwardRule::parse(value) {
+                        host.local_forwards.push(rule);
+                    }
+                }
+                // RemoteForward: [bind_address:]port host:hostport
+                "remoteforward" => {
+                    if let Some(rule) = PortForwardRule::parse(value) {
+                        host.remote_forwards.push(rule);
+                    }
+                }
+                // DynamicForward: [bind_address:]port
+                "dynamicforward" => {
+                    let port_str = if value.contains(':') {
+                        value.rsplit(':').next().unwrap_or(value)
+                    } else {
+                        value
+                    };
+                    host.dynamic_forward = port_str.parse().ok();
                 }
                 _ => {} // Ignore other directives
             }
@@ -234,5 +400,104 @@ Host prod
         
         assert_eq!(host.effective_hostname(), "myhost");
         assert_eq!(host.effective_port(), 22);
+    }
+    
+    #[test]
+    fn test_parse_proxy_jump() {
+        let content = r#"
+Host hpc
+    HostName login.hpc.edu.cn
+    User zhangsan
+    ProxyJump bastion
+
+Host bastion
+    HostName jump.school.edu.cn
+    User zhangsan
+    IdentityFile ~/.ssh/id_ed25519
+"#;
+        
+        let hosts = parse_ssh_config_content(content).unwrap();
+        assert_eq!(hosts.len(), 2);
+        
+        // HPC host with ProxyJump
+        assert_eq!(hosts[0].alias, "hpc");
+        assert!(hosts[0].has_proxy_jump());
+        assert_eq!(hosts[0].proxy_jump.len(), 1);
+        assert_eq!(hosts[0].proxy_jump[0].host, "bastion");
+        assert_eq!(hosts[0].proxy_jump[0].port, 22);
+        
+        // Bastion host (no proxy)
+        assert_eq!(hosts[1].alias, "bastion");
+        assert!(!hosts[1].has_proxy_jump());
+    }
+    
+    #[test]
+    fn test_parse_multi_hop_proxy() {
+        let content = r#"
+Host compute
+    HostName node001.internal
+    User admin
+    ProxyJump bastion,hpc
+"#;
+        
+        let hosts = parse_ssh_config_content(content).unwrap();
+        assert_eq!(hosts[0].proxy_jump.len(), 2);
+        assert_eq!(hosts[0].proxy_jump[0].host, "bastion");
+        assert_eq!(hosts[0].proxy_jump[1].host, "hpc");
+    }
+    
+    #[test]
+    fn test_parse_proxy_jump_with_user_port() {
+        let content = r#"
+Host target
+    HostName target.example.com
+    ProxyJump admin@jump.example.com:2222
+"#;
+        
+        let hosts = parse_ssh_config_content(content).unwrap();
+        let proxy = &hosts[0].proxy_jump[0];
+        assert_eq!(proxy.user, Some("admin".to_string()));
+        assert_eq!(proxy.host, "jump.example.com");
+        assert_eq!(proxy.port, 2222);
+    }
+    
+    #[test]
+    fn test_parse_port_forwards() {
+        let content = r#"
+Host hpc
+    HostName hpc.edu.cn
+    LocalForward 8888 localhost:8888
+    LocalForward 127.0.0.1:6006 localhost:6006
+    RemoteForward 3000 localhost:3000
+    DynamicForward 1080
+"#;
+        
+        let hosts = parse_ssh_config_content(content).unwrap();
+        let host = &hosts[0];
+        
+        assert_eq!(host.local_forwards.len(), 2);
+        assert_eq!(host.local_forwards[0].local_port, 8888);
+        assert_eq!(host.local_forwards[0].remote_port, 8888);
+        assert_eq!(host.local_forwards[1].bind_address, "127.0.0.1");
+        
+        assert_eq!(host.remote_forwards.len(), 1);
+        assert_eq!(host.remote_forwards[0].remote_port, 3000);
+        
+        assert_eq!(host.dynamic_forward, Some(1080));
+    }
+    
+    #[test]
+    fn test_proxy_jump_description() {
+        let host = SshConfigHost {
+            alias: "target".to_string(),
+            proxy_jump: vec![
+                ProxyJumpHost { user: Some("admin".to_string()), host: "jump1".to_string(), port: 22 },
+                ProxyJumpHost { user: None, host: "jump2".to_string(), port: 2222 },
+            ],
+            ..Default::default()
+        };
+        
+        let desc = host.proxy_jump_description().unwrap();
+        assert_eq!(desc, "admin@jump1:22 → jump2:2222");
     }
 }

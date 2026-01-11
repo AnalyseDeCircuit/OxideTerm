@@ -147,6 +147,7 @@ async fn connect_with_timeout(
         timeout_secs: HANDSHAKE_TIMEOUT_SECS,
         cols: config.cols,
         rows: config.rows,
+        proxy_chain: None, // TODO: Support proxy chain from connection config
     };
 
     // Connect with handshake timeout

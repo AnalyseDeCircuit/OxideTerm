@@ -9,3 +9,5 @@ export { TerminalSearchBar } from './TerminalSearchBar';
 export { TerminalContextMenu } from './TerminalContextMenu';
 export { TerminalSettings } from './TerminalSettings';
 export { SftpDrawer } from './SftpDrawer';
+export { PortForwardingPanel } from './PortForwardingPanel';
+export { ConnectionHealthIndicator, AllConnectionsHealth, useConnectionHealth } from './ConnectionHealthIndicator';

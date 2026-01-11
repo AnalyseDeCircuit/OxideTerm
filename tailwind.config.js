@@ -43,12 +43,16 @@ export default {
         pink: '#f5c2e7',
         flamingo: '#f2cdcd',
         rosewater: '#f5e0dc',
-        // Semantic colors
+        // Semantic colors (Refined)
         sidebar: {
-          bg: 'rgba(24, 24, 37, 0.8)',     // mantle with opacity
-          border: '#313244',
-          hover: 'rgba(49, 50, 68, 0.6)',
-          active: 'rgba(137, 180, 250, 0.15)',
+          bg: 'rgba(24, 24, 37, 0.75)',
+          'bg-solid': '#181825',
+          border: 'rgba(255, 255, 255, 0.04)',
+          'border-subtle': 'rgba(255, 255, 255, 0.02)',
+          hover: 'rgba(255, 255, 255, 0.03)',
+          'hover-strong': 'rgba(255, 255, 255, 0.06)',
+          active: 'rgba(137, 180, 250, 0.12)',
+          'active-border': 'rgba(137, 180, 250, 0.20)',
         },
         titlebar: {
           bg: 'rgba(17, 17, 27, 0.9)',     // crust with opacity

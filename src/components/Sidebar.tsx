@@ -130,26 +130,26 @@ export function Sidebar({
           background: 'var(--sidebar-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderRight: isCollapsed ? 'none' : '1px solid var(--color-surface-0)'
+          borderRight: isCollapsed ? 'none' : '1px solid rgba(255, 255, 255, 0.03)'
         }}
       >
         {!isCollapsed && (
           <>
             {/* Header with Logo */}
-            <div className="pt-2 pb-3 px-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue to-mauve flex items-center justify-center">
-                  <span className="text-base">⚡</span>
+            <div className="pt-5 pb-4 px-4 border-b border-white/[0.02]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue/20 to-mauve/20 border border-white/[0.06] flex items-center justify-center">
+                  <span className="text-lg">⚡</span>
                 </div>
                 <span className="font-semibold text-text tracking-tight">OxideTerm</span>
               </div>
             </div>
 
             {/* New Connection Button */}
-            <div className="px-3 pb-3">
+            <div className="px-4 pt-4 pb-5">
               <button
                 onClick={onNewConnection}
-                className="w-full btn btn-primary text-sm h-9"
+                className="w-full btn-primary py-2.5 rounded-xl"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -159,14 +159,14 @@ export function Sidebar({
             </div>
 
             {/* Tab Switcher */}
-            <div className="flex mx-3 mb-2 p-0.5 bg-surface-0/50 rounded-lg">
+            <div className="flex mx-4 mb-4 p-1 bg-black/20 rounded-xl">
               <button
                 onClick={() => setActiveTab('saved')}
                 className={`
-                  flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+                  flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200
                   ${activeTab === 'saved'
-                    ? 'bg-surface-1 text-text shadow-sm'
-                    : 'text-overlay-1 hover:text-text'
+                    ? 'bg-surface-1/80 text-text shadow-sm'
+                    : 'text-overlay-1 hover:text-text hover:bg-white/[0.03]'
                   }
                 `}
               >
@@ -175,10 +175,10 @@ export function Sidebar({
               <button
                 onClick={() => setActiveTab('active')}
                 className={`
-                  flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all
+                  flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200
                   ${activeTab === 'active'
-                    ? 'bg-surface-1 text-text shadow-sm'
-                    : 'text-overlay-1 hover:text-text'
+                    ? 'bg-surface-1/80 text-text shadow-sm'
+                    : 'text-overlay-1 hover:text-text hover:bg-white/[0.03]'
                   }
                 `}
               >
@@ -192,7 +192,7 @@ export function Sidebar({
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-2">
+            <div className="flex-1 overflow-y-auto px-1">
               {activeTab === 'saved' ? (
                 <ConnectionList
                   onConnect={(conn) => onConnectSaved?.(conn)}
@@ -223,15 +223,15 @@ export function Sidebar({
             </div>
 
             {/* Footer */}
-            <div className="px-3 py-2 border-t border-surface-0/50">
+            <div className="px-4 py-4 border-t border-white/[0.02]">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-overlay-0 font-mono">v0.1.0</span>
-                <div className="flex items-center gap-1">
+                <span className="text-[11px] text-overlay-0/60 font-mono">v0.1.0</span>
+                <div className="flex items-center gap-0.5">
                   {/* Settings Button */}
                   {onOpenSettings && (
                     <button
                       onClick={onOpenSettings}
-                      className="p-1.5 text-overlay-1 hover:text-text hover:bg-surface-0/50 rounded-md transition-colors"
+                      className="p-1.5 text-overlay-0/60 hover:text-text hover:bg-white/[0.04] rounded-lg transition-all duration-200"
                       title="Settings"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -243,7 +243,7 @@ export function Sidebar({
                   {/* Collapse Button */}
                   <button
                     onClick={() => onCollapsedChange?.(!isCollapsed)}
-                    className="p-1.5 text-overlay-1 hover:text-text hover:bg-surface-0/50 rounded-md transition-colors"
+                    className="p-1.5 text-overlay-0/60 hover:text-text hover:bg-white/[0.04] rounded-lg transition-all duration-200"
                     title="Toggle Sidebar (⌘B)"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

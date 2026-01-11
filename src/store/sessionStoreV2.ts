@@ -278,8 +278,14 @@ export const useSessionStoreV2 = create<SessionStoreState>()(
 );
 
 // Selector hooks for common patterns
+// Note: Using inline selector instead of getActiveSession() to avoid creating new object each render
 export const useActiveSession = () => 
-  useSessionStoreV2(state => state.getActiveSession());
+  useSessionStoreV2(state => {
+    if (!state.activeTabId) return null;
+    const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+    if (!activeTab) return null;
+    return state.sessions.get(activeTab.sessionId) ?? null;
+  });
 
 export const useTabs = () => 
   useSessionStoreV2(state => state.tabs);
