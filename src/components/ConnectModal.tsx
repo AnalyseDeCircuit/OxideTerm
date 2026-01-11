@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSessionStore } from '../store';
-import { useSessionStoreV2 } from '../store/sessionStoreV2';
-import { ConnectionConfig } from '../types';
 import type { ConnectRequest } from '../types';
-
-// Feature flag - should match App.tsx
-const USE_V2_UI = true;
 
 interface ConnectModalProps {
   isOpen: boolean;
@@ -22,13 +17,9 @@ interface ConnectModalProps {
 }
 
 export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
-  // v1 store
-  const addSessionV1 = useSessionStore((state) => state.addSession);
-  
-  // v2 store
-  const connectV2 = useSessionStoreV2((state) => state.connect);
-  const isConnectingV2 = useSessionStoreV2((state) => state.isConnecting);
-  const connectionErrorV2 = useSessionStoreV2((state) => state.connectionError);
+  const connect = useSessionStore((state) => state.connect);
+  const isConnecting = useSessionStore((state) => state.isConnecting);
+  const connectionError = useSessionStore((state) => state.connectionError);
   
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
@@ -36,7 +27,6 @@ export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
   const [password, setPassword] = useState('');
   const [authType, setAuthType] = useState<'password' | 'key'>('key');
   const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
-  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Apply prefill data when modal opens
@@ -54,49 +44,24 @@ export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsConnecting(true);
 
-    if (USE_V2_UI) {
-      // V2 connect - use flat structure matching backend
-      const request: ConnectRequest = {
-        host,
-        port: parseInt(port, 10),
-        username,
-        auth_type: authType,
-        password: authType === 'password' ? password : undefined,
-        key_path: authType === 'key' ? keyPath : undefined,
-        cols: 120,
-        rows: 30,
-      };
+    const request: ConnectRequest = {
+      host,
+      port: parseInt(port, 10),
+      username,
+      auth_type: authType,
+      password: authType === 'password' ? password : undefined,
+      key_path: authType === 'key' ? keyPath : undefined,
+      cols: 120,
+      rows: 30,
+    };
 
-      try {
-        await connectV2(request);
-        // Reset form and close modal
-        resetForm();
-        onClose();
-      } catch (err) {
-        setError(String(err));
-      } finally {
-        setIsConnecting(false);
-      }
-    } else {
-      // V1 connect
-      const config: ConnectionConfig = {
-        host,
-        port: parseInt(port, 10),
-        username,
-        password,
-      };
-
-      try {
-        await addSessionV1(config);
-        resetForm();
-        onClose();
-      } catch (err) {
-        setError(String(err));
-      } finally {
-        setIsConnecting(false);
-      }
+    try {
+      await connect(request);
+      resetForm();
+      onClose();
+    } catch (err) {
+      setError(String(err));
     }
   };
 
@@ -109,8 +74,7 @@ export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
     setKeyPath('~/.ssh/id_rsa');
   };
 
-  const displayError = USE_V2_UI ? (error || connectionErrorV2) : error;
-  const isSubmitting = USE_V2_UI ? (isConnecting || isConnectingV2) : isConnecting;
+  const displayError = error || connectionError;
 
   if (!isOpen) return null;
 
@@ -251,16 +215,16 @@ export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
               type="button"
               onClick={onClose}
               className="btn btn-secondary"
-              disabled={isSubmitting}
+              disabled={isConnecting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={isSubmitting}
+              disabled={isConnecting}
             >
-              {isSubmitting ? (
+              {isConnecting ? (
                 <span className="flex items-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                     <circle

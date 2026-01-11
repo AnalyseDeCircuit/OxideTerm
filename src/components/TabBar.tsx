@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useTabs, useSessionStoreV2 } from '../store';
+import { useTabs, useSessionStore } from '../store';
 import type { TabConfig, SessionState } from '../types';
 
 interface TabBarProps {
@@ -18,7 +18,7 @@ interface TabBarProps {
 
 export function TabBar({ onNewTab }: TabBarProps) {
   const tabs = useTabs();
-  const { setActiveTab, reorderTabs, disconnect } = useSessionStoreV2();
+  const { setActiveTab, reorderTabs, disconnect } = useSessionStore();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
@@ -117,7 +117,7 @@ function Tab({
   onClick,
   onClose,
 }: TabProps) {
-  const session = useSessionStoreV2(state => state.sessions.get(tab.sessionId));
+  const session = useSessionStore(state => state.sessions.get(tab.sessionId));
   const state = session?.state ?? 'disconnected';
 
   return (

@@ -1,6 +1,5 @@
-export { useSessionStore } from './sessionStore';
 export { 
-  useSessionStoreV2,
+  useSessionStoreV2 as useSessionStore,
   useActiveSession,
   useTabs,
   useSessionStats,

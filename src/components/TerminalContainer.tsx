@@ -14,7 +14,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 
-import { useSessionStoreV2, useTabs } from '../store';
+import { useSessionStore, useTabs } from '../store';
 import { encodeFrame, FrameDecoder, dataFrame, resizeFrame, heartbeatFrame, MessageType } from '../lib/protocol';
 import type { SessionInfo } from '../types';
 
@@ -34,8 +34,8 @@ interface TerminalContainerProps {
 
 export function TerminalContainer({ className = '' }: TerminalContainerProps) {
   const tabs = useTabs();
-  const sessions = useSessionStoreV2(state => state.sessions);
-  const activeTabId = useSessionStoreV2(state => state.activeTabId);
+  const sessions = useSessionStore(state => state.sessions);
+  const activeTabId = useSessionStore(state => state.activeTabId);
 
   return (
     <div className={`relative flex-1 ${className}`}>
@@ -72,7 +72,7 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
   const wsConnectedRef = useRef(false);
   
   // Get store action directly to avoid dependency issues
-  const updateSession = useSessionStoreV2(state => state.updateSession);
+  const updateSession = useSessionStore(state => state.updateSession);
   
   // Stable callback using ref pattern
   const sessionRef = useRef(session);

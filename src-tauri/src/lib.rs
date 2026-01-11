@@ -53,14 +53,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Legacy commands (v1)
-            commands::ssh_connect,
-            commands::ssh_connect_key,
-            commands::list_sessions,
-            commands::disconnect_session,
-            commands::resize_session,
-            commands::get_session_count,
-            // New commands (v2 with registry)
+            // Session commands (v2 with registry)
             commands::connect_v2,
             commands::disconnect_v2,
             commands::list_sessions_v2,

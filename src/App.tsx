@@ -1,12 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Sidebar, ConnectModal, TerminalView, TabBar, TerminalContainer } from './components';
+import { Sidebar, ConnectModal, TabBar, TerminalContainer } from './components';
 import { useSessionStore } from './store';
-import { useSessionStoreV2 } from './store/sessionStoreV2';
 import { ConnectionInfo, getConnectionPassword } from './lib/config';
 import { useKeyboardShortcuts } from './hooks';
-
-// Feature flag for v2 multi-tab UI
-const USE_V2_UI = true;
 
 function App() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
@@ -19,14 +15,8 @@ function App() {
     keyPath?: string;
   } | null>(null);
   
-  // v1 store (legacy)
-  const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const sessionList = Array.from(sessions.values());
-
-  // v2 store
-  const tabs = useSessionStoreV2((state) => state.tabs);
-  const hasV2Sessions = tabs.length > 0;
+  const tabs = useSessionStore((state) => state.tabs);
+  const hasSessions = tabs.length > 0;
 
   // Handle connecting from saved connection
   const handleConnectSaved = useCallback(async (conn: ConnectionInfo) => {
@@ -78,64 +68,25 @@ function App() {
     onNewTab: openNewConnection,
   });
 
-  if (USE_V2_UI) {
-    return (
-      <div className="flex h-screen w-screen bg-gray-900 overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar 
-          onNewConnection={openNewConnection}
-          onConnectSaved={handleConnectSaved}
-        />
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Tab Bar (only show if sessions exist) */}
-          {hasV2Sessions && <TabBar />}
-
-          {/* Terminal Area */}
-          <div className="flex-1 relative">
-            {!hasV2Sessions ? (
-              <WelcomeScreen onNewConnection={() => setIsConnectModalOpen(true)} />
-            ) : (
-              <TerminalContainer className="h-full" />
-            )}
-          </div>
-        </div>
-
-        {/* Connect Modal */}
-        <ConnectModal
-          isOpen={isConnectModalOpen}
-          onClose={handleCloseModal}
-          prefill={prefillConnection || undefined}
-        />
-      </div>
-    );
-  }
-
-  // Legacy v1 UI
   return (
     <div className="flex h-screen w-screen bg-gray-900 overflow-hidden">
       {/* Sidebar */}
       <Sidebar 
-        onNewConnection={() => setIsConnectModalOpen(true)}
+        onNewConnection={openNewConnection}
         onConnectSaved={handleConnectSaved}
       />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Tab Bar (only show if sessions exist) */}
+        {hasSessions && <TabBar />}
+
         {/* Terminal Area */}
         <div className="flex-1 relative">
-          {sessionList.length === 0 ? (
-            <WelcomeScreen onNewConnection={() => setIsConnectModalOpen(true)} />
+          {!hasSessions ? (
+            <WelcomeScreen onNewConnection={openNewConnection} />
           ) : (
-            sessionList.map((session) => (
-              <TerminalView
-                key={session.id}
-                sessionId={session.id}
-                wsUrl={session.wsUrl || null}
-                isActive={session.id === activeSessionId}
-              />
-            ))
+            <TerminalContainer className="h-full" />
           )}
         </div>
       </div>

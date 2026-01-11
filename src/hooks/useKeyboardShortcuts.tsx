@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { useSessionStoreV2 } from '../store/sessionStoreV2';
+import { useSessionStore } from '../store';
 
 interface UseKeyboardShortcutsOptions {
   onNewTab?: () => void;
@@ -16,10 +16,10 @@ interface UseKeyboardShortcutsOptions {
  * - Cmd/Ctrl+Tab: Cycle through tabs
  */
 export function useKeyboardShortcuts({ onNewTab }: UseKeyboardShortcutsOptions = {}) {
-  const tabs = useSessionStoreV2((state) => state.tabs);
-  const activeTabId = useSessionStoreV2((state) => state.activeTabId);
-  const setActiveTab = useSessionStoreV2((state) => state.setActiveTab);
-  const disconnect = useSessionStoreV2((state) => state.disconnect);
+  const tabs = useSessionStore((state) => state.tabs);
+  const activeTabId = useSessionStore((state) => state.activeTabId);
+  const setActiveTab = useSessionStore((state) => state.setActiveTab);
+  const disconnect = useSessionStore((state) => state.disconnect);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Check for Cmd (Mac) or Ctrl (Windows/Linux)
