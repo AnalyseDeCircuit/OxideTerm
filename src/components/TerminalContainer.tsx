@@ -5,9 +5,10 @@
  * - xterm instances are kept alive using CSS visibility
  * - Tab switching doesn't destroy terminal state or scrollback
  * - Memory-efficient: only active terminal renders WebGL
+ * - Stable WebSocket connections (no cleanup on re-render)
  */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -24,6 +25,7 @@ const terminalInstances = new Map<string, {
   webglAddon?: WebglAddon;
   ws?: WebSocket;
   decoder: FrameDecoder;
+  inputDisposable?: { dispose: () => void };
 }>();
 
 interface TerminalContainerProps {
@@ -34,7 +36,6 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
   const tabs = useTabs();
   const sessions = useSessionStoreV2(state => state.sessions);
   const activeTabId = useSessionStoreV2(state => state.activeTabId);
-  const updateSession = useSessionStoreV2(state => state.updateSession);
 
   return (
     <div className={`relative flex-1 ${className}`}>
@@ -47,11 +48,6 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
             key={session.id}
             session={session}
             isVisible={tab.id === activeTabId}
-            onStatusChange={(status, error) => {
-              if (session.state !== status) {
-                updateSession({ ...session, state: status, error });
-              }
-            }}
           />
         );
       })}
@@ -69,12 +65,25 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
 interface TerminalInstanceProps {
   session: SessionInfo;
   isVisible: boolean;
-  onStatusChange: (status: SessionInfo['state'], error?: string) => void;
 }
 
-function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstanceProps) {
+function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef(terminalInstances.get(session.id));
+  const wsConnectedRef = useRef(false);
+  
+  // Get store action directly to avoid dependency issues
+  const updateSession = useSessionStoreV2(state => state.updateSession);
+  
+  // Stable callback using ref pattern
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  
+  const handleStatusChange = useCallback((status: SessionInfo['state'], error?: string) => {
+    const currentSession = sessionRef.current;
+    if (currentSession.state !== status) {
+      updateSession({ ...currentSession, state: status, error });
+    }
+  }, [updateSession]);
 
   // Initialize terminal instance
   useEffect(() => {
@@ -84,6 +93,7 @@ function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstan
     let instance = terminalInstances.get(session.id);
     
     if (!instance) {
+      console.log(`[Terminal] Creating new instance for session ${session.id}`);
       // Create new terminal
       const terminal = new Terminal({
         cursorBlink: true,
@@ -126,29 +136,47 @@ function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstan
       };
       
       terminalInstances.set(session.id, instance);
+      console.log(`[Terminal] Instance created for session ${session.id}`);
     } else if (!instance.terminal.element?.parentElement) {
       // Re-attach terminal to container
+      console.log(`[Terminal] Re-attaching instance for session ${session.id}`);
       containerRef.current.appendChild(instance.terminal.element!);
     }
-
-    instanceRef.current = instance;
   }, [session.id]);
 
-  // Connect WebSocket when session is connected
+  // Connect WebSocket when session is connected - STABLE dependencies only
   useEffect(() => {
-    const instance = instanceRef.current;
-    if (!instance || !session.ws_url || session.state !== 'connected') return;
-    if (instance.ws?.readyState === WebSocket.OPEN) return;
+    const instance = terminalInstances.get(session.id);
+    
+    // Skip if no instance, no URL, or not connected
+    if (!instance || !session.ws_url || session.state !== 'connected') {
+      return;
+    }
+    
+    // Skip if already connected
+    if (instance.ws?.readyState === WebSocket.OPEN || instance.ws?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+    
+    // Prevent duplicate connections
+    if (wsConnectedRef.current) {
+      return;
+    }
+    wsConnectedRef.current = true;
 
+    console.log(`[WS] Connecting to ${session.ws_url} for session ${session.id}`);
     const ws = new WebSocket(session.ws_url);
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      console.log(`WebSocket connected for session ${session.id}`);
+      console.log(`[WS] WebSocket connected for session ${session.id}`);
       
       // Send initial resize
       const { cols, rows } = instance.terminal;
       ws.send(encodeFrame(resizeFrame(cols, rows)));
+      
+      // Focus terminal
+      instance.terminal.focus();
     };
 
     ws.onmessage = (event) => {
@@ -167,7 +195,7 @@ function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstan
               break;
             case MessageType.Error:
               console.error('Server error:', frame.message);
-              onStatusChange('error', frame.message);
+              handleStatusChange('error', frame.message);
               break;
           }
         }
@@ -175,35 +203,40 @@ function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstan
     };
 
     ws.onclose = () => {
-      console.log(`WebSocket closed for session ${session.id}`);
-      onStatusChange('disconnected');
+      console.log(`[WS] WebSocket closed for session ${session.id}`);
+      wsConnectedRef.current = false;
+      instance.ws = undefined;
+      handleStatusChange('disconnected');
     };
 
     ws.onerror = (error) => {
-      console.error(`WebSocket error for session ${session.id}:`, error);
-      onStatusChange('error', 'WebSocket connection error');
+      console.error(`[WS] WebSocket error for session ${session.id}:`, error);
+      wsConnectedRef.current = false;
+      handleStatusChange('error', 'WebSocket connection error');
     };
 
     instance.ws = ws;
 
-    // Set up input handler
-    const inputDisposable = instance.terminal.onData((data) => {
+    // Set up input handler (only once)
+    if (instance.inputDisposable) {
+      instance.inputDisposable.dispose();
+    }
+    instance.inputDisposable = instance.terminal.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(encodeFrame(dataFrame(data)));
       }
     });
 
+    // Cleanup only on unmount or session change - NOT on every render
     return () => {
-      inputDisposable.dispose();
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
+      // Only cleanup if the session ID is actually changing
+      // or component is truly unmounting
     };
-  }, [session.id, session.ws_url, session.state, onStatusChange]);
+  }, [session.id, session.ws_url, session.state, handleStatusChange]);
 
   // Handle resize
   useEffect(() => {
-    const instance = instanceRef.current;
+    const instance = terminalInstances.get(session.id);
     if (!instance || !isVisible) return;
 
     const handleResize = () => {
@@ -232,19 +265,32 @@ function TerminalInstance({ session, isVisible, onStatusChange }: TerminalInstan
       window.removeEventListener('resize', debouncedResize);
       clearTimeout(resizeTimer);
     };
-  }, [isVisible]);
+  }, [isVisible, session.id]);
 
-  // Cleanup on unmount
+  // Cleanup WebSocket on unmount
   useEffect(() => {
+    const sessionId = session.id;
     return () => {
-      // Don't destroy instance - keep it for potential reactivation
-      // Instance cleanup happens when session is removed from store
+      wsConnectedRef.current = false;
+      const instance = terminalInstances.get(sessionId);
+      if (instance?.ws?.readyState === WebSocket.OPEN) {
+        instance.ws.close();
+      }
     };
-  }, []);
+  }, [session.id]);
+
+  // Handle click to focus terminal
+  const handleClick = () => {
+    const instance = terminalInstances.get(session.id);
+    if (instance && isVisible) {
+      instance.terminal.focus();
+    }
+  };
 
   return (
     <div
       ref={containerRef}
+      onClick={handleClick}
       className={`
         absolute inset-0 
         ${isVisible ? 'visible' : 'invisible'}
