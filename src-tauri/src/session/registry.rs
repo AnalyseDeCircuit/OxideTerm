@@ -4,14 +4,15 @@
 //! Includes connection limiting and lifecycle management.
 
 use dashmap::DashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc;
 use tracing::{info, warn, debug};
+use russh::client::Handle;
 
 use super::state::SessionState;
 use super::types::{SessionConfig, SessionEntry, SessionInfo, SessionStats};
-use crate::ssh::SessionCommand;
+use crate::ssh::{SessionCommand, ClientHandler};
 
 /// Default maximum concurrent sessions
 const DEFAULT_MAX_SESSIONS: usize = 20;
@@ -106,6 +107,7 @@ impl SessionRegistry {
         session_id: &str,
         ws_port: u16,
         cmd_tx: mpsc::Sender<SessionCommand>,
+        ssh_handle: Arc<Handle<ClientHandler>>,
     ) -> Result<(), RegistryError> {
         let mut entry = self.sessions
             .get_mut(session_id)
@@ -116,6 +118,7 @@ impl SessionRegistry {
 
         entry.ws_port = Some(ws_port);
         entry.cmd_tx = Some(cmd_tx);
+        entry.ssh_handle = Some(ssh_handle);
 
         info!("Session {} connected on port {}", session_id, ws_port);
         Ok(())
@@ -163,6 +166,7 @@ impl SessionRegistry {
                 .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
             entry.ws_port = None;
             entry.cmd_tx = None;
+            entry.ssh_handle = None;
 
             info!("Session {} disconnected", session_id);
         }
@@ -197,6 +201,13 @@ impl SessionRegistry {
     /// Get command sender for a session
     pub fn get_cmd_tx(&self, session_id: &str) -> Option<mpsc::Sender<SessionCommand>> {
         self.sessions.get(session_id).and_then(|entry| entry.cmd_tx.clone())
+    }
+
+    /// Get cloned SSH handle for a session (used to open additional channels)
+    pub fn get_ssh_handle(&self, session_id: &str) -> Option<Arc<Handle<ClientHandler>>> {
+        self.sessions
+            .get(session_id)
+            .and_then(|entry| entry.ssh_handle.clone())
     }
 
     /// List all sessions

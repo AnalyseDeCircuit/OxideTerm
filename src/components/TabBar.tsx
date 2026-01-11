@@ -11,13 +11,15 @@
 import { useState, useCallback } from 'react';
 import { useTabs, useSessionStore } from '../store';
 import type { TabConfig, SessionState } from '../types';
+import { ConnectionHealthIndicator } from './ConnectionHealthIndicator';
 
 interface TabBarProps {
   onNewTab?: () => void;
   onOpenSftp?: () => void;
+  onOpenPortForwarding?: () => void;
 }
 
-export function TabBar({ onNewTab, onOpenSftp }: TabBarProps) {
+export function TabBar({ onNewTab, onOpenSftp, onOpenPortForwarding }: TabBarProps) {
   const tabs = useTabs();
   const { setActiveTab, reorderTabs, disconnect } = useSessionStore();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -117,6 +119,19 @@ export function TabBar({ onNewTab, onOpenSftp }: TabBarProps) {
         </button>
       )}
 
+      {/* Port Forwarding Button */}
+      {onOpenPortForwarding && (
+        <button
+          onClick={onOpenPortForwarding}
+          className="flex items-center justify-center w-8 h-8 mr-1 text-overlay-1 hover:text-mauve hover:bg-mauve/10 rounded-md transition-colors"
+          title="Port Forwarding"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+        </button>
+      )}
+
       {/* SFTP Button */}
       {onOpenSftp && (
         <button
@@ -201,6 +216,16 @@ function Tab({
 
       {/* State Indicator */}
       <StateIndicator state={state} color={tab.color} />
+      
+      {/* Health Indicator (only for connected sessions) */}
+      {state === 'connected' && (
+        <ConnectionHealthIndicator
+          sessionId={tab.sessionId}
+          size="sm"
+          showDetails={false}
+          className="mr-1"
+        />
+      )}
       
       {/* Title */}
       <span className="flex-1 truncate text-[13px] font-medium">

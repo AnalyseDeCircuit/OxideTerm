@@ -1,11 +1,13 @@
 //! Session Types and Data Structures
 
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
+use russh::client::Handle;
 
 use super::state::{SessionState, SessionStateMachine};
-use crate::ssh::SessionCommand;
+use crate::ssh::{SessionCommand, ClientHandler};
 
 /// Authentication method for SSH connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +171,8 @@ pub struct SessionEntry {
     pub ws_port: Option<u16>,
     /// Command channel to SSH session
     pub cmd_tx: Option<mpsc::Sender<SessionCommand>>,
+    /// Shared SSH handle for opening additional channels (e.g., SFTP)
+    pub ssh_handle: Option<Arc<Handle<ClientHandler>>>,
     /// Creation timestamp
     pub created_at: Instant,
     /// Tab order (for UI sorting)
@@ -184,6 +188,7 @@ impl SessionEntry {
             state_machine: SessionStateMachine::new(),
             ws_port: None,
             cmd_tx: None,
+            ssh_handle: None,
             created_at: Instant::now(),
             order,
         }

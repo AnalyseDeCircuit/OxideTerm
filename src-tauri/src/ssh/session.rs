@@ -1,5 +1,6 @@
 //! SSH Session management
 
+use std::sync::Arc;
 use russh::client::Handle;
 use russh::ChannelMsg;
 use tokio::sync::mpsc;
@@ -41,20 +42,26 @@ pub struct ExtendedSessionHandle {
 
 /// SSH Session with PTY
 pub struct SshSession {
-    handle: Handle<ClientHandler>,
+    handle: Arc<Handle<ClientHandler>>,
     cols: u32,
     rows: u32,
 }
 
 impl SshSession {
     pub fn new(handle: Handle<ClientHandler>, cols: u32, rows: u32) -> Self {
-        Self { handle, cols, rows }
+        Self { handle: Arc::new(handle), cols, rows }
     }
 
     /// Consume this session and return the underlying SSH handle.
     /// Useful for SFTP operations that need direct channel access.
-    pub fn into_handle(self) -> Handle<ClientHandler> {
+    /// Returns the Arc so it can be shared.
+    pub fn into_handle(self) -> Arc<Handle<ClientHandler>> {
         self.handle
+    }
+
+    /// Get a cloned Arc to the underlying SSH handle for sharing.
+    pub fn shared_handle(&self) -> Arc<Handle<ClientHandler>> {
+        Arc::clone(&self.handle)
     }
 
     /// Get a reference to the underlying SSH handle.

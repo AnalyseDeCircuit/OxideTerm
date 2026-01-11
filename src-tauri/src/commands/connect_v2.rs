@@ -16,6 +16,7 @@ use tracing::{info, warn, error};
 use crate::session::{SessionRegistry, SessionConfig, AuthMethod, SessionInfo, SessionStats, KeyAuth};
 use crate::ssh::{SshClient, SshConfig, AuthMethod as SshAuthMethod};
 use crate::bridge::{WsBridge, BridgeManager};
+use crate::sftp::session::SftpRegistry;
 
 /// Connection timeout settings
 const HANDSHAKE_TIMEOUT_SECS: u64 = 30;
@@ -162,6 +163,9 @@ async fn connect_with_timeout(
     .map_err(|_| format!("Connection timeout after {}s", HANDSHAKE_TIMEOUT_SECS))?
     .map_err(|e| format!("Connection failed: {}", e))?;
 
+    // Get shared handle for reuse (e.g., SFTP) before consuming the session
+    let shared_handle = session.shared_handle();
+
     // Request shell with auth timeout
     let shell_future = session.request_shell_extended();
     
@@ -182,7 +186,7 @@ async fn connect_with_timeout(
         .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
     // Update registry with success
-    registry.connect_success(session_id, ws_port, cmd_tx)
+    registry.connect_success(session_id, ws_port, cmd_tx, shared_handle)
         .map_err(|e| format!("Failed to update session state: {}", e))?;
 
     let ws_url = format!("ws://localhost:{}", ws_port);
@@ -205,6 +209,7 @@ pub async fn disconnect_v2(
     session_id: String,
     registry: State<'_, Arc<SessionRegistry>>,
     bridge_manager: State<'_, BridgeManager>,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
 ) -> Result<bool, String> {
     info!("Disconnecting session: {}", session_id);
 
@@ -216,6 +221,9 @@ pub async fn disconnect_v2(
 
     // Also unregister from bridge manager
     bridge_manager.unregister(&session_id);
+
+    // Drop any cached SFTP handle tied to this session
+    sftp_registry.remove(&session_id);
 
     Ok(true)
 }

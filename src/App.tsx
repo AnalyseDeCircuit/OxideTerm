@@ -5,7 +5,8 @@ import {
   TabBar, 
   TerminalContainer, 
   TerminalSettings,
-  SftpDrawer 
+  SftpDrawer,
+  PortForwardingPanel,
 } from './components';
 import { useSessionStore } from './store';
 import { ConnectionInfo, getConnectionPassword } from './lib/config';
@@ -16,6 +17,7 @@ function App() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSftpOpen, setIsSftpOpen] = useState(false);
+  const [isPortForwardingOpen, setIsPortForwardingOpen] = useState(false);
   
   // Sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -110,6 +112,16 @@ function App() {
             <TabBar 
               onNewTab={openNewConnection}
               onOpenSftp={() => setIsSftpOpen(true)}
+              onOpenPortForwarding={() => setIsPortForwardingOpen(!isPortForwardingOpen)}
+            />
+          )}
+
+          {/* Port Forwarding Panel (collapsible) */}
+          {hasSessions && isPortForwardingOpen && activeTab && (
+            <PortForwardingPanel 
+              sessionId={activeTab.sessionId}
+              isExpanded={true}
+              onToggle={() => setIsPortForwardingOpen(false)}
             />
           )}
 

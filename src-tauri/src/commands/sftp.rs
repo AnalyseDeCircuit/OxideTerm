@@ -2,8 +2,7 @@
 //!
 //! Exposes SFTP functionality to the frontend.
 //! 
-//! Note: SFTP uses a separate SSH connection from the terminal session.
-//! This is a common pattern as SFTP requires its own channel.
+//! Note: SFTP opens its own SSH channel on the already-connected session handle.
 
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -15,8 +14,6 @@ use crate::sftp::{
     session::{SftpRegistry, SftpSession},
     types::*,
 };
-use crate::ssh::{SshClient, SshConfig, AuthMethod as SshAuthMethod};
-use crate::session::AuthMethod;
 
 /// Initialize SFTP for a session
 #[tauri::command]
@@ -35,43 +32,10 @@ pub async fn sftp_init(
         }
     }
 
-    // Get session config to establish new SSH connection for SFTP
-    let config = session_registry
-        .get_config(&session_id)
+    // Reuse the existing SSH handle instead of creating a new connection
+    let handle = session_registry
+        .get_ssh_handle(&session_id)
         .ok_or_else(|| SftpError::SessionNotFound(session_id.clone()))?;
-
-    // Convert auth method
-    let ssh_auth = match &config.auth {
-        AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
-        AuthMethod::Key { key_path, passphrase } => SshAuthMethod::Key {
-            key_path: key_path.clone(),
-            passphrase: passphrase.clone(),
-        },
-        AuthMethod::Agent => {
-            return Err(SftpError::SubsystemNotAvailable("SSH Agent not supported yet".to_string()));
-        }
-    };
-
-    let ssh_config = SshConfig {
-        host: config.host.clone(),
-        port: config.port,
-        username: config.username.clone(),
-        auth: ssh_auth,
-        timeout_secs: 30,
-        cols: 80,
-        rows: 24,
-        proxy_chain: None,
-    };
-
-    // Establish new SSH connection for SFTP
-    let client = SshClient::new(ssh_config);
-    let ssh_session = client
-        .connect()
-        .await
-        .map_err(|e| SftpError::ChannelError(e.to_string()))?;
-
-    // Get the underlying handle for SFTP
-    let handle = ssh_session.into_handle();
 
     // Create SFTP session
     let sftp = SftpSession::new(&handle, session_id.clone()).await?;

@@ -10,8 +10,8 @@ import type {
 } from '../types/sftp';
 
 /**
- * Initialize SFTP for a session
- * Creates a new SSH connection for SFTP operations
+ * Initialize SFTP for a session.
+ * Idempotent and reuses the existing SSH connection.
  */
 export async function initSftp(sessionId: string): Promise<string> {
   return invoke<string>('sftp_init', { sessionId });

@@ -139,26 +139,40 @@ export const useSftpStore = create<SftpStore>()(
     initSession: async (sessionId: string) => {
       const { sessions } = get();
 
+      // Short-circuit if this session is already initialized in the store.
+      const existingState = sessions.get(sessionId);
+      if (existingState?.initialized) {
+        set({ activeSessionId: sessionId });
+        return;
+      }
+
       // Update state to loading
       const newSessions = new Map(sessions);
       newSessions.set(sessionId, {
-        ...DEFAULT_SESSION_STATE,
+        ...(existingState ?? DEFAULT_SESSION_STATE),
         loading: true,
+        error: null,
       });
       set({ sessions: newSessions });
 
       try {
-        await sftpApi.initSftp(sessionId);
-        const cwd = await sftpApi.pwd(sessionId);
+        const alreadyInitialized = await sftpApi.isSftpInitialized(sessionId);
+        const cwd = alreadyInitialized
+          ? await sftpApi.pwd(sessionId)
+          : await sftpApi.initSftp(sessionId);
+
         const files = await sftpApi.listDir(sessionId, cwd, get().filter);
 
         const updatedSessions = new Map(get().sessions);
+        const baseState = updatedSessions.get(sessionId) ?? DEFAULT_SESSION_STATE;
+
         updatedSessions.set(sessionId, {
-          ...DEFAULT_SESSION_STATE,
+          ...baseState,
           initialized: true,
           cwd,
           files,
           loading: false,
+          error: null,
         });
         set({ sessions: updatedSessions, activeSessionId: sessionId });
       } catch (error) {
