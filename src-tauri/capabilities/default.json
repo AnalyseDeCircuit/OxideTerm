@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default"
+  ],
+  "remote": {
+    "urls": ["ws://localhost:*", "ws://127.0.0.1:*"]
+  }
+}

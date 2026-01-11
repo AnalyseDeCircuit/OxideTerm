@@ -1,0 +1,49 @@
+[package]
+name = "oxideterm"
+version = "0.1.0"
+description = "A modern SSH terminal client built with Rust and Tauri"
+authors = ["OxideTerm Team"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "oxideterm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+
+# SSH Protocol
+russh = "0.48"
+russh-keys = "0.48"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# Binary Protocol
+bytes = "1"
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+
+# Session Management
+dashmap = "6"
+dirs = "5"
+
+
