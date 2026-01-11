@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useSessionStore } from '../store';
+import { useSessionStoreV2 } from '../store/sessionStoreV2';
 import { ConnectionConfig } from '../types';
+import type { ConnectRequest } from '../types';
+
+// Feature flag - should match App.tsx
+const USE_V2_UI = true;
 
 interface ConnectModalProps {
   isOpen: boolean;
@@ -8,7 +13,13 @@ interface ConnectModalProps {
 }
 
 export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
-  const addSession = useSessionStore((state) => state.addSession);
+  // v1 store
+  const addSessionV1 = useSessionStore((state) => state.addSession);
+  
+  // v2 store
+  const connectV2 = useSessionStoreV2((state) => state.connect);
+  const isConnectingV2 = useSessionStoreV2((state) => state.isConnecting);
+  const connectionErrorV2 = useSessionStoreV2((state) => state.connectionError);
   
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
@@ -22,27 +33,58 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
     setError(null);
     setIsConnecting(true);
 
-    const config: ConnectionConfig = {
-      host,
-      port: parseInt(port, 10),
-      username,
-      password,
-    };
+    if (USE_V2_UI) {
+      // V2 connect - use flat structure matching backend
+      const request: ConnectRequest = {
+        host,
+        port: parseInt(port, 10),
+        username,
+        auth_type: 'password',
+        password,
+        cols: 120,
+        rows: 30,
+      };
 
-    try {
-      await addSession(config);
-      // Reset form and close modal
-      setHost('');
-      setPort('22');
-      setUsername('');
-      setPassword('');
-      onClose();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setIsConnecting(false);
+      try {
+        await connectV2(request);
+        // Reset form and close modal
+        setHost('');
+        setPort('22');
+        setUsername('');
+        setPassword('');
+        onClose();
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setIsConnecting(false);
+      }
+    } else {
+      // V1 connect
+      const config: ConnectionConfig = {
+        host,
+        port: parseInt(port, 10),
+        username,
+        password,
+      };
+
+      try {
+        await addSessionV1(config);
+        // Reset form and close modal
+        setHost('');
+        setPort('22');
+        setUsername('');
+        setPassword('');
+        onClose();
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setIsConnecting(false);
+      }
     }
   };
+
+  const displayError = USE_V2_UI ? (error || connectionErrorV2) : error;
+  const isSubmitting = USE_V2_UI ? (isConnecting || isConnectingV2) : isConnecting;
 
   if (!isOpen) return null;
 
@@ -118,9 +160,9 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
           </div>
 
           {/* Error message */}
-          {error && (
+          {displayError && (
             <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-300 text-sm">
-              {error}
+              {displayError}
             </div>
           )}
 
@@ -130,16 +172,16 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
               type="button"
               onClick={onClose}
               className="btn btn-secondary"
-              disabled={isConnecting}
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={isConnecting}
+              disabled={isSubmitting}
             >
-              {isConnecting ? (
+              {isSubmitting ? (
                 <span className="flex items-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                     <circle

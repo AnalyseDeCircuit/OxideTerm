@@ -49,6 +49,12 @@ export interface SessionInfo {
   color: string;
   uptime_secs: number;
   order: number;
+  // Helper for compatibility with v1 session display
+  config: {
+    host: string;
+    port: number;
+    username: string;
+  };
 }
 
 /**

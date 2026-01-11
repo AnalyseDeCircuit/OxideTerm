@@ -76,10 +76,20 @@ export const useSessionStoreV2 = create<SessionStoreState>()(
         
         const { session } = response;
         
+        // Add config helper for compatibility
+        const sessionWithConfig: SessionInfo = {
+          ...session,
+          config: {
+            host: session.host,
+            port: session.port,
+            username: session.username,
+          },
+        };
+        
         // Update sessions map
         set(state => {
           const newSessions = new Map(state.sessions);
-          newSessions.set(session.id, session);
+          newSessions.set(session.id, sessionWithConfig);
           
           // Create tab for new session
           const newTab: TabConfig = {
