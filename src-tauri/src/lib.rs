@@ -8,12 +8,14 @@ pub mod commands;
 pub mod session;
 pub mod config;
 pub mod forwarding;
+pub mod sftp;
 
 use std::sync::Arc;
 use bridge::BridgeManager;
 use session::SessionRegistry;
 use commands::config::ConfigState;
 use commands::HealthRegistry;
+use sftp::session::SftpRegistry;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -39,6 +41,9 @@ pub fn run() {
     
     // Create health registry
     let health_registry = HealthRegistry::new();
+    
+    // Create SFTP registry
+    let sftp_registry = Arc::new(SftpRegistry::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -46,6 +51,7 @@ pub fn run() {
         .manage(registry)
         .manage(forwarding_registry)
         .manage(health_registry)
+        .manage(sftp_registry)
         .setup(|app| {
             // Initialize config state asynchronously
             let handle = app.handle().clone();
@@ -100,6 +106,20 @@ pub fn run() {
             commands::get_all_health_status,
             commands::get_health_for_display,
             commands::simulate_health_response,
+            // SFTP commands
+            commands::sftp_init,
+            commands::sftp_list_dir,
+            commands::sftp_stat,
+            commands::sftp_preview,
+            commands::sftp_download,
+            commands::sftp_upload,
+            commands::sftp_delete,
+            commands::sftp_mkdir,
+            commands::sftp_rename,
+            commands::sftp_pwd,
+            commands::sftp_cd,
+            commands::sftp_close,
+            commands::sftp_is_initialized,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

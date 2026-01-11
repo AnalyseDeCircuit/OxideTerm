@@ -51,6 +51,17 @@ impl SshSession {
         Self { handle, cols, rows }
     }
 
+    /// Consume this session and return the underlying SSH handle.
+    /// Useful for SFTP operations that need direct channel access.
+    pub fn into_handle(self) -> Handle<ClientHandler> {
+        self.handle
+    }
+
+    /// Get a reference to the underlying SSH handle.
+    pub fn handle(&self) -> &Handle<ClientHandler> {
+        &self.handle
+    }
+
     /// Request a PTY and start an interactive shell session
     pub async fn request_shell(self) -> Result<SessionHandle, SshError> {
         let session_id = uuid::Uuid::new_v4().to_string();

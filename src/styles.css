@@ -9,6 +9,46 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 /* ============================================
+   Font Rendering Optimization (Fix for uneven stroke width)
+   Fixes pixel snapping issues on Retina/HiDPI displays
+   ============================================ */
+body {
+  /* macOS font smoothing - use grayscale for more consistent stroke width */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Prevent GPU texture filtering artifacts */
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Terminal-specific rendering fixes */
+.xterm {
+  /* Force pixel-perfect rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent subpixel positioning */
+  font-feature-settings: "kern" 0;
+  text-rendering: geometricPrecision;
+  /* Prevent GPU interpolation artifacts */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.xterm-screen {
+  /* Ensure crisp edges for canvas */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.xterm canvas {
+  /* Prevent canvas scaling artifacts */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /* Ensure integer pixel positioning */
+  shape-rendering: crispEdges;
+}
+
+/* ============================================
    CSS Variables (Design Tokens)
    ============================================ */
 :root {

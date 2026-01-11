@@ -14,9 +14,10 @@ import type { TabConfig, SessionState } from '../types';
 
 interface TabBarProps {
   onNewTab?: () => void;
+  onOpenSftp?: () => void;
 }
 
-export function TabBar({ onNewTab }: TabBarProps) {
+export function TabBar({ onNewTab, onOpenSftp }: TabBarProps) {
   const tabs = useTabs();
   const { setActiveTab, reorderTabs, disconnect } = useSessionStore();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -112,6 +113,19 @@ export function TabBar({ onNewTab }: TabBarProps) {
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      )}
+
+      {/* SFTP Button */}
+      {onOpenSftp && (
+        <button
+          onClick={onOpenSftp}
+          className="flex items-center justify-center w-8 h-8 mr-2 text-overlay-1 hover:text-teal hover:bg-teal/10 rounded-md transition-colors"
+          title="File Manager (SFTP)"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
         </button>
       )}

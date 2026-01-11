@@ -486,14 +486,18 @@ function TerminalInstance({ session, isVisible, onContextMenu }: TerminalInstanc
       ref={containerRef}
       onClick={handleClick}
       onContextMenu={onContextMenu}
-      className={`
-        absolute inset-0 
-        ${isVisible ? 'visible' : 'invisible'}
-      `}
+      className="absolute inset-0"
       style={{ 
         // Use visibility instead of display to keep terminal rendered
         visibility: isVisible ? 'visible' : 'hidden',
         zIndex: isVisible ? 1 : 0,
+        // Force integer pixel positioning to prevent subpixel rendering artifacts
+        // This fixes uneven stroke width in monospace fonts on Retina displays
+        transform: 'translate3d(0, 0, 0)',
+        // Ensure pixel-perfect rendering
+        imageRendering: 'pixelated',
+        // Disable font smoothing variations
+        WebkitFontSmoothing: 'antialiased',
       }}
     />
   );

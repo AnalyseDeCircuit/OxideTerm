@@ -6,6 +6,9 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { FileExplorer } from './sftp/FileExplorer';
+import { PreviewModal } from './sftp/PreviewModal';
+import { TransferQueue } from './sftp/TransferQueue';
 
 interface SftpDrawerProps {
   isOpen: boolean;
@@ -128,65 +131,17 @@ export function SftpDrawer({ isOpen, onClose, sessionId, hostName }: SftpDrawerP
           </button>
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-0/50">
-          <button className="btn btn-ghost btn-icon text-xs" title="Upload">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          </button>
-          <button className="btn btn-ghost btn-icon text-xs" title="Download">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          </button>
-          <button className="btn btn-ghost btn-icon text-xs" title="Refresh">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <div className="flex-1" />
-          <button className="btn btn-ghost btn-icon text-xs" title="New Folder">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-            </svg>
-          </button>
+        {/* File Explorer */}
+        <div className="flex-1 overflow-hidden">
+          <FileExplorer sessionId={sessionId} />
         </div>
 
-        {/* Path Bar */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-surface-0/30">
-          <svg className="w-4 h-4 text-overlay-0 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          <input
-            type="text"
-            defaultValue="/home/user"
-            className="flex-1 px-2 py-1 text-sm font-mono bg-transparent border-none outline-none text-text placeholder-overlay-0"
-            placeholder="/path/to/directory"
-          />
-        </div>
-
-        {/* File List (Placeholder) */}
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-surface-0/50 flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-overlay-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <p className="text-sm text-overlay-1 mb-2">SFTP Coming Soon</p>
-            <p className="text-xs text-overlay-0 max-w-[200px]">
-              File browser with upload/download will be available in Week 7
-            </p>
-          </div>
-        </div>
-
-        {/* Status Bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-t border-surface-0/50 text-xs text-overlay-0">
-          <span>0 items</span>
-          <span>SFTP</span>
-        </div>
+        {/* Transfer Queue */}
+        <TransferQueue />
       </div>
+
+      {/* Preview Modal */}
+      <PreviewModal />
     </>
   );
 }
