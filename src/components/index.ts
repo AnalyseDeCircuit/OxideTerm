@@ -1,6 +1,11 @@
+export { TitleBar } from './TitleBar';
 export { ConnectModal } from './ConnectModal';
 export { Sidebar } from './Sidebar';
 export { TabBar } from './TabBar';
-export { TerminalContainer, cleanupTerminalInstance } from './TerminalContainer';
+export { TerminalContainer, cleanupTerminalInstance, getTerminalInstance } from './TerminalContainer';
 export { ConnectionList } from './ConnectionList';
 export { ConnectionFormModal } from './ConnectionFormModal';
+export { TerminalSearchBar } from './TerminalSearchBar';
+export { TerminalContextMenu } from './TerminalContextMenu';
+export { TerminalSettings } from './TerminalSettings';
+export { SftpDrawer } from './SftpDrawer';

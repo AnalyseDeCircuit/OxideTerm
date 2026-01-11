@@ -1,7 +1,72 @@
 @import "tailwindcss";
 
-/* 基础样式重置 */
-* {
+/* ============================================
+   OxideTerm Design System
+   Theme: Catppuccin Mocha + macOS Native Feel
+   ============================================ */
+
+/* Google Fonts: JetBrains Mono */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+/* ============================================
+   CSS Variables (Design Tokens)
+   ============================================ */
+:root {
+  /* Base palette */
+  --color-base: #1e1e2e;
+  --color-mantle: #181825;
+  --color-crust: #11111b;
+  --color-surface-0: #313244;
+  --color-surface-1: #45475a;
+  --color-surface-2: #585b70;
+  --color-overlay-0: #6c7086;
+  --color-overlay-1: #7f849c;
+  --color-text: #cdd6f4;
+  --color-subtext-0: #a6adc8;
+  --color-subtext-1: #bac2de;
+  
+  /* Accent colors */
+  --color-blue: #89b4fa;
+  --color-green: #a6e3a1;
+  --color-yellow: #f9e2af;
+  --color-red: #f38ba8;
+  --color-mauve: #cba6f7;
+  --color-pink: #f5c2e7;
+  --color-teal: #94e2d5;
+  --color-peach: #fab387;
+  
+  /* Semantic tokens */
+  --sidebar-bg: rgba(24, 24, 37, 0.85);
+  --sidebar-border: var(--color-surface-0);
+  --titlebar-bg: rgba(17, 17, 27, 0.95);
+  --titlebar-height: 38px;
+  --glass-blur: 20px;
+  --glass-bg: rgba(30, 30, 46, 0.75);
+  
+  /* Shadows */
+  --shadow-glow: 0 0 20px rgba(137, 180, 250, 0.15);
+  --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+  
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+}
+
+/* ============================================
+   Base Reset & Defaults
+   ============================================ */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -14,85 +79,356 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: #1e1e2e;
-  color: #cdd6f4;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: var(--color-base);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 终端容器样式 */
-.terminal-container {
-  @apply w-full h-full;
+/* ============================================
+   Glassmorphism Utilities
+   ============================================ */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* 自定义滚动条 */
+.glass-light {
+  background: rgba(49, 50, 68, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ============================================
+   Custom Scrollbar (macOS style)
+   ============================================ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #313244;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #45475a;
-  border-radius: 4px;
+  background: var(--color-surface-1);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #585b70;
+  background: var(--color-surface-2);
+  background-clip: content-box;
 }
 
-/* 按钮基础样式 */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================
+   Button Components
+   ============================================ */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
   font-weight: 500;
-  transition: all 0.2s;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-blue);
 }
 
 .btn-primary {
-  background-color: #2563eb;
-  color: white;
+  background: var(--color-blue);
+  color: var(--color-crust);
 }
 
 .btn-primary:hover {
-  background-color: #1d4ed8;
+  background: #9ec3fc;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn-secondary {
-  background-color: #374151;
-  color: #f3f4f6;
+  background: var(--color-surface-0);
+  color: var(--color-text);
 }
 
 .btn-secondary:hover {
-  background-color: #4b5563;
+  background: var(--color-surface-1);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-subtext-0);
+}
+
+.btn-ghost:hover {
+  background: var(--color-surface-0);
+  color: var(--color-text);
 }
 
 .btn-danger {
-  background-color: #dc2626;
-  color: white;
+  background: var(--color-red);
+  color: var(--color-crust);
 }
 
 .btn-danger:hover {
-  background-color: #b91c1c;
+  background: #f5a0b4;
 }
 
+.btn-icon {
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+}
+
+/* ============================================
+   Input Fields
+   ============================================ */
 .input-field {
   width: 100%;
-  padding: 0.5rem 0.75rem;
-  background-color: #1f2937;
-  border: 1px solid #4b5563;
-  border-radius: 0.5rem;
-  color: #f3f4f6;
+  padding: 0.625rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-surface-1);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  transition: all var(--transition-fast);
 }
 
 .input-field::placeholder {
-  color: #6b7280;
+  color: var(--color-overlay-0);
 }
 
 .input-field:focus {
   outline: none;
-  box-shadow: 0 0 0 2px #3b82f6;
-  border-color: transparent;
+  border-color: var(--color-blue);
+  box-shadow: 0 0 0 3px rgba(137, 180, 250, 0.2);
+}
+
+.input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Terminal Container
+   ============================================ */
+.terminal-container {
+  width: 100%;
+  height: 100%;
+  background: var(--color-base);
+}
+
+/* ============================================
+   Traffic Light Buttons (macOS style)
+   ============================================ */
+.traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.traffic-light:hover {
+  filter: brightness(1.1);
+}
+
+.traffic-light.close {
+  background: #ff5f57;
+}
+
+.traffic-light.minimize {
+  background: #febc2e;
+}
+
+.traffic-light.maximize {
+  background: #28c840;
+}
+
+.traffic-lights:hover .traffic-light.close {
+  background: #ff5f57;
+}
+
+.traffic-lights:hover .traffic-light.minimize {
+  background: #febc2e;
+}
+
+.traffic-lights:hover .traffic-light.maximize {
+  background: #28c840;
+}
+
+/* Inactive state */
+.traffic-lights.inactive .traffic-light {
+  background: var(--color-surface-1);
+}
+
+/* ============================================
+   Sidebar Resize Handle
+   ============================================ */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background: var(--color-blue);
+}
+
+/* ============================================
+   Drawer / Slide Panel
+   ============================================ */
+.drawer {
+  position: fixed;
+  top: var(--titlebar-height);
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  max-width: 50vw;
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-left: 1px solid var(--color-surface-0);
+  transform: translateX(100%);
+  transition: transform var(--transition-normal);
+  z-index: 50;
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+/* ============================================
+   Tooltip
+   ============================================ */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: var(--color-surface-0);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.tooltip:hover::after {
+  opacity: 1;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+.animate-slide-up {
+  animation: slideInUp var(--transition-normal) ease-out;
+}
+
+/* ============================================
+   Selection Highlight
+   ============================================ */
+::selection {
+  background: rgba(137, 180, 250, 0.3);
+  color: inherit;
+}
+
+/* ============================================
+   Focus Visible (Accessibility)
+   ============================================ */
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   Drag Region (for Tauri frameless window)
+   ============================================ */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] input {
+  -webkit-app-region: no-drag;
 }

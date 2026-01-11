@@ -6,23 +6,36 @@
  * - Tab switching doesn't destroy terminal state or scrollback
  * - Memory-efficient: only active terminal renders WebGL
  * - Stable WebSocket connections (no cleanup on re-render)
+ * - SearchAddon for in-terminal search
+ * - WebLinksAddon for clickable URLs
+ * - Unicode11Addon for CJK/emoji support
+ * - Dynamic theme switching
  */
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
 import { useSessionStore, useTabs } from '../store';
+import { useTerminalConfig } from '../store/terminalConfigStore';
 import { encodeFrame, FrameDecoder, dataFrame, resizeFrame, heartbeatFrame, MessageType } from '../lib/protocol';
 import type { SessionInfo } from '../types';
+import { TerminalContextMenu } from './TerminalContextMenu';
+import { TerminalSearchBar } from './TerminalSearchBar';
 
 // Store terminal instances globally to persist across re-renders
 const terminalInstances = new Map<string, {
   terminal: Terminal;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   webglAddon?: WebglAddon;
+  webLinksAddon?: WebLinksAddon;
+  unicodeAddon?: Unicode11Addon;
   ws?: WebSocket;
   decoder: FrameDecoder;
   inputDisposable?: { dispose: () => void };
@@ -36,9 +49,86 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
   const tabs = useTabs();
   const sessions = useSessionStore(state => state.sessions);
   const activeTabId = useSessionStore(state => state.activeTabId);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
+
+  // Get active session ID for search/context menu
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  const activeSessionId = activeTab?.sessionId ?? null;
+
+  // Close context menu on click elsewhere
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  // Global keyboard shortcuts for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.key === 'f') {
+        e.preventDefault();
+        setSearchVisible(v => !v);
+      }
+      if (e.key === 'Escape' && searchVisible) {
+        setSearchVisible(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchVisible]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+  }, []);
+
+  const handleSearch = useCallback((query: string, options: { caseSensitive: boolean; wholeWord: boolean; regex: boolean }) => {
+    if (!activeSessionId) return;
+    const instance = terminalInstances.get(activeSessionId);
+    if (instance?.searchAddon) {
+      instance.searchAddon.findNext(query, {
+        caseSensitive: options.caseSensitive,
+        wholeWord: options.wholeWord,
+        regex: options.regex,
+      });
+    }
+  }, [activeSessionId]);
+
+  const handleSearchNext = useCallback(() => {
+    if (!activeSessionId) return;
+    const instance = terminalInstances.get(activeSessionId);
+    instance?.searchAddon?.findNext('');
+  }, [activeSessionId]);
+
+  const handleSearchPrev = useCallback(() => {
+    if (!activeSessionId) return;
+    const instance = terminalInstances.get(activeSessionId);
+    instance?.searchAddon?.findPrevious('');
+  }, [activeSessionId]);
+
+  const handleCloseSearch = useCallback(() => {
+    setSearchVisible(false);
+    // Clear search decorations
+    if (activeSessionId) {
+      const instance = terminalInstances.get(activeSessionId);
+      instance?.searchAddon?.clearDecorations();
+    }
+  }, [activeSessionId]);
 
   return (
     <div className={`relative flex-1 ${className}`}>
+      {/* Search Bar */}
+      {searchVisible && (
+        <TerminalSearchBar
+          onSearch={handleSearch}
+          onNext={handleSearchNext}
+          onPrev={handleSearchPrev}
+          onClose={handleCloseSearch}
+        />
+      )}
+
       {tabs.map(tab => {
         const session = sessions.get(tab.sessionId);
         if (!session) return null;
@@ -48,9 +138,21 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
             key={session.id}
             session={session}
             isVisible={tab.id === activeTabId}
+            onContextMenu={(e) => handleContextMenu(e, session.id)}
           />
         );
       })}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <TerminalContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sessionId={contextMenu.sessionId}
+          onClose={() => setContextMenu(null)}
+          onShowSearch={() => setSearchVisible(true)}
+        />
+      )}
 
       {/* Empty state */}
       {tabs.length === 0 && (
@@ -65,11 +167,17 @@ export function TerminalContainer({ className = '' }: TerminalContainerProps) {
 interface TerminalInstanceProps {
   session: SessionInfo;
   isVisible: boolean;
+  onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
+function TerminalInstance({ session, isVisible, onContextMenu }: TerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsConnectedRef = useRef(false);
+  
+  // Get terminal config
+  const terminalConfig = useTerminalConfig(state => state.getXtermOptions());
+  const themeId = useTerminalConfig(state => state.themeId);
+  const linkHandler = useTerminalConfig(state => state.linkHandler);
   
   // Get store action directly to avoid dependency issues
   const updateSession = useSessionStore(state => state.updateSession);
@@ -94,25 +202,39 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
     
     if (!instance) {
       console.log(`[Terminal] Creating new instance for session ${session.id}`);
-      // Create new terminal
+      // Create new terminal with config
       const terminal = new Terminal({
-        cursorBlink: true,
-        fontSize: 14,
-        fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-        theme: {
-          background: '#1a1a2e',
-          foreground: '#eaeaea',
-          cursor: '#f8f8f2',
-          selectionBackground: 'rgba(248, 248, 242, 0.3)',
-        },
-        scrollback: 10000,
+        ...terminalConfig,
         allowProposedApi: true,
       });
 
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       
+      // Search addon
+      const searchAddon = new SearchAddon();
+      terminal.loadAddon(searchAddon);
+      
+      // Unicode 11 addon for CJK/emoji support
+      const unicodeAddon = new Unicode11Addon();
+      terminal.loadAddon(unicodeAddon);
+      terminal.unicode.activeVersion = '11';
+      
       terminal.open(containerRef.current);
+      
+      // WebLinks addon for clickable URLs
+      let webLinksAddon: WebLinksAddon | undefined;
+      if (linkHandler) {
+        try {
+          webLinksAddon = new WebLinksAddon((_, uri) => {
+            // Open URL in default browser via Tauri
+            window.open(uri, '_blank');
+          });
+          terminal.loadAddon(webLinksAddon);
+        } catch (e) {
+          console.warn('WebLinksAddon failed to load:', e);
+        }
+      }
       
       // Try WebGL, fallback to canvas
       let webglAddon: WebglAddon | undefined;
@@ -120,6 +242,7 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
         webglAddon = new WebglAddon();
         terminal.loadAddon(webglAddon);
         webglAddon.onContextLoss(() => {
+          console.warn('[Terminal] WebGL context lost, disposing addon');
           webglAddon?.dispose();
         });
       } catch (e) {
@@ -131,7 +254,10 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
       instance = {
         terminal,
         fitAddon,
+        searchAddon,
         webglAddon,
+        webLinksAddon,
+        unicodeAddon,
         decoder: new FrameDecoder(),
       };
       
@@ -142,7 +268,25 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
       console.log(`[Terminal] Re-attaching instance for session ${session.id}`);
       containerRef.current.appendChild(instance.terminal.element!);
     }
-  }, [session.id]);
+  }, [session.id, terminalConfig, linkHandler]);
+
+  // Update theme when it changes
+  useEffect(() => {
+    const instance = terminalInstances.get(session.id);
+    if (instance && terminalConfig.theme) {
+      instance.terminal.options.theme = terminalConfig.theme;
+    }
+  }, [session.id, themeId, terminalConfig.theme]);
+
+  // Update font when it changes
+  useEffect(() => {
+    const instance = terminalInstances.get(session.id);
+    if (instance) {
+      instance.terminal.options.fontSize = terminalConfig.fontSize;
+      instance.terminal.options.fontFamily = terminalConfig.fontFamily;
+      instance.fitAddon.fit();
+    }
+  }, [session.id, terminalConfig.fontSize, terminalConfig.fontFamily]);
 
   // Connect WebSocket when session is connected - STABLE dependencies only
   useEffect(() => {
@@ -291,6 +435,7 @@ function TerminalInstance({ session, isVisible }: TerminalInstanceProps) {
     <div
       ref={containerRef}
       onClick={handleClick}
+      onContextMenu={onContextMenu}
       className={`
         absolute inset-0 
         ${isVisible ? 'visible' : 'invisible'}
@@ -310,9 +455,17 @@ export function cleanupTerminalInstance(sessionId: string) {
   if (instance) {
     instance.ws?.close();
     instance.webglAddon?.dispose();
+    instance.webLinksAddon?.dispose();
+    instance.unicodeAddon?.dispose();
+    instance.searchAddon?.dispose();
     instance.terminal.dispose();
     terminalInstances.delete(sessionId);
   }
+}
+
+// Export for external access (e.g., settings panel)
+export function getTerminalInstance(sessionId: string) {
+  return terminalInstances.get(sessionId);
 }
 
 export default TerminalContainer;
