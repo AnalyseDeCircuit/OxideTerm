@@ -17,6 +17,8 @@ use crate::session::{SessionRegistry, SessionConfig, AuthMethod, SessionInfo, Se
 use crate::ssh::{SshClient, SshConfig, AuthMethod as SshAuthMethod};
 use crate::bridge::{WsBridge, BridgeManager};
 use crate::sftp::session::SftpRegistry;
+use crate::forwarding::ForwardingManager;
+use super::ForwardingRegistry;
 
 /// Connection timeout settings
 const HANDSHAKE_TIMEOUT_SECS: u64 = 30;
@@ -66,6 +68,7 @@ fn default_rows() -> u32 { 24 }
 pub async fn connect_v2(
     request: ConnectRequest,
     registry: State<'_, Arc<SessionRegistry>>,
+    forwarding_registry: State<'_, ForwardingRegistry>,
 ) -> Result<ConnectResponseV2, String> {
     info!("Connect request: {}@{}:{}", request.username, request.host, request.port);
 
@@ -110,6 +113,7 @@ pub async fn connect_v2(
         &session_id,
         &config,
         registry.inner().clone(),
+        forwarding_registry.inner(),
     ).await;
 
     match result {
@@ -127,6 +131,7 @@ async fn connect_with_timeout(
     session_id: &str,
     config: &SessionConfig,
     registry: Arc<SessionRegistry>,
+    forwarding_registry: &ForwardingRegistry,
 ) -> Result<ConnectResponseV2, String> {
     // Build SSH config
     let ssh_auth = match &config.auth {
@@ -186,8 +191,15 @@ async fn connect_with_timeout(
         .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
     // Update registry with success
-    registry.connect_success(session_id, ws_port, cmd_tx, shared_handle)
+    registry.connect_success(session_id, ws_port, cmd_tx, shared_handle.clone())
         .map_err(|e| format!("Failed to update session state: {}", e))?;
+
+    // Register ForwardingManager for port forwarding support
+    // Note: ForwardingManager needs Handle<ClientHandler>, not Arc<Handle<ClientHandler>>
+    // We use the inner reference to create a new handle clone
+    let forwarding_manager = ForwardingManager::new_from_arc(shared_handle, session_id.to_string());
+    forwarding_registry.register(session_id.to_string(), forwarding_manager).await;
+    info!("ForwardingManager registered for session {}", session_id);
 
     let ws_url = format!("ws://localhost:{}", ws_port);
     let session_info = registry.get(session_id)
@@ -210,8 +222,12 @@ pub async fn disconnect_v2(
     registry: State<'_, Arc<SessionRegistry>>,
     bridge_manager: State<'_, BridgeManager>,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
+    forwarding_registry: State<'_, ForwardingRegistry>,
 ) -> Result<bool, String> {
     info!("Disconnecting session: {}", session_id);
+
+    // Stop and remove all port forwards for this session
+    forwarding_registry.remove(&session_id).await;
 
     // Close via registry (sends close command)
     registry.close_session(&session_id).await?;

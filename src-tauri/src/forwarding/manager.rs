@@ -143,6 +143,18 @@ impl ForwardingManager {
         }
     }
 
+    /// Create a new forwarding manager from an Arc<Handle>
+    /// 
+    /// This is useful when the handle is already wrapped in Arc (e.g., from SessionRegistry)
+    pub fn new_from_arc(ssh_handle: Arc<Handle<ClientHandler>>, session_id: impl Into<String>) -> Self {
+        Self {
+            ssh_handle,
+            local_forwards: RwLock::new(HashMap::new()),
+            remote_forwards: RwLock::new(HashMap::new()),
+            session_id: session_id.into(),
+        }
+    }
+
     /// Get session ID
     pub fn session_id(&self) -> &str {
         &self.session_id

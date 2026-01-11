@@ -42,7 +42,13 @@ impl SftpSession {
             .await
             .map_err(|e| SftpError::ChannelError(e.to_string()))?;
 
-        // Request SFTP subsystem
+        // Request SFTP subsystem on the channel
+        channel
+            .request_subsystem(true, "sftp")
+            .await
+            .map_err(|e| SftpError::SubsystemNotAvailable(format!("Failed to request SFTP subsystem: {}", e)))?;
+
+        // Create SFTP session from the channel stream
         let sftp = RusshSftpSession::new(channel.into_stream())
             .await
             .map_err(|e| SftpError::SubsystemNotAvailable(e.to_string()))?;

@@ -115,6 +115,9 @@ const DEFAULT_SESSION_STATE: SftpSessionState = {
   error: null,
 };
 
+// Track in-flight initialization requests to prevent concurrent duplicate calls
+const initializingPromises = new Map<string, Promise<void>>();
+
 export const useSftpStore = create<SftpStore>()(
   subscribeWithSelector((set, get) => ({
     sessions: new Map(),
@@ -146,44 +149,64 @@ export const useSftpStore = create<SftpStore>()(
         return;
       }
 
-      // Update state to loading
-      const newSessions = new Map(sessions);
-      newSessions.set(sessionId, {
-        ...(existingState ?? DEFAULT_SESSION_STATE),
-        loading: true,
-        error: null,
-      });
-      set({ sessions: newSessions });
+      // Check if there's already an in-flight initialization for this session
+      const existingPromise = initializingPromises.get(sessionId);
+      if (existingPromise) {
+        // Wait for the existing initialization to complete
+        return existingPromise;
+      }
 
-      try {
-        const alreadyInitialized = await sftpApi.isSftpInitialized(sessionId);
-        const cwd = alreadyInitialized
-          ? await sftpApi.pwd(sessionId)
-          : await sftpApi.initSftp(sessionId);
-
-        const files = await sftpApi.listDir(sessionId, cwd, get().filter);
-
-        const updatedSessions = new Map(get().sessions);
-        const baseState = updatedSessions.get(sessionId) ?? DEFAULT_SESSION_STATE;
-
-        updatedSessions.set(sessionId, {
-          ...baseState,
-          initialized: true,
-          cwd,
-          files,
-          loading: false,
+      // Create the initialization promise
+      const initPromise = (async () => {
+        // Update state to loading
+        const newSessions = new Map(get().sessions);
+        newSessions.set(sessionId, {
+          ...(newSessions.get(sessionId) ?? DEFAULT_SESSION_STATE),
+          loading: true,
           error: null,
         });
-        set({ sessions: updatedSessions, activeSessionId: sessionId });
-      } catch (error) {
-        const updatedSessions = new Map(get().sessions);
-        updatedSessions.set(sessionId, {
-          ...DEFAULT_SESSION_STATE,
-          loading: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        set({ sessions: updatedSessions });
-        throw error;
+        set({ sessions: newSessions });
+
+        try {
+          const alreadyInitialized = await sftpApi.isSftpInitialized(sessionId);
+          const cwd = alreadyInitialized
+            ? await sftpApi.pwd(sessionId)
+            : await sftpApi.initSftp(sessionId);
+
+          const files = await sftpApi.listDir(sessionId, cwd, get().filter);
+
+          const updatedSessions = new Map(get().sessions);
+          const baseState = updatedSessions.get(sessionId) ?? DEFAULT_SESSION_STATE;
+
+          updatedSessions.set(sessionId, {
+            ...baseState,
+            initialized: true,
+            cwd,
+            files,
+            loading: false,
+            error: null,
+          });
+          set({ sessions: updatedSessions, activeSessionId: sessionId });
+        } catch (error) {
+          const updatedSessions = new Map(get().sessions);
+          updatedSessions.set(sessionId, {
+            ...DEFAULT_SESSION_STATE,
+            loading: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          set({ sessions: updatedSessions });
+          throw error;
+        }
+      })();
+
+      // Register the promise
+      initializingPromises.set(sessionId, initPromise);
+
+      try {
+        await initPromise;
+      } finally {
+        // Clean up the promise after it completes (success or failure)
+        initializingPromises.delete(sessionId);
       }
     },
 

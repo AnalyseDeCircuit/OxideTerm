@@ -1,7 +1,7 @@
 // SFTP Types for TypeScript
 // Must match Rust types in src-tauri/src/sftp/types.rs
 
-export type FileType = 'File' | 'Directory' | 'Symlink' | 'Other';
+export type FileType = 'File' | 'Directory' | 'Symlink' | 'Unknown';
 
 export interface FileInfo {
   name: string;
