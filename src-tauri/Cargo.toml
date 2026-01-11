@@ -46,4 +46,9 @@ async-trait = "0.1"
 dashmap = "6"
 dirs = "5"
 
+# Config & Keychain
+chrono = { version = "0.4", features = ["serde"] }
+keyring = "3"
+whoami = "1"
+
 

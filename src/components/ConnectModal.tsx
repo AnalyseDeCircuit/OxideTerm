@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSessionStore } from '../store';
 import { useSessionStoreV2 } from '../store/sessionStoreV2';
 import { ConnectionConfig } from '../types';
@@ -10,9 +10,18 @@ const USE_V2_UI = true;
 interface ConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Pre-fill form with saved connection data */
+  prefill?: {
+    host: string;
+    port: number;
+    username: string;
+    authType: 'password' | 'key';
+    password?: string;
+    keyPath?: string;
+  };
 }
 
-export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
+export function ConnectModal({ isOpen, onClose, prefill }: ConnectModalProps) {
   // v1 store
   const addSessionV1 = useSessionStore((state) => state.addSession);
   
@@ -25,8 +34,22 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [authType, setAuthType] = useState<'password' | 'key'>('key');
+  const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Apply prefill data when modal opens
+  useEffect(() => {
+    if (isOpen && prefill) {
+      setHost(prefill.host);
+      setPort(String(prefill.port));
+      setUsername(prefill.username);
+      setAuthType(prefill.authType);
+      setPassword(prefill.password || '');
+      setKeyPath(prefill.keyPath || '~/.ssh/id_rsa');
+    }
+  }, [isOpen, prefill]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +62,9 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
         host,
         port: parseInt(port, 10),
         username,
-        auth_type: 'password',
-        password,
+        auth_type: authType,
+        password: authType === 'password' ? password : undefined,
+        key_path: authType === 'key' ? keyPath : undefined,
         cols: 120,
         rows: 30,
       };
@@ -48,10 +72,7 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
       try {
         await connectV2(request);
         // Reset form and close modal
-        setHost('');
-        setPort('22');
-        setUsername('');
-        setPassword('');
+        resetForm();
         onClose();
       } catch (err) {
         setError(String(err));
@@ -69,11 +90,7 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
 
       try {
         await addSessionV1(config);
-        // Reset form and close modal
-        setHost('');
-        setPort('22');
-        setUsername('');
-        setPassword('');
+        resetForm();
         onClose();
       } catch (err) {
         setError(String(err));
@@ -81,6 +98,15 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
         setIsConnecting(false);
       }
     }
+  };
+
+  const resetForm = () => {
+    setHost('');
+    setPort('22');
+    setUsername('');
+    setPassword('');
+    setAuthType('key');
+    setKeyPath('~/.ssh/id_rsa');
   };
 
   const displayError = USE_V2_UI ? (error || connectionErrorV2) : error;
@@ -144,20 +170,73 @@ export function ConnectModal({ isOpen, onClose }: ConnectModalProps) {
             />
           </div>
 
-          {/* Password */}
+          {/* Auth Type Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              Password
+              Authentication
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input-field"
-              required
-            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAuthType('key')}
+                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors
+                  ${authType === 'key'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  }`}
+              >
+                🔐 SSH Key
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthType('password')}
+                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors
+                  ${authType === 'password'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  }`}
+              >
+                🔑 Password
+              </button>
+            </div>
           </div>
+
+          {/* Password field (for password auth) */}
+          {authType === 'password' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="input-field"
+                required={authType === 'password'}
+              />
+            </div>
+          )}
+
+          {/* Key path field (for key auth) */}
+          {authType === 'key' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Private Key Path
+              </label>
+              <input
+                type="text"
+                value={keyPath}
+                onChange={(e) => setKeyPath(e.target.value)}
+                placeholder="~/.ssh/id_rsa"
+                className="input-field"
+                required={authType === 'key'}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Supports RSA, Ed25519, and ECDSA keys
+              </p>
+            </div>
+          )}
 
           {/* Error message */}
           {displayError && (

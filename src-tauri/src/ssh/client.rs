@@ -36,9 +36,11 @@ impl SshClient {
             .next()
             .ok_or_else(|| SshError::ConnectionFailed("No address found".to_string()))?;
 
-        // Configure SSH client
+        // Configure SSH client with keepalive
         let ssh_config = client::Config {
-            inactivity_timeout: Some(Duration::from_secs(self.config.timeout_secs)),
+            inactivity_timeout: Some(Duration::from_secs(300)), // 5 min inactivity timeout
+            keepalive_interval: Some(Duration::from_secs(30)),  // Send keepalive every 30s
+            keepalive_max: 3,  // Disconnect after 3 missed keepalives (90s total)
             ..Default::default()
         };
 

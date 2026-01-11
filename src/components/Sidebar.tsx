@@ -1,16 +1,27 @@
+import { useState } from 'react';
 import { useSessionStore } from '../store';
 import { useSessionStoreV2 } from '../store/sessionStoreV2';
 import { Session } from '../types';
 import type { SessionInfo } from '../types';
+import { ConnectionList } from './ConnectionList';
+import { ConnectionFormModal } from './ConnectionFormModal';
+import type { ConnectionInfo, SshHostInfo } from '../lib/config';
 
 // Feature flag - should match App.tsx
 const USE_V2_UI = true;
 
 interface SidebarProps {
   onNewConnection: () => void;
+  onConnectSaved?: (connection: ConnectionInfo) => void;
 }
 
-export function Sidebar({ onNewConnection }: SidebarProps) {
+export function Sidebar({ onNewConnection, onConnectSaved }: SidebarProps) {
+  // Modal state
+  const [showConnectionForm, setShowConnectionForm] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<ConnectionInfo | undefined>();
+  const [importingHosts, setImportingHosts] = useState<SshHostInfo[] | undefined>();
+  const [showSavedConnections, setShowSavedConnections] = useState(true);
+
   // v1 store
   const sessionsV1 = useSessionStore((state) => state.sessions);
   const activeSessionIdV1 = useSessionStore((state) => state.activeSessionId);
@@ -86,43 +97,96 @@ export function Sidebar({ onNewConnection }: SidebarProps) {
         </button>
       </div>
 
-      {/* Sessions List */}
+      {/* Section Toggle */}
+      <div className="flex border-b border-gray-800">
+        <button
+          onClick={() => setShowSavedConnections(true)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors
+            ${showSavedConnections
+              ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
+              : 'text-gray-500 hover:text-gray-300'
+            }`}
+        >
+          💾 Saved
+        </button>
+        <button
+          onClick={() => setShowSavedConnections(false)}
+          className={`flex-1 px-3 py-2 text-xs font-medium transition-colors
+            ${!showSavedConnections
+              ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50'
+              : 'text-gray-500 hover:text-gray-300'
+            }`}
+        >
+          🔌 Active ({sessionList.length})
+        </button>
+      </div>
+
+      {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Active Sessions ({sessionList.length})
-        </div>
-        
-        {sessionList.length === 0 ? (
-          <div className="px-4 py-8 text-center text-gray-500 text-sm">
-            No active sessions.<br />
-            Click "New Connection" to start.
-          </div>
+        {showSavedConnections ? (
+          /* Saved Connections List */
+          <ConnectionList
+            onConnect={(conn) => {
+              if (onConnectSaved) {
+                onConnectSaved(conn);
+              }
+            }}
+            onEdit={(conn) => {
+              setEditingConnection(conn);
+              setImportingHosts(undefined);
+              setShowConnectionForm(true);
+            }}
+            onNewConnection={() => {
+              setEditingConnection(undefined);
+              setImportingHosts(undefined);
+              setShowConnectionForm(true);
+            }}
+            onImportFromSsh={(hosts) => {
+              setEditingConnection(undefined);
+              setImportingHosts(hosts);
+              setShowConnectionForm(true);
+            }}
+          />
         ) : (
-          <div className="space-y-1 px-2">
-            {USE_V2_UI ? (
-              // V2 sessions
-              (sessionList as SessionInfo[]).map((session) => (
-                <SessionItemV2
-                  key={session.id}
-                  session={session}
-                  isActive={session.id === activeSessionId}
-                  onSelect={() => handleSelect(session.id)}
-                  onClose={() => handleClose(session.id)}
-                />
-              ))
+          /* Active Sessions List */
+          <>
+            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Active Sessions ({sessionList.length})
+            </div>
+            
+            {sessionList.length === 0 ? (
+              <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                No active sessions.<br />
+                Click "New Connection" to start.
+              </div>
             ) : (
-              // V1 sessions
-              (sessionList as Session[]).map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  isActive={session.id === activeSessionId}
-                  onSelect={() => handleSelect(session.id)}
-                  onClose={() => handleClose(session.id)}
-                />
-              ))
+              <div className="space-y-1 px-2">
+                {USE_V2_UI ? (
+                  // V2 sessions
+                  (sessionList as SessionInfo[]).map((session) => (
+                    <SessionItemV2
+                      key={session.id}
+                      session={session}
+                      isActive={session.id === activeSessionId}
+                      onSelect={() => handleSelect(session.id)}
+                      onClose={() => handleClose(session.id)}
+                    />
+                  ))
+                ) : (
+                  // V1 sessions
+                  (sessionList as Session[]).map((session) => (
+                    <SessionItem
+                      key={session.id}
+                      session={session}
+                      isActive={session.id === activeSessionId}
+                      onSelect={() => handleSelect(session.id)}
+                      onClose={() => handleClose(session.id)}
+                    />
+                  ))
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
 
@@ -130,6 +194,22 @@ export function Sidebar({ onNewConnection }: SidebarProps) {
       <div className="p-3 border-t border-gray-800 text-xs text-gray-500">
         v0.1.0 • Built with Rust & Tauri
       </div>
+
+      {/* Connection Form Modal */}
+      <ConnectionFormModal
+        isOpen={showConnectionForm}
+        onClose={() => {
+          setShowConnectionForm(false);
+          setEditingConnection(undefined);
+          setImportingHosts(undefined);
+        }}
+        onSaved={(conn) => {
+          // Optionally connect after save
+          console.log('Connection saved:', conn.name);
+        }}
+        editConnection={editingConnection}
+        importHosts={importingHosts}
+      />
     </div>
   );
 }
