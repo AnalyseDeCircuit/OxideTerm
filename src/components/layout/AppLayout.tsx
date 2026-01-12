@@ -6,24 +6,19 @@ import { TerminalView } from '../terminal/TerminalView';
 import { SFTPView } from '../sftp/SFTPView';
 import { ForwardsView } from '../forwards/ForwardsView';
 import { Button } from '../ui/button';
+import { NewConnectionModal } from '../modals/NewConnectionModal';
+import { SettingsModal } from '../modals/SettingsModal';
+import { Plus } from 'lucide-react';
 
 export const AppLayout = () => {
-  const { tabs, activeTabId, connect } = useAppStore();
-
-  const activeTab = tabs.find(t => t.id === activeTabId);
-
-  // Quick connect for demo purposes if no tabs
-  const handleQuickConnect = () => {
-    connect({
-      host: '127.0.0.1',
-      port: 22,
-      username: 'root',
-      auth_type: 'password'
-    });
-  };
+  const { tabs, activeTabId, toggleModal } = useAppStore();
 
   return (
     <div className="flex h-screen w-screen bg-oxide-bg text-oxide-text overflow-hidden">
+      {/* Modals */}
+      <NewConnectionModal />
+      <SettingsModal />
+
       {/* Sidebar */}
       <Sidebar />
 
@@ -36,8 +31,8 @@ export const AppLayout = () => {
             <div className="flex flex-col items-center justify-center h-full text-zinc-500">
               <div className="mb-4 text-2xl font-bold text-zinc-700">OxideTerm</div>
               <p className="mb-8">No active sessions</p>
-              <Button onClick={handleQuickConnect}>
-                Quick Connect (Localhost)
+              <Button onClick={() => toggleModal('newConnection', true)} className="gap-2">
+                <Plus className="h-4 w-4" /> New Connection
               </Button>
             </div>
           ) : (

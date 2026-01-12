@@ -20,7 +20,7 @@ export const Sidebar = () => {
     sidebarActiveSection, 
     setSidebarSection,
     sessions,
-    connect
+    toggleModal
   } = useAppStore();
 
   if (sidebarCollapsed) {
@@ -31,8 +31,7 @@ export const Sidebar = () => {
 
   return (
     <div className="flex h-full border-r border-oxide-border bg-oxide-panel w-64 flex-col">
-      {/* Activity Bar (Left Strip - Optional, or Top of sidebar) */}
-      {/* For this design, we'll put the switcher at the top */}
+      {/* Activity Bar (Top of sidebar) */}
       <div className="flex items-center p-2 gap-1 border-b border-oxide-border">
         <Button 
           variant={sidebarActiveSection === 'sessions' ? 'secondary' : 'ghost'} 
@@ -62,7 +61,12 @@ export const Sidebar = () => {
           <ArrowLeftRight className="h-4 w-4" />
         </Button>
         <div className="flex-1" />
-        <Button variant="ghost" size="icon" className="rounded-sm">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="rounded-sm"
+          onClick={() => toggleModal('settings', true)}
+        >
           <Settings className="h-4 w-4" />
         </Button>
       </div>
@@ -73,7 +77,12 @@ export const Sidebar = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
               <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Sessions</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6"
+                onClick={() => toggleModal('newConnection', true)}
+              >
                 <Plus className="h-3 w-3" />
               </Button>
             </div>

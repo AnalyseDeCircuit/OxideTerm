@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { api } from '../lib/api';
 import { 
   SessionInfo, 
   Tab, 
@@ -8,6 +8,11 @@ import {
   SessionState
 } from '../types';
 
+interface ModalsState {
+  newConnection: boolean;
+  settings: boolean;
+}
+
 interface AppStore {
   // State
   sessions: Map<string, SessionInfo>;
@@ -15,6 +20,7 @@ interface AppStore {
   activeTabId: string | null;
   sidebarCollapsed: boolean;
   sidebarActiveSection: 'sessions' | 'sftp' | 'forwards';
+  modals: ModalsState;
 
   // Actions - Sessions
   connect: (request: ConnectRequest) => Promise<string>;
@@ -29,6 +35,7 @@ interface AppStore {
   // Actions - UI
   toggleSidebar: () => void;
   setSidebarSection: (section: 'sessions' | 'sftp' | 'forwards') => void;
+  toggleModal: (modal: keyof ModalsState, isOpen: boolean) => void;
   
   // Computed (Helper methods)
   getSession: (sessionId: string) => SessionInfo | undefined;
@@ -40,25 +47,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activeTabId: null,
   sidebarCollapsed: false,
   sidebarActiveSection: 'sessions',
+  modals: {
+    newConnection: false,
+    settings: false,
+  },
 
   connect: async (request: ConnectRequest) => {
-    // 1. Call Backend to initiate connection
     try {
-      // TODO: Uncomment when backend is ready
-      // const sessionInfo = await invoke<SessionInfo>('connect_v2', { request });
-      
-      // MOCK for now
-      const sessionId = crypto.randomUUID();
-      const sessionInfo: SessionInfo = {
-        id: sessionId,
-        name: request.name || `${request.username}@${request.host}`,
-        host: request.host,
-        port: request.port,
-        username: request.username,
-        state: 'connecting',
-        color: '#3b82f6', // blue-500
-        uptime_secs: 0
-      };
+      // Use API layer
+      const sessionInfo = await api.connect(request);
       
       set((state) => {
         const newSessions = new Map(state.sessions);
@@ -66,15 +63,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return { sessions: newSessions };
       });
 
-      // Simulate connection success
-      setTimeout(() => {
-        get().updateSessionState(sessionId, 'connected');
-      }, 1000);
+      // MOCK State Update (if API is mock)
+      // If real API, we expect events or immediate correct state
+      if (sessionInfo.state === 'connecting') {
+          setTimeout(() => {
+            get().updateSessionState(sessionInfo.id, 'connected');
+          }, 1000);
+      }
 
       // Open terminal tab by default
-      get().createTab('terminal', sessionId);
+      get().createTab('terminal', sessionInfo.id);
       
-      return sessionId;
+      return sessionInfo.id;
     } catch (error) {
       console.error('Connection failed:', error);
       throw error;
@@ -83,7 +83,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   disconnect: async (sessionId: string) => {
     try {
-      // await invoke('disconnect_v2', { sessionId });
+      await api.disconnect(sessionId);
+      
       set((state) => {
         const newSessions = new Map(state.sessions);
         newSessions.delete(sessionId);
@@ -162,6 +163,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setSidebarSection: (section) => {
     set({ sidebarActiveSection: section });
+  },
+  
+  toggleModal: (modal, isOpen) => {
+    set((state) => ({
+      modals: { ...state.modals, [modal]: isOpen }
+    }));
   },
 
   getSession: (sessionId) => {
