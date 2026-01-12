@@ -47,9 +47,12 @@ export interface ConnectionInfo {
   host: string;
   port: number;
   username: string;
-  authType: 'password' | 'key' | 'agent';
-  keyPath: string | null;
-  lastUsedAt: string | null;
+  auth_type: 'password' | 'key' | 'agent';
+  key_path: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  color: string | null;
+  tags: string[];
 }
 
 export interface SaveConnectionRequest {
@@ -59,9 +62,11 @@ export interface SaveConnectionRequest {
   host: string;
   port: number;
   username: string;
-  authType: 'password' | 'key' | 'agent';
+  auth_type: 'password' | 'key' | 'agent';
   password?: string;
-  keyPath?: string;
+  key_path?: string;
+  color?: string;
+  tags?: string[];
 }
 
 // Terminal Config
@@ -120,38 +125,43 @@ export type ForwardType = 'local' | 'remote' | 'dynamic';
 export interface ForwardRequest {
   session_id: string;
   forward_type: ForwardType;
-  local_host: string;
-  local_port: number;
-  remote_host: string;
-  remote_port: number;
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  description?: string;
 }
 
 export interface ForwardRule {
   id: string;
   forward_type: ForwardType;
-  local_host: string;
-  local_port: number;
-  remote_host: string;
-  remote_port: number;
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
   status: 'starting' | 'active' | 'stopped' | 'error';
+  description?: string;
 }
 
 // Health Types
 export interface HealthMetrics {
-  status: 'healthy' | 'degraded' | 'unresponsive' | 'disconnected';
-  latency_ms: number | null;
-  last_check: number;
+  session_id: string;
   uptime_secs: number;
+  ping_sent: number;
+  ping_received: number;
+  avg_latency_ms: number | null;
+  last_latency_ms: number | null;
+  status: 'Healthy' | 'Degraded' | 'Unresponsive' | 'Disconnected' | 'Unknown';
 }
 
-export type HealthStatus = 'healthy' | 'degraded' | 'unresponsive' | 'disconnected';
+export type HealthStatus = 'Healthy' | 'Degraded' | 'Unresponsive' | 'Disconnected' | 'Unknown';
 
 // SSH Types
 export interface SshHostInfo {
     alias: string;
-    host: string;
+    hostname: string;
+    user: string | null;
     port: number;
-    user: string;
     identity_file: string | null;
 }
 

@@ -14,25 +14,28 @@ interface TransferItem {
 }
 
 export const TransferQueue = () => {
-  // Mock Data
-  const items: TransferItem[] = [
-    { id: '1', name: 'backup.zip', type: 'download', progress: 45, size: '27.4 MB', speed: '2.1 MB/s', state: 'active' },
-    { id: '2', name: 'config.json', type: 'upload', progress: 100, size: '2.1 KB', speed: '', state: 'completed' },
-    { id: '3', name: 'data.csv', type: 'download', progress: 0, size: '1.2 MB', speed: '', state: 'pending' },
-  ];
+  // Transfer items will be populated from actual transfer events
+  const items: TransferItem[] = [];
+
+  const activeCount = items.filter(i => i.state === 'active').length;
 
   return (
     <div className="h-48 bg-oxide-bg border-t border-oxide-border flex flex-col">
       <div className="flex items-center justify-between px-2 py-1 bg-oxide-panel border-b border-oxide-border">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Transfer Queue (2 active)</span>
+        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Transfer Queue {activeCount > 0 ? `(${activeCount} active)` : ''}</span>
         <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" className="h-6 text-xs px-2">Pause All</Button>
-            <Button size="icon" variant="ghost" className="h-6 w-6"><X className="h-3 w-3" /></Button>
+            <Button size="sm" variant="ghost" className="h-6 text-xs px-2" disabled={items.length === 0}>Pause All</Button>
+            <Button size="icon" variant="ghost" className="h-6 w-6" disabled={items.length === 0}><X className="h-3 w-3" /></Button>
         </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
-         {items.map(item => (
+         {items.length === 0 ? (
+           <div className="flex items-center justify-center h-full text-sm text-zinc-500">
+             No transfers in progress
+           </div>
+         ) : (
+           items.map(item => (
              <div key={item.id} className="flex items-center gap-3 text-sm p-2 bg-zinc-900/50 rounded-sm border border-transparent hover:border-oxide-border">
                  <div className="w-4 text-center text-zinc-500 font-bold">
                      {item.type === 'upload' ? '↑' : '↓'}
@@ -61,7 +64,8 @@ export const TransferQueue = () => {
                      )}
                  </div>
              </div>
-         ))}
+         ))
+         )}
       </div>
     </div>
   );

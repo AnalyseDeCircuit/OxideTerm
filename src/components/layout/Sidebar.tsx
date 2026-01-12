@@ -20,7 +20,8 @@ export const Sidebar = () => {
     sidebarActiveSection, 
     setSidebarSection,
     sessions,
-    toggleModal
+    toggleModal,
+    createTab
   } = useAppStore();
 
   if (sidebarCollapsed) {
@@ -105,32 +106,71 @@ export const Sidebar = () => {
               )}
             </div>
 
-            <div className="px-2 pt-4">
-               <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Saved Connections</span>
-               {/* Mock Saved List */}
-               <div className="mt-2 space-y-1">
-                 <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 rounded-sm cursor-pointer">
-                    <Monitor className="h-3 w-3" />
-                    <span>Production DB</span>
-                 </div>
-                 <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 rounded-sm cursor-pointer">
-                    <Monitor className="h-3 w-3" />
-                    <span>Dev Server</span>
-                 </div>
-               </div>
-            </div>
+
           </div>
         )}
         
         {sidebarActiveSection === 'sftp' && (
-          <div className="p-2 text-sm text-zinc-500">
-            Select a session to browse files.
+          <div className="space-y-4">
+            <div className="px-2">
+              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">SFTP Sessions</span>
+            </div>
+            <div className="space-y-1">
+              {sessionList.length === 0 ? (
+                <div className="text-sm text-zinc-500 px-2 py-4 text-center">
+                  No active sessions
+                </div>
+              ) : (
+                sessionList.filter(s => s.state === 'connected').map(session => (
+                  <div 
+                    key={session.id}
+                    onClick={() => createTab('sftp', session.id)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 rounded-sm cursor-pointer group"
+                  >
+                    <Folder className="h-3 w-3 text-zinc-500" />
+                    <span className="truncate flex-1">{session.name}</span>
+                    <ChevronRight className="h-3 w-3 text-zinc-600 opacity-0 group-hover:opacity-100" />
+                  </div>
+                ))
+              )}
+              {sessionList.length > 0 && sessionList.filter(s => s.state === 'connected').length === 0 && (
+                <div className="text-sm text-zinc-500 px-2 py-4 text-center">
+                  No connected sessions
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {sidebarActiveSection === 'forwards' && (
-          <div className="p-2 text-sm text-zinc-500">
-             Select a session to manage ports.
+          <div className="space-y-4">
+            <div className="px-2">
+              <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Port Forwarding</span>
+            </div>
+            <div className="space-y-1">
+              {sessionList.length === 0 ? (
+                <div className="text-sm text-zinc-500 px-2 py-4 text-center">
+                  No active sessions
+                </div>
+              ) : (
+                sessionList.filter(s => s.state === 'connected').map(session => (
+                  <div 
+                    key={session.id}
+                    onClick={() => createTab('forwards', session.id)}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 rounded-sm cursor-pointer group"
+                  >
+                    <ArrowLeftRight className="h-3 w-3 text-zinc-500" />
+                    <span className="truncate flex-1">{session.name}</span>
+                    <ChevronRight className="h-3 w-3 text-zinc-600 opacity-0 group-hover:opacity-100" />
+                  </div>
+                ))
+              )}
+              {sessionList.length > 0 && sessionList.filter(s => s.state === 'connected').length === 0 && (
+                <div className="text-sm text-zinc-500 px-2 py-4 text-center">
+                  No connected sessions
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

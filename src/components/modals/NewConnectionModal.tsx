@@ -7,6 +7,7 @@ import { Checkbox } from '../ui/checkbox';
 import { 
   Dialog, 
   DialogContent, 
+  DialogDescription,
   DialogHeader, 
   DialogTitle, 
   DialogFooter 
@@ -71,9 +72,12 @@ export const NewConnectionModal = () => {
 
   return (
     <Dialog open={modals.newConnection} onOpenChange={(open) => toggleModal('newConnection', open)}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px]" aria-describedby="new-connection-description">
         <DialogHeader>
           <DialogTitle>New Connection</DialogTitle>
+          <DialogDescription id="new-connection-description">
+            Enter the details for your new SSH connection.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="grid gap-4 py-4">

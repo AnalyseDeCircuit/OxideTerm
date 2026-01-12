@@ -123,11 +123,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const session = get().sessions.get(sessionId);
     if (!session) return;
 
+    // Check if a tab with the same type and sessionId already exists
+    const existingTab = get().tabs.find(t => t.type === type && t.sessionId === sessionId);
+    if (existingTab) {
+      // Switch to existing tab instead of creating a new one
+      set({ activeTabId: existingTab.id });
+      return;
+    }
+
     const newTab: Tab = {
       id: crypto.randomUUID(),
       type,
       sessionId,
-      title: type === 'terminal' ? session.name : `${type}: ${session.name}`,
+      title: type === 'terminal' ? session.name : `${type === 'sftp' ? 'SFTP' : 'Forwards'}: ${session.name}`,
       icon: type === 'terminal' ? '>_' : type === 'sftp' ? '📁' : '🔀'
     };
 
