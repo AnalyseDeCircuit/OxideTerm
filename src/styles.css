@@ -87,9 +87,9 @@ body {
 
 /* xterm.js specific optimizations */
 .xterm {
-  /* Use subpixel antialiasing for clearer text on macOS */
-  -webkit-font-smoothing: subpixel-antialiased;
-  -moz-osx-font-smoothing: auto;
+  /* Use antialiased rendering for clear text */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   
   /* Ensure monospace grid integrity - CRITICAL */
   letter-spacing: 0 !important;
@@ -106,6 +106,5 @@ body {
 }
 
 .xterm canvas {
-  /* Do NOT set image-rendering on text canvas - it causes blur */
-  /* xterm.js WebGL addon handles DPI scaling internally */
+  /* WebGL addon handles DPI scaling internally */
 }

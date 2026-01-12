@@ -198,6 +198,79 @@ pub async fn sftp_rename(
     sftp.rename(&old_path, &new_path).await
 }
 
+/// Delete file or directory recursively
+#[tauri::command]
+pub async fn sftp_delete_recursive(
+    session_id: String,
+    path: String,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+) -> Result<u64, SftpError> {
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    let sftp = sftp.lock().await;
+    sftp.delete_recursive(&path).await
+}
+
+/// Download directory recursively
+#[tauri::command]
+pub async fn sftp_download_dir(
+    session_id: String,
+    remote_path: String,
+    local_path: String,
+    app: AppHandle,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+) -> Result<u64, SftpError> {
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    // Create progress channel
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<TransferProgress>(100);
+
+    // Spawn progress event emitter
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = app_clone.emit(&format!("sftp:progress:{}", session_id_clone), &progress);
+        }
+    });
+
+    let sftp = sftp.lock().await;
+    sftp.download_dir(&remote_path, &local_path, Some(tx)).await
+}
+
+/// Upload directory recursively
+#[tauri::command]
+pub async fn sftp_upload_dir(
+    session_id: String,
+    local_path: String,
+    remote_path: String,
+    app: AppHandle,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+) -> Result<u64, SftpError> {
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    // Create progress channel
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<TransferProgress>(100);
+
+    // Spawn progress event emitter
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = app_clone.emit(&format!("sftp:progress:{}", session_id_clone), &progress);
+        }
+    });
+
+    let sftp = sftp.lock().await;
+    sftp.upload_dir(&local_path, &remote_path, Some(tx)).await
+}
+
 /// Get current working directory
 #[tauri::command]
 pub async fn sftp_pwd(
@@ -253,4 +326,41 @@ pub async fn sftp_is_initialized(
     sftp_registry: State<'_, Arc<SftpRegistry>>,
 ) -> Result<bool, SftpError> {
     Ok(sftp_registry.has_sftp(&session_id))
+}
+
+// ============ Transfer Control Commands ============
+
+/// Cancel a specific transfer
+#[tauri::command]
+pub async fn sftp_cancel_transfer(
+    transfer_id: String,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
+) -> Result<bool, SftpError> {
+    Ok(transfer_manager.cancel(&transfer_id))
+}
+
+/// Pause a specific transfer
+#[tauri::command]
+pub async fn sftp_pause_transfer(
+    transfer_id: String,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
+) -> Result<bool, SftpError> {
+    Ok(transfer_manager.pause(&transfer_id))
+}
+
+/// Resume a specific transfer
+#[tauri::command]
+pub async fn sftp_resume_transfer(
+    transfer_id: String,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
+) -> Result<bool, SftpError> {
+    Ok(transfer_manager.resume(&transfer_id))
+}
+
+/// Get transfer manager stats
+#[tauri::command]
+pub async fn sftp_transfer_stats(
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
+) -> Result<(usize, usize), SftpError> {
+    Ok((transfer_manager.active_count(), transfer_manager.max_concurrent()))
 }

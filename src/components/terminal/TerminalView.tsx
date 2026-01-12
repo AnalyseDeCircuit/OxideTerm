@@ -158,12 +158,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
     // Try WebGL, fallback to canvas/dom if needed
     try {
-        // Pass devicePixelRatio for crisp rendering on HiDPI displays
+        // Configure WebGL with explicit DPR for crisp HiDPI rendering
+        const dpr = Math.ceil(window.devicePixelRatio || 1);
         const webglAddon = new WebglAddon();
         webglAddon.onContextLoss(() => {
             webglAddon.dispose();
         });
         term.loadAddon(webglAddon);
+        console.log(`WebGL addon loaded with DPR: ${dpr}`);
     } catch (e) {
         console.warn("WebGL addon failed to load, falling back to canvas renderer", e);
     }

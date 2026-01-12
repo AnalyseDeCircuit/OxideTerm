@@ -25,6 +25,7 @@ interface AppStore {
   // Actions - Sessions
   connect: (request: ConnectRequest) => Promise<string>;
   disconnect: (sessionId: string) => Promise<void>;
+  reconnect: (sessionId: string) => Promise<void>;
   updateSessionState: (sessionId: string, state: SessionState, error?: string) => void;
   
   // Actions - Tabs
@@ -105,6 +106,49 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Disconnect failed:', error);
+    }
+  },
+
+  reconnect: async (sessionId: string) => {
+    const session = get().sessions.get(sessionId);
+    if (!session) return;
+
+    // Update state to connecting
+    get().updateSessionState(sessionId, 'connecting');
+
+    try {
+      // Disconnect existing session first
+      await api.disconnect(sessionId).catch(() => {});
+      
+      // Reconnect with same parameters
+      const newSession = await api.connect({
+        host: session.host,
+        port: session.port,
+        username: session.username,
+        auth_type: 'default_key', // Use default key for reconnect
+        name: session.name,
+      });
+
+      // Update session map with new session info but keep same sessionId in tabs
+      set((state) => {
+        const newSessions = new Map(state.sessions);
+        newSessions.delete(sessionId); // Remove old
+        newSessions.set(newSession.id, newSession); // Add new
+        
+        // Update tabs to point to new session
+        const newTabs = state.tabs.map(tab => 
+          tab.sessionId === sessionId 
+            ? { ...tab, sessionId: newSession.id }
+            : tab
+        );
+        
+        return { sessions: newSessions, tabs: newTabs };
+      });
+
+      console.log(`Reconnected session: ${sessionId} -> ${newSession.id}`);
+    } catch (error) {
+      console.error('Reconnect failed:', error);
+      get().updateSessionState(sessionId, 'error', String(error));
     }
   },
 

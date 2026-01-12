@@ -16,6 +16,7 @@ use session::SessionRegistry;
 use commands::config::ConfigState;
 use commands::HealthRegistry;
 use sftp::session::SftpRegistry;
+use sftp::TransferManager;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -44,6 +45,9 @@ pub fn run() {
     
     // Create SFTP registry
     let sftp_registry = Arc::new(SftpRegistry::new());
+    
+    // Create transfer manager for concurrent transfer control
+    let transfer_manager = Arc::new(TransferManager::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -54,6 +58,7 @@ pub fn run() {
         .manage(forwarding_registry)
         .manage(health_registry)
         .manage(sftp_registry)
+        .manage(transfer_manager)
         .setup(|app| {
             // Initialize config state asynchronously
             let handle = app.handle().clone();
@@ -116,12 +121,20 @@ pub fn run() {
             commands::sftp_download,
             commands::sftp_upload,
             commands::sftp_delete,
+            commands::sftp_delete_recursive,
+            commands::sftp_download_dir,
+            commands::sftp_upload_dir,
             commands::sftp_mkdir,
             commands::sftp_rename,
             commands::sftp_pwd,
             commands::sftp_cd,
             commands::sftp_close,
             commands::sftp_is_initialized,
+            // Transfer control commands
+            commands::sftp_cancel_transfer,
+            commands::sftp_pause_transfer,
+            commands::sftp_resume_transfer,
+            commands::sftp_transfer_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

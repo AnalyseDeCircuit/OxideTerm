@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Terminal, FolderOpen, GitFork } from 'lucide-react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
 
@@ -18,12 +18,25 @@ const TabIcon = ({ type }: { type: string }) => {
 };
 
 export const TabBar = () => {
-  const { tabs, activeTabId, setActiveTab, closeTab } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, reconnect, getSession } = useAppStore();
+  const [reconnecting, setReconnecting] = React.useState<string | null>(null);
+
+  const handleReconnect = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    setReconnecting(sessionId);
+    try {
+      await reconnect(sessionId);
+    } finally {
+      setReconnecting(null);
+    }
+  };
 
   return (
     <div className="flex items-center h-9 bg-oxide-bg border-b border-oxide-border overflow-x-auto no-scrollbar">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
+        const session = getSession(tab.sessionId);
+        const isReconnecting = reconnecting === tab.sessionId;
         return (
           <div
             key={tab.id}
@@ -37,18 +50,35 @@ export const TabBar = () => {
           >
             <TabIcon type={tab.type} />
             <span className="truncate flex-1">{tab.title}</span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              className={cn(
-                "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
-                isActive && "opacity-100" // Always show close on active
+            <div className="flex items-center gap-0.5">
+              {/* Refresh button for terminal tabs */}
+              {tab.type === 'terminal' && (
+                <button
+                  onClick={(e) => handleReconnect(e, tab.sessionId)}
+                  disabled={isReconnecting}
+                  className={cn(
+                    "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
+                    isActive && "opacity-100",
+                    isReconnecting && "opacity-100"
+                  )}
+                  title="Reconnect"
+                >
+                  <RefreshCw className={cn("h-3 w-3", isReconnecting && "animate-spin")} />
+                </button>
               )}
-            >
-              <X className="h-3 w-3" />
-            </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(tab.id);
+                }}
+                className={cn(
+                  "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
+                  isActive && "opacity-100"
+                )}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           </div>
         );
       })}

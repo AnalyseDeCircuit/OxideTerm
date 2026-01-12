@@ -191,6 +191,21 @@ export const api = {
     return invoke('sftp_delete', { sessionId, path });
   },
 
+  sftpDeleteRecursive: async (sessionId: string, path: string): Promise<number> => {
+    if (USE_MOCK) return 1;
+    return invoke('sftp_delete_recursive', { sessionId, path });
+  },
+
+  sftpDownloadDir: async (sessionId: string, remotePath: string, localPath: string): Promise<number> => {
+    if (USE_MOCK) return 0;
+    return invoke('sftp_download_dir', { sessionId, remotePath, localPath });
+  },
+
+  sftpUploadDir: async (sessionId: string, localPath: string, remotePath: string): Promise<number> => {
+    if (USE_MOCK) return 0;
+    return invoke('sftp_upload_dir', { sessionId, localPath, remotePath });
+  },
+
   sftpMkdir: async (sessionId: string, path: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('sftp_mkdir', { sessionId, path });
@@ -214,6 +229,27 @@ export const api = {
   sftpClose: async (sessionId: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('sftp_close', { sessionId });
+  },
+
+  // Transfer Control
+  sftpCancelTransfer: async (transferId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('sftp_cancel_transfer', { transferId });
+  },
+
+  sftpPauseTransfer: async (transferId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('sftp_pause_transfer', { transferId });
+  },
+
+  sftpResumeTransfer: async (transferId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('sftp_resume_transfer', { transferId });
+  },
+
+  sftpTransferStats: async (): Promise<{ active: number; queued: number; completed: number }> => {
+    if (USE_MOCK) return { active: 0, queued: 0, completed: 0 };
+    return invoke('sftp_transfer_stats');
   },
   
   // ============ Port Forwarding ============

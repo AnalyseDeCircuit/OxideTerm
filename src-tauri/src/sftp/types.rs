@@ -50,10 +50,9 @@ impl FileType {
 
 /// File preview content
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
 pub enum PreviewContent {
     /// Plain text content
-    Text(String),
+    Text { data: String, mime_type: Option<String> },
     /// Base64-encoded binary content (images, etc.)
     Base64 { data: String, mime_type: String },
     /// File is too large to preview

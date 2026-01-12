@@ -108,9 +108,9 @@ export interface FileInfo {
 
 export type PreviewContent =
   | { Text: { data: string; mime_type: string | null } }
-  | { Base64: { data: string; mime_type: string | null } }
-  | { TooLarge: { size: number } }
-  | { Unsupported: { mime_type: string | null } };
+  | { Base64: { data: string; mime_type: string } }
+  | { TooLarge: { size: number; max_size: number } }
+  | { Unsupported: { mime_type: string } };
 
 export interface TransferProgress {
   transferred: number;

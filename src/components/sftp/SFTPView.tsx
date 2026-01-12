@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Folder, 
   File, 
@@ -11,9 +11,15 @@ import {
   Edit3,
   Copy,
   Eye,
-  FolderPlus
+  FolderPlus,
+  Search,
+  ArrowUpDown,
+  ArrowDownAZ,
+  ArrowUpAZ
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
+import { useTransferStore } from '../../store/transferStore';
+import { useToast } from '../../hooks/useToast';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
@@ -21,7 +27,7 @@ import { TransferQueue } from './TransferQueue';
 import { api } from '../../lib/api';
 import { FileInfo } from '../../types';
 import { listen } from '@tauri-apps/api/event';
-import { readDir, stat } from '@tauri-apps/plugin-fs';
+import { readDir, stat, remove, rename, mkdir } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 import { 
   Dialog, 
@@ -32,13 +38,39 @@ import {
   DialogFooter
 } from '../ui/dialog';
 
-// Types for Transfer Events (should match Backend)
-interface TransferEvent {
+// Types for Transfer Events (should match Backend TransferProgress)
+interface TransferProgressEvent {
     id: string;
-    sessionId: string;
-    transferred: number;
-    total: number;
+    remote_path: string;
+    local_path: string;
+    direction: string;
+    state: string;
+    total_bytes: number;
+    transferred_bytes: number;
+    speed: number;
+    eta_seconds: number | null;
+    error: string | null;
 }
+
+interface TransferCompleteEvent {
+    transfer_id: string;
+    session_id: string;
+    success: boolean;
+    error?: string;
+}
+
+// Format file size to human readable format
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const size = bytes / Math.pow(1024, i);
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
+// Sort options
+type SortField = 'name' | 'size' | 'modified';
+type SortDirection = 'asc' | 'desc';
 
 const FileList = ({ 
   title, 
@@ -56,7 +88,16 @@ const FileList = ({
   selected,
   setSelected,
   lastSelected,
-  setLastSelected
+  setLastSelected,
+  isDragOver,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  filter,
+  onFilterChange,
+  sortField,
+  sortDirection,
+  onSortChange
 }: { 
   title: string, 
   path: string, 
@@ -73,7 +114,16 @@ const FileList = ({
   selected: Set<string>,
   setSelected: (s: Set<string>) => void,
   lastSelected: string | null,
-  setLastSelected: (s: string | null) => void
+  setLastSelected: (s: string | null) => void,
+  isDragOver?: boolean,
+  onDragOver?: (e: React.DragEvent) => void,
+  onDragLeave?: (e: React.DragEvent) => void,
+  onDrop?: (e: React.DragEvent) => void,
+  filter?: string,
+  onFilterChange?: (v: string) => void,
+  sortField?: SortField,
+  sortDirection?: SortDirection,
+  onSortChange?: (field: SortField) => void
 }) => {
   const listRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, file?: FileInfo} | null>(null);
@@ -117,6 +167,21 @@ const FileList = ({
       return;
     }
     
+    // Enter: Open directory or preview file
+    if (e.key === 'Enter' && selectedFiles.length === 1) {
+      e.preventDefault();
+      const file = files.find(f => f.name === selectedFiles[0]);
+      if (file) {
+        if (file.file_type === 'Directory') {
+          const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
+          onNavigate(newPath);
+        } else if (onPreview) {
+          onPreview(file);
+        }
+      }
+      return;
+    }
+    
     // Arrow keys for transfer
     if (e.key === 'ArrowRight' && isLocal && selectedFiles.length > 0 && onTransfer) {
       e.preventDefault();
@@ -142,7 +207,7 @@ const FileList = ({
       onRename(selectedFiles[0]);
       return;
     }
-  }, [active, selected, files, title, onTransfer, onDelete, onRename, setSelected]);
+  }, [active, selected, files, title, path, onNavigate, onPreview, onTransfer, onDelete, onRename, setSelected]);
 
   // Context menu handler
   const handleContextMenu = (e: React.MouseEvent, file?: FileInfo) => {
@@ -169,11 +234,15 @@ const FileList = ({
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-oxide-bg border transition-colors",
-        active ? "border-oxide-accent/50" : "border-oxide-border"
+        "flex flex-col h-full bg-oxide-bg border transition-all duration-200",
+        active ? "border-oxide-accent/50" : "border-oxide-border",
+        isDragOver && "border-oxide-accent border-2 bg-oxide-accent/10 ring-2 ring-oxide-accent/30"
       )}
       onClick={onActivate}
       onContextMenu={(e) => handleContextMenu(e)}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {/* Header */}
       <div className={cn(
@@ -193,14 +262,77 @@ const FileList = ({
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onRefresh}>
            <RefreshCw className="h-3 w-3" />
         </Button>
+        {/* Transfer selected files */}
+        {onTransfer && selected.size > 0 && (
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-6 px-2 text-xs gap-1"
+            onClick={() => onTransfer(Array.from(selected), isLocal ? 'upload' : 'download')}
+          >
+            {isLocal ? <Upload className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+            {isLocal ? `Upload (${selected.size})` : `Download (${selected.size})`}
+          </Button>
+        )}
       </div>
 
-      {/* Column Headers */}
+      {/* Column Headers with Sort */}
       <div className="flex items-center px-2 py-1 bg-zinc-900 border-b border-oxide-border text-xs text-zinc-500">
-        <div className="flex-1">Name</div>
-        <div className="w-20 text-right">Size</div>
-        <div className="w-24 text-right">Mod</div>
+        <button 
+          className={cn(
+            "flex-1 flex items-center gap-1 hover:text-zinc-300 transition-colors text-left",
+            sortField === 'name' && "text-oxide-accent"
+          )}
+          onClick={() => onSortChange?.('name')}
+        >
+          Name
+          {sortField === 'name' && (
+            sortDirection === 'asc' ? <ArrowUpAZ className="h-3 w-3" /> : <ArrowDownAZ className="h-3 w-3" />
+          )}
+        </button>
+        <button 
+          className={cn(
+            "w-20 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
+            sortField === 'size' && "text-oxide-accent"
+          )}
+          onClick={() => onSortChange?.('size')}
+        >
+          Size
+          {sortField === 'size' && <ArrowUpDown className="h-3 w-3" />}
+        </button>
+        <button 
+          className={cn(
+            "w-24 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
+            sortField === 'modified' && "text-oxide-accent"
+          )}
+          onClick={() => onSortChange?.('modified')}
+        >
+          Mod
+          {sortField === 'modified' && <ArrowUpDown className="h-3 w-3" />}
+        </button>
       </div>
+
+      {/* Filter Input */}
+      {onFilterChange && (
+        <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 border-b border-oxide-border">
+          <Search className="h-3 w-3 text-zinc-500" />
+          <input
+            type="text"
+            value={filter || ''}
+            onChange={(e) => onFilterChange(e.target.value)}
+            placeholder="Filter files..."
+            className="flex-1 bg-transparent text-xs text-zinc-300 placeholder:text-zinc-600 outline-none"
+          />
+          {filter && (
+            <button 
+              onClick={() => onFilterChange('')}
+              className="text-zinc-500 hover:text-zinc-300 text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {/* File List */}
       <div 
@@ -247,7 +379,7 @@ const FileList = ({
                 <span>{file.name}</span>
               </div>
               <div className="w-20 text-right text-zinc-500">
-                {file.file_type === 'Directory' ? '-' : (file.size / 1024).toFixed(1) + ' KB'}
+                {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}
               </div>
               <div className="w-24 text-right text-zinc-600">
                 {file.modified ? new Date(file.modified * 1000).toLocaleDateString() : '-'}
@@ -379,6 +511,86 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   const [deleteConfirm, setDeleteConfirm] = useState<{files: string[], isRemote: boolean} | null>(null);
   const [inputValue, setInputValue] = useState('');
 
+  // Drag and Drop state
+  const [localDragOver, setLocalDragOver] = useState(false);
+  const [remoteDragOver, setRemoteDragOver] = useState(false);
+
+  // Filter and Sort state
+  const [localFilter, setLocalFilter] = useState('');
+  const [remoteFilter, setRemoteFilter] = useState('');
+  const [localSortField, setLocalSortField] = useState<SortField>('name');
+  const [localSortDirection, setLocalSortDirection] = useState<SortDirection>('asc');
+  const [remoteSortField, setRemoteSortField] = useState<SortField>('name');
+  const [remoteSortDirection, setRemoteSortDirection] = useState<SortDirection>('asc');
+
+  // Sort handler
+  const handleSortChange = (isLocal: boolean, field: SortField) => {
+    if (isLocal) {
+      if (localSortField === field) {
+        setLocalSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+      } else {
+        setLocalSortField(field);
+        setLocalSortDirection('asc');
+      }
+    } else {
+      if (remoteSortField === field) {
+        setRemoteSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+      } else {
+        setRemoteSortField(field);
+        setRemoteSortDirection('asc');
+      }
+    }
+  };
+
+  // Filter and sort files
+  const filterAndSortFiles = useCallback((
+    files: FileInfo[],
+    filter: string,
+    sortField: SortField,
+    sortDirection: SortDirection
+  ): FileInfo[] => {
+    // Filter
+    let filtered = files;
+    if (filter.trim()) {
+      const lowerFilter = filter.toLowerCase();
+      filtered = files.filter(f => f.name.toLowerCase().includes(lowerFilter));
+    }
+
+    // Sort (directories first, then by field)
+    const sorted = [...filtered].sort((a, b) => {
+      // Directories always first
+      if (a.file_type === 'Directory' && b.file_type !== 'Directory') return -1;
+      if (a.file_type !== 'Directory' && b.file_type === 'Directory') return 1;
+
+      let cmp = 0;
+      switch (sortField) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case 'size':
+          cmp = a.size - b.size;
+          break;
+        case 'modified':
+          cmp = (a.modified || 0) - (b.modified || 0);
+          break;
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+    return sorted;
+  }, []);
+
+  // Memoized filtered/sorted file lists
+  const displayLocalFiles = useMemo(
+    () => filterAndSortFiles(localFiles, localFilter, localSortField, localSortDirection),
+    [localFiles, localFilter, localSortField, localSortDirection, filterAndSortFiles]
+  );
+
+  const displayRemoteFiles = useMemo(
+    () => filterAndSortFiles(remoteFiles, remoteFilter, remoteSortField, remoteSortDirection),
+    [remoteFiles, remoteFilter, remoteSortField, remoteSortDirection, filterAndSortFiles]
+  );
+
   // Initialize local home directory
   useEffect(() => {
     homeDir().then(home => {
@@ -427,12 +639,13 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
       const files: FileInfo[] = await Promise.all(
         entries.map(async (entry) => {
           const fullPath = `${localPath}/${entry.name}`;
+          const isDir = entry.isDirectory === true;
           try {
             const info = await stat(fullPath);
             return {
               name: entry.name,
               path: fullPath,
-              file_type: entry.isDirectory ? 'Directory' : 'File',
+              file_type: isDir ? 'Directory' : 'File',
               size: info.size || 0,
               modified: info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0,
               permissions: ''
@@ -441,7 +654,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
             return {
               name: entry.name,
               path: fullPath,
-              file_type: entry.isDirectory ? 'Directory' : 'File',
+              file_type: isDir ? 'Directory' : 'File',
               size: 0,
               modified: 0,
               permissions: ''
@@ -466,59 +679,162 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
     refreshLocalFiles();
   }, [refreshLocalFiles]);
 
-  // Event Listener for Progress
-  useEffect(() => {
-      const unlisten = listen<TransferEvent>(`sftp:progress:${sessionId}`, (event) => {
-          // TODO: Update TransferQueue Store/State
-          console.log('Transfer Update:', event);
-      });
-      return () => { unlisten.then(f => f()); };
-  }, [sessionId]);
+  // Get transfer store actions
+  const { addTransfer, updateProgress, setTransferState, getAllTransfers } = useTransferStore();
 
-  // Transfer handler (upload/download)
+  // Event Listeners for Transfer Progress
+  useEffect(() => {
+      const unlistenProgress = listen<TransferProgressEvent>(`sftp:progress:${sessionId}`, (event) => {
+          const { remote_path, local_path, transferred_bytes, total_bytes } = event.payload;
+          // Find matching transfer by path (normalize paths for comparison)
+          const transfers = getAllTransfers();
+          const normalizePath = (p: string) => p.replace(/\/+/g, '/').replace(/\/$/, '');
+          const normalizedRemote = normalizePath(remote_path);
+          const normalizedLocal = normalizePath(local_path);
+          
+          const match = transfers.find(t => {
+            const tRemote = normalizePath(t.remotePath);
+            const tLocal = normalizePath(t.localPath);
+            return tRemote === normalizedRemote || tLocal === normalizedLocal ||
+                   normalizedRemote.endsWith(tRemote) || tRemote.endsWith(normalizedRemote) ||
+                   normalizedLocal.endsWith(tLocal) || tLocal.endsWith(normalizedLocal);
+          });
+          
+          if (match) {
+            updateProgress(match.id, transferred_bytes, total_bytes);
+          } else {
+            console.log('[SFTP Progress] No match found for:', { remote_path, local_path, transfers: transfers.map(t => ({ remotePath: t.remotePath, localPath: t.localPath })) });
+          }
+      });
+      
+      const unlistenComplete = listen<TransferCompleteEvent>(`sftp:complete:${sessionId}`, (event) => {
+          const { transfer_id, success, error } = event.payload;
+          if (success) {
+              setTransferState(transfer_id, 'completed');
+              // Refresh file lists
+              refreshLocalFiles();
+              api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+          } else {
+              setTransferState(transfer_id, 'error', error || 'Transfer failed');
+          }
+      });
+      
+      return () => { 
+          unlistenProgress.then(f => f()); 
+          unlistenComplete.then(f => f());
+      };
+  }, [sessionId, updateProgress, setTransferState, refreshLocalFiles, remotePath]);
+
+  // Toast notifications
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  // Transfer handler (upload/download) - supports both files and directories
   const handleTransfer = async (files: string[], direction: 'upload' | 'download', basePath: string) => {
-    try {
-      if (direction === 'upload') {
-        for (const file of files) {
-          const localFilePath = `${basePath}/${file}`;
-          const remoteFilePath = `${remotePath}/${file}`;
-          console.log(`Uploading ${localFilePath} -> ${remoteFilePath}`);
-          await api.sftpUpload(sessionId, localFilePath, remoteFilePath);
+    const directionLabel = direction === 'upload' ? 'Upload' : 'Download';
+    let successCount = 0;
+    let failCount = 0;
+    
+    // Get file info to determine if directory
+    const sourceFiles = direction === 'upload' ? localFiles : remoteFiles;
+    
+    for (const file of files) {
+      const fileInfo = sourceFiles.find(f => f.name === file);
+      const isDirectory = fileInfo?.file_type === 'Directory';
+      
+      const localFilePath = direction === 'upload' 
+        ? `${basePath}/${file}` 
+        : `${localPath}/${file}`;
+      const remoteFilePath = direction === 'upload'
+        ? `${remotePath}/${file}`
+        : `${basePath}/${file}`;
+      
+      // Add to transfer queue
+      const transferId = addTransfer({
+        id: `${sessionId}-${Date.now()}-${file}`,
+        sessionId,
+        name: isDirectory ? `${file}/` : file,
+        localPath: localFilePath,
+        remotePath: remoteFilePath,
+        direction,
+        size: fileInfo?.size || 0,
+      });
+      
+      try {
+        if (direction === 'upload') {
+          if (isDirectory) {
+            await api.sftpUploadDir(sessionId, localFilePath, remoteFilePath);
+          } else {
+            await api.sftpUpload(sessionId, localFilePath, remoteFilePath);
+          }
+        } else {
+          if (isDirectory) {
+            await api.sftpDownloadDir(sessionId, remoteFilePath, localFilePath);
+          } else {
+            await api.sftpDownload(sessionId, remoteFilePath, localFilePath);
+          }
         }
-        // Refresh remote
-        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
-      } else {
-        for (const file of files) {
-          const remoteFilePath = `${basePath}/${file}`;
-          const localFilePath = `${localPath}/${file}`;
-          console.log(`Downloading ${remoteFilePath} -> ${localFilePath}`);
-          await api.sftpDownload(sessionId, remoteFilePath, localFilePath);
-        }
-        // Refresh local
-        refreshLocalFiles();
+        // If no events fired, mark as completed
+        setTransferState(transferId, 'completed');
+        successCount++;
+      } catch (err) {
+        console.error("Transfer failed:", err);
+        setTransferState(transferId, 'error', String(err));
+        failCount++;
       }
-    } catch (err) {
-      console.error("Transfer failed:", err);
+    }
+    
+    // Show toast notification
+    if (successCount > 0 && failCount === 0) {
+      toastSuccess(`${directionLabel} Complete`, `${successCount} file(s) transferred successfully`);
+    } else if (failCount > 0 && successCount === 0) {
+      toastError(`${directionLabel} Failed`, `${failCount} file(s) failed to transfer`);
+    } else if (successCount > 0 && failCount > 0) {
+      toastError(`${directionLabel} Partial`, `${successCount} succeeded, ${failCount} failed`);
+    }
+    
+    // Refresh file lists
+    if (direction === 'upload') {
+      api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+    } else {
+      refreshLocalFiles();
     }
   };
 
-  // Delete handler
+  // Delete handler - uses recursive delete for directories
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     const { files, isRemote } = deleteConfirm;
     try {
       if (isRemote) {
+        let totalDeleted = 0;
         for (const file of files) {
-          await api.sftpDelete(sessionId, `${remotePath}/${file}`);
+          const filePath = `${remotePath}/${file}`;
+          // Check if it's a directory
+          const fileInfo = remoteFiles.find(f => f.name === file);
+          if (fileInfo?.file_type === 'Directory') {
+            const count = await api.sftpDeleteRecursive(sessionId, filePath);
+            totalDeleted += count;
+          } else {
+            await api.sftpDelete(sessionId, filePath);
+            totalDeleted += 1;
+          }
         }
         api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
         setRemoteSelected(new Set());
+        toastSuccess('Deleted', `${totalDeleted} item(s) deleted`);
       } else {
-        // Local delete not implemented - would need tauri fs write permissions
-        console.log("Local delete not implemented yet");
+        // Local delete
+        for (const file of files) {
+          const filePath = localPath.endsWith('/') ? `${localPath}${file}` : `${localPath}/${file}`;
+          await remove(filePath, { recursive: true });
+        }
+        refreshLocalFiles();
+        setLocalSelected(new Set());
+        toastSuccess('Deleted', `${files.length} item(s) deleted`);
       }
     } catch (err) {
       console.error("Delete failed:", err);
+      toastError('Delete Failed', String(err));
     }
     setDeleteConfirm(null);
   };
@@ -532,12 +848,19 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
         await api.sftpRename(sessionId, `${remotePath}/${oldName}`, `${remotePath}/${inputValue}`);
         api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
         setRemoteSelected(new Set());
+        toastSuccess('Renamed', `${oldName} → ${inputValue}`);
       } else {
-        // Local rename not implemented
-        console.log("Local rename not implemented yet");
+        // Local rename
+        const oldPath = localPath.endsWith('/') ? `${localPath}${oldName}` : `${localPath}/${oldName}`;
+        const newPath = localPath.endsWith('/') ? `${localPath}${inputValue}` : `${localPath}/${inputValue}`;
+        await rename(oldPath, newPath);
+        refreshLocalFiles();
+        setLocalSelected(new Set());
+        toastSuccess('Renamed', `${oldName} → ${inputValue}`);
       }
     } catch (err) {
       console.error("Rename failed:", err);
+      toastError('Rename Failed', String(err));
     }
     setRenameDialog(null);
     setInputValue('');
@@ -551,12 +874,17 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
       if (isRemote) {
         await api.sftpMkdir(sessionId, `${remotePath}/${inputValue}`);
         api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        toastSuccess('Folder Created', inputValue);
       } else {
-        // Local mkdir not implemented
-        console.log("Local mkdir not implemented yet");
+        // Local mkdir
+        const newPath = localPath.endsWith('/') ? `${localPath}${inputValue}` : `${localPath}/${inputValue}`;
+        await mkdir(newPath, { recursive: true });
+        refreshLocalFiles();
+        toastSuccess('Folder Created', inputValue);
       }
     } catch (err) {
       console.error("New folder failed:", err);
+      toastError('Create Folder Failed', String(err));
     }
     setNewFolderDialog(null);
     setInputValue('');
@@ -581,9 +909,11 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   };
 
   const handlePreview = async (file: FileInfo) => {
-      if (file.size > 1024 * 1024) {
-          // TODO: Show toast for too large
-          console.warn("File too large to preview");
+      const MAX_PREVIEW_SIZE = 10 * 1024 * 1024; // 10MB - should match backend
+      
+      // Pre-check file size on client side
+      if (file.size > MAX_PREVIEW_SIZE) {
+          toastError('File Too Large', `${file.name} (${formatFileSize(file.size)}) exceeds preview limit (${formatFileSize(MAX_PREVIEW_SIZE)})`);
           return;
       }
 
@@ -592,11 +922,22 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           const fullPath = `${remotePath}/${file.name}`;
           const content = await api.sftpPreview(sessionId, fullPath);
           
+          // Handle all response types from backend
+          if ('TooLarge' in content) {
+              toastError('File Too Large', `${file.name} (${formatFileSize(content.TooLarge.size)}) cannot be previewed`);
+              return;
+          }
+          
+          if ('Unsupported' in content) {
+              toastError('Unsupported Format', `Cannot preview ${content.Unsupported.mime_type || 'unknown'} file type`);
+              return;
+          }
+          
           let text = "";
           if ('Text' in content) {
               text = content.Text.data;
           } else if ('Base64' in content) {
-              text = atob(content.Base64.data); // Decode for display if possible, or show hex
+              text = atob(content.Base64.data); // Decode for display if possible
           } else {
               text = "[Binary or Unsupported Content]";
           }
@@ -608,6 +949,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           });
       } catch (e) {
           console.error("Preview failed:", e);
+          toastError('Preview Failed', String(e));
       } finally {
           setPreviewLoading(false);
       }
@@ -617,15 +959,11 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
     <div className="flex flex-col h-full w-full bg-oxide-bg p-2 gap-2">
       <div className="flex-1 flex gap-2 min-h-0">
         {/* Local Pane */}
-        <div 
-            className="flex-1 min-w-0"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, 'local')}
-        >
+        <div className="flex-1 min-w-0">
            <FileList 
              title="Local" 
              path={localPath} 
-             files={localFiles}
+             files={displayLocalFiles}
              onNavigate={(p) => setLocalPath(p === '..' ? localPath.split('/').slice(0,-1).join('/') || '/' : p === '~' ? localHome : p)}
              onRefresh={refreshLocalFiles}
              active={activePane === 'local'}
@@ -638,19 +976,24 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
              setSelected={setLocalSelected}
              lastSelected={localLastSelected}
              setLastSelected={setLocalLastSelected}
+             isDragOver={localDragOver}
+             onDragOver={(e) => { e.preventDefault(); setLocalDragOver(true); }}
+             onDragLeave={() => setLocalDragOver(false)}
+             onDrop={(e) => { setLocalDragOver(false); handleDrop(e, 'local'); }}
+             filter={localFilter}
+             onFilterChange={setLocalFilter}
+             sortField={localSortField}
+             sortDirection={localSortDirection}
+             onSortChange={(field) => handleSortChange(true, field)}
            />
         </div>
 
         {/* Remote Pane */}
-        <div 
-            className="flex-1 min-w-0"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => handleDrop(e, 'remote')}
-        >
+        <div className="flex-1 min-w-0">
            <FileList 
              title={`Remote (${session?.host})`}
              path={remotePath}
-             files={remoteFiles}
+             files={displayRemoteFiles}
              onNavigate={(p) => setRemotePath(p === '..' ? remotePath.split('/').slice(0,-1).join('/') || '/' : p === '~' ? '/home/' + session?.username : p)}
              onRefresh={() => api.sftpListDir(sessionId, remotePath).then(setRemoteFiles)}
              active={activePane === 'remote'}
@@ -664,6 +1007,15 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
              setSelected={setRemoteSelected}
              lastSelected={remoteLastSelected}
              setLastSelected={setRemoteLastSelected}
+             isDragOver={remoteDragOver}
+             onDragOver={(e) => { e.preventDefault(); setRemoteDragOver(true); }}
+             onDragLeave={() => setRemoteDragOver(false)}
+             onDrop={(e) => { setRemoteDragOver(false); handleDrop(e, 'remote'); }}
+             filter={remoteFilter}
+             onFilterChange={setRemoteFilter}
+             sortField={remoteSortField}
+             sortDirection={remoteSortDirection}
+             onSortChange={(field) => handleSortChange(false, field)}
            />
         </div>
       </div>

@@ -299,9 +299,12 @@ impl SftpSession {
             
             // Truncate if too large
             if text.len() > constants::MAX_TEXT_PREVIEW_SIZE as usize {
-                Ok(PreviewContent::Text(text[..constants::MAX_TEXT_PREVIEW_SIZE as usize].to_string()))
+                Ok(PreviewContent::Text { 
+                    data: text[..constants::MAX_TEXT_PREVIEW_SIZE as usize].to_string(),
+                    mime_type: Some(mime_type)
+                })
             } else {
-                Ok(PreviewContent::Text(text))
+                Ok(PreviewContent::Text { data: text, mime_type: Some(mime_type) })
             }
         } else {
             // Binary preview (images)
@@ -484,6 +487,205 @@ impl SftpSession {
         Ok(())
     }
 
+    /// Download directory recursively with progress reporting
+    pub async fn download_dir(
+        &self,
+        remote_path: &str,
+        local_path: &str,
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+    ) -> Result<u64, SftpError> {
+        let canonical_path = self.resolve_path(remote_path).await?;
+        info!("Downloading directory {} to {}", canonical_path, local_path);
+
+        let transfer_id = uuid::Uuid::new_v4().to_string();
+        let start_time = std::time::Instant::now();
+        
+        // Create local directory
+        tokio::fs::create_dir_all(local_path)
+            .await
+            .map_err(SftpError::IoError)?;
+
+        let total_count = self.download_dir_inner(&canonical_path, local_path, &transfer_id, &progress_tx, &start_time).await?;
+
+        info!("Download directory complete: {} files", total_count);
+        Ok(total_count)
+    }
+
+    /// Internal recursive directory download implementation
+    async fn download_dir_inner(
+        &self,
+        remote_path: &str,
+        local_path: &str,
+        transfer_id: &str,
+        progress_tx: &Option<mpsc::Sender<TransferProgress>>,
+        start_time: &std::time::Instant,
+    ) -> Result<u64, SftpError> {
+        let entries = self.list_dir(remote_path, Some(ListFilter {
+            show_hidden: true,
+            pattern: None,
+            sort: SortOrder::Name,
+        })).await?;
+
+        let mut count = 0u64;
+
+        for entry in entries {
+            let local_entry_path = format!("{}/{}", local_path, entry.name);
+
+            if entry.file_type == FileType::Directory {
+                // Create local directory
+                tokio::fs::create_dir_all(&local_entry_path)
+                    .await
+                    .map_err(SftpError::IoError)?;
+                
+                // Recurse into subdirectory (boxed to avoid infinite future size)
+                count += Box::pin(self.download_dir_inner(&entry.path, &local_entry_path, transfer_id, progress_tx, start_time)).await?;
+            } else {
+                // Download file
+                let content = self
+                    .sftp
+                    .read(&entry.path)
+                    .await
+                    .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+                tokio::fs::write(&local_entry_path, &content)
+                    .await
+                    .map_err(SftpError::IoError)?;
+
+                count += 1;
+
+                // Send progress
+                if let Some(ref tx) = progress_tx {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let speed = if elapsed > 0.0 {
+                        (content.len() as f64 / elapsed) as u64
+                    } else {
+                        0
+                    };
+
+                    let _ = tx
+                        .send(TransferProgress {
+                            id: transfer_id.to_string(),
+                            remote_path: entry.path.clone(),
+                            local_path: local_entry_path.clone(),
+                            direction: TransferDirection::Download,
+                            state: TransferState::InProgress,
+                            total_bytes: entry.size,
+                            transferred_bytes: entry.size,
+                            speed,
+                            eta_seconds: None,
+                            error: None,
+                        })
+                        .await;
+                }
+            }
+        }
+
+        Ok(count)
+    }
+
+    /// Upload directory recursively with progress reporting
+    pub async fn upload_dir(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+    ) -> Result<u64, SftpError> {
+        let canonical_path = if remote_path.starts_with('/') {
+            remote_path.to_string()
+        } else {
+            format!("{}/{}", self.cwd, remote_path)
+        };
+        info!("Uploading directory {} to {}", local_path, canonical_path);
+
+        let transfer_id = uuid::Uuid::new_v4().to_string();
+        let start_time = std::time::Instant::now();
+        
+        // Create remote directory
+        let _ = self.mkdir(&canonical_path).await; // Ignore error if exists
+
+        let total_count = self.upload_dir_inner(local_path, &canonical_path, &transfer_id, &progress_tx, &start_time).await?;
+
+        info!("Upload directory complete: {} files", total_count);
+        Ok(total_count)
+    }
+
+    /// Internal recursive directory upload implementation
+    async fn upload_dir_inner(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        transfer_id: &str,
+        progress_tx: &Option<mpsc::Sender<TransferProgress>>,
+        start_time: &std::time::Instant,
+    ) -> Result<u64, SftpError> {
+        let mut entries = tokio::fs::read_dir(local_path)
+            .await
+            .map_err(SftpError::IoError)?;
+
+        let mut count = 0u64;
+
+        while let Some(entry) = entries.next_entry().await.map_err(SftpError::IoError)? {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let local_entry_path = entry.path();
+            let remote_entry_path = format!("{}/{}", remote_path, name);
+
+            let metadata = entry.metadata().await.map_err(SftpError::IoError)?;
+
+            if metadata.is_dir() {
+                // Create remote directory
+                let _ = self.mkdir(&remote_entry_path).await;
+                
+                // Recurse into subdirectory (boxed to avoid infinite future size)
+                count += Box::pin(self.upload_dir_inner(
+                    local_entry_path.to_string_lossy().as_ref(),
+                    &remote_entry_path,
+                    transfer_id,
+                    progress_tx,
+                    start_time,
+                )).await?;
+            } else {
+                // Upload file
+                let content = tokio::fs::read(&local_entry_path)
+                    .await
+                    .map_err(SftpError::IoError)?;
+
+                self.sftp
+                    .write(&remote_entry_path, &content)
+                    .await
+                    .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+                count += 1;
+
+                // Send progress
+                if let Some(ref tx) = progress_tx {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let speed = if elapsed > 0.0 {
+                        (content.len() as f64 / elapsed) as u64
+                    } else {
+                        0
+                    };
+
+                    let _ = tx
+                        .send(TransferProgress {
+                            id: transfer_id.to_string(),
+                            remote_path: remote_entry_path.clone(),
+                            local_path: local_entry_path.to_string_lossy().to_string(),
+                            direction: TransferDirection::Upload,
+                            state: TransferState::InProgress,
+                            total_bytes: content.len() as u64,
+                            transferred_bytes: content.len() as u64,
+                            speed,
+                            eta_seconds: None,
+                            error: None,
+                        })
+                        .await;
+                }
+            }
+        }
+
+        Ok(count)
+    }
+
     /// Delete file or empty directory
     pub async fn delete(&self, path: &str) -> Result<(), SftpError> {
         let canonical_path = self.resolve_path(path).await?;
@@ -504,6 +706,50 @@ impl SftpSession {
         }
 
         Ok(())
+    }
+
+    /// Delete file or directory recursively
+    pub async fn delete_recursive(&self, path: &str) -> Result<u64, SftpError> {
+        let canonical_path = self.resolve_path(path).await?;
+        info!("Recursively deleting: {}", canonical_path);
+        
+        self.delete_recursive_inner(&canonical_path).await
+    }
+
+    /// Internal recursive delete implementation
+    async fn delete_recursive_inner(&self, path: &str) -> Result<u64, SftpError> {
+        let info = self.stat(path).await?;
+        let mut deleted_count = 0u64;
+
+        if info.file_type == FileType::Directory {
+            // List directory contents
+            let entries = self.list_dir(path, Some(ListFilter {
+                show_hidden: true,
+                pattern: None,
+                sort: SortOrder::Name,
+            })).await?;
+
+            // Recursively delete each entry (boxed to avoid infinite future size)
+            for entry in entries {
+                deleted_count += Box::pin(self.delete_recursive_inner(&entry.path)).await?;
+            }
+
+            // Delete the now-empty directory
+            self.sftp
+                .remove_dir(path)
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+            deleted_count += 1;
+        } else {
+            // Delete file
+            self.sftp
+                .remove_file(path)
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+            deleted_count += 1;
+        }
+
+        Ok(deleted_count)
     }
 
     /// Create directory
