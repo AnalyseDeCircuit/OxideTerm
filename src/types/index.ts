@@ -107,10 +107,14 @@ export interface FileInfo {
 }
 
 export type PreviewContent =
-  | { Text: { data: string; mime_type: string | null } }
-  | { Base64: { data: string; mime_type: string } }
-  | { TooLarge: { size: number; max_size: number } }
-  | { Unsupported: { mime_type: string } };
+  | { Text: { data: string; mime_type: string | null; language: string | null } }
+  | { Image: { data: string; mime_type: string } }
+  | { Video: { data: string; mime_type: string } }
+  | { Audio: { data: string; mime_type: string } }
+  | { Pdf: { data: string; original_mime: string | null } }
+  | { Hex: { data: string; total_size: number; offset: number; chunk_size: number; has_more: boolean } }
+  | { TooLarge: { size: number; max_size: number; recommend_download: boolean } }
+  | { Unsupported: { mime_type: string; reason: string } };
 
 export interface TransferProgress {
   transferred: number;

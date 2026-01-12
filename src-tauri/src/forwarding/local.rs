@@ -65,6 +65,19 @@ impl LocalForward {
     }
 }
 
+/// Statistics for a port forward
+#[derive(Debug, Clone, Default)]
+pub struct ForwardStats {
+    /// Total connections handled
+    pub connection_count: u64,
+    /// Active connections right now
+    pub active_connections: u64,
+    /// Total bytes sent (client -> server)
+    pub bytes_sent: u64,
+    /// Total bytes received (server -> client)
+    pub bytes_received: u64,
+}
+
 /// Handle to a running local port forward
 pub struct LocalForwardHandle {
     /// Forward configuration
@@ -75,6 +88,8 @@ pub struct LocalForwardHandle {
     running: Arc<AtomicBool>,
     /// Channel to signal stop
     stop_tx: mpsc::Sender<()>,
+    /// Connection statistics
+    stats: Arc<parking_lot::RwLock<ForwardStats>>,
 }
 
 impl LocalForwardHandle {
@@ -88,6 +103,11 @@ impl LocalForwardHandle {
     /// Check if the forward is still running
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
+    }
+
+    /// Get current statistics
+    pub fn stats(&self) -> ForwardStats {
+        self.stats.read().clone()
     }
 }
 
@@ -123,6 +143,8 @@ pub async fn start_local_forward(
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
     let (stop_tx, mut stop_rx) = mpsc::channel::<()>(1);
+    let stats = Arc::new(parking_lot::RwLock::new(ForwardStats::default()));
+    let stats_clone = stats.clone();
 
     let remote_host = config.remote_host.clone();
     let remote_port = config.remote_port;
@@ -147,18 +169,35 @@ pub async fn start_local_forward(
                             
                             debug!("Accepted connection from {} for forward", peer_addr);
                             
+                            // Update stats
+                            {
+                                let mut s = stats_clone.write();
+                                s.connection_count += 1;
+                                s.active_connections += 1;
+                            }
+                            
                             // Clone for the connection handler
                             let controller = handle_controller.clone();
                             let remote_host_clone = remote_host.clone();
+                            let stats_for_conn = stats_clone.clone();
                             
                             // Spawn a task to handle this connection
                             tokio::spawn(async move {
-                                if let Err(e) = handle_forward_connection(
+                                let result = handle_forward_connection(
                                     controller,
                                     stream,
                                     &remote_host_clone,
                                     remote_port,
-                                ).await {
+                                    stats_for_conn.clone(),
+                                ).await;
+                                
+                                // Decrement active connections when done
+                                {
+                                    let mut s = stats_for_conn.write();
+                                    s.active_connections = s.active_connections.saturating_sub(1);
+                                }
+                                
+                                if let Err(e) = result {
                                     warn!("Forward connection error: {}", e);
                                 }
                             });
@@ -182,6 +221,7 @@ pub async fn start_local_forward(
         bound_addr,
         running,
         stop_tx,
+        stats,
     })
 }
 
@@ -191,6 +231,7 @@ async fn handle_forward_connection(
     mut local_stream: TcpStream,
     remote_host: &str,
     remote_port: u16,
+    stats: Arc<parking_lot::RwLock<ForwardStats>>,
 ) -> Result<(), SshError> {
     // Open direct-tcpip channel to remote via Handle Owner Task
     let channel = handle_controller
@@ -212,6 +253,9 @@ async fn handle_forward_connection(
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
+    
+    let stats_for_send = stats.clone();
+    let stats_for_recv = stats.clone();
 
     // Local -> Remote task
     let local_to_remote = async {
@@ -225,6 +269,8 @@ async fn handle_forward_connection(
                         debug!("Channel write error: {}", e);
                         break;
                     }
+                    // Update bytes sent
+                    stats_for_send.write().bytes_sent += n as u64;
                 }
                 Err(e) => {
                     debug!("Local read error: {}", e);
@@ -243,11 +289,14 @@ async fn handle_forward_connection(
             let mut ch = channel_for_read.lock().await;
             match ch.wait().await {
                 Some(russh::ChannelMsg::Data { data }) => {
+                    let data_len = data.len();
                     drop(ch); // Release lock before writing
                     if let Err(e) = local_write.write_all(&data).await {
                         debug!("Local write error: {}", e);
                         break;
                     }
+                    // Update bytes received
+                    stats_for_recv.write().bytes_received += data_len as u64;
                 }
                 Some(russh::ChannelMsg::Eof) => {
                     debug!("Channel EOF received");

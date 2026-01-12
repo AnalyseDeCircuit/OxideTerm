@@ -107,6 +107,10 @@ pub fn run() {
             commands::forward_jupyter,
             commands::forward_tensorboard,
             commands::stop_all_forwards,
+            commands::delete_port_forward,
+            commands::restart_port_forward,
+            commands::update_port_forward,
+            commands::get_port_forward_stats,
             // Health check commands
             commands::get_connection_health,
             commands::get_quick_health,
@@ -118,6 +122,7 @@ pub fn run() {
             commands::sftp_list_dir,
             commands::sftp_stat,
             commands::sftp_preview,
+            commands::sftp_preview_hex,
             commands::sftp_download,
             commands::sftp_upload,
             commands::sftp_delete,

@@ -10,7 +10,7 @@ use tauri::State;
 use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
-use crate::forwarding::{ForwardingManager, ForwardRule, ForwardStatus, ForwardType};
+use crate::forwarding::{ForwardingManager, ForwardRule, ForwardRuleUpdate, ForwardStatus, ForwardType, ForwardStats};
 
 /// Global registry of forwarding managers (one per session)
 pub struct ForwardingRegistry {
@@ -292,4 +292,167 @@ pub async fn stop_all_forwards(
     }
 
     Ok(())
+}
+
+/// Request to update a forward's configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateForwardRequest {
+    /// Session ID
+    pub session_id: String,
+    /// Forward ID to update
+    pub forward_id: String,
+    /// New bind address (optional)
+    pub bind_address: Option<String>,
+    /// New bind port (optional)
+    pub bind_port: Option<u16>,
+    /// New target host (optional)
+    pub target_host: Option<String>,
+    /// New target port (optional)
+    pub target_port: Option<u16>,
+    /// New description (optional)
+    pub description: Option<String>,
+}
+
+/// Forward stats DTO for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForwardStatsDto {
+    pub connection_count: u64,
+    pub active_connections: u64,
+    pub bytes_sent: u64,
+    pub bytes_received: u64,
+}
+
+impl From<ForwardStats> for ForwardStatsDto {
+    fn from(stats: ForwardStats) -> Self {
+        Self {
+            connection_count: stats.connection_count,
+            active_connections: stats.active_connections,
+            bytes_sent: stats.bytes_sent,
+            bytes_received: stats.bytes_received,
+        }
+    }
+}
+
+/// Delete a port forward (permanently remove)
+#[tauri::command]
+pub async fn delete_port_forward(
+    registry: State<'_, ForwardingRegistry>,
+    session_id: String,
+    forward_id: String,
+) -> Result<ForwardResponse, String> {
+    info!("Deleting port forward {} for session {}", forward_id, session_id);
+
+    let manager = registry
+        .get(&session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    match manager.delete_forward(&forward_id).await {
+        Ok(()) => {
+            info!("Port forward deleted: {}", forward_id);
+            Ok(ForwardResponse {
+                success: true,
+                forward: None,
+                error: None,
+            })
+        }
+        Err(e) => {
+            warn!("Failed to delete port forward: {}", e);
+            Ok(ForwardResponse {
+                success: false,
+                forward: None,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+/// Restart a stopped port forward
+#[tauri::command]
+pub async fn restart_port_forward(
+    registry: State<'_, ForwardingRegistry>,
+    session_id: String,
+    forward_id: String,
+) -> Result<ForwardResponse, String> {
+    info!("Restarting port forward {} for session {}", forward_id, session_id);
+
+    let manager = registry
+        .get(&session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    match manager.restart_forward(&forward_id).await {
+        Ok(rule) => {
+            info!("Port forward restarted: {}", rule.id);
+            Ok(ForwardResponse {
+                success: true,
+                forward: Some(rule.into()),
+                error: None,
+            })
+        }
+        Err(e) => {
+            warn!("Failed to restart port forward: {}", e);
+            Ok(ForwardResponse {
+                success: false,
+                forward: None,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+/// Update a stopped port forward's configuration
+#[tauri::command]
+pub async fn update_port_forward(
+    registry: State<'_, ForwardingRegistry>,
+    request: UpdateForwardRequest,
+) -> Result<ForwardResponse, String> {
+    info!("Updating port forward {} for session {}", request.forward_id, request.session_id);
+
+    let manager = registry
+        .get(&request.session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", request.session_id))?;
+
+    let updates = ForwardRuleUpdate {
+        bind_address: request.bind_address,
+        bind_port: request.bind_port,
+        target_host: request.target_host,
+        target_port: request.target_port,
+        description: request.description,
+    };
+
+    match manager.update_forward(&request.forward_id, updates).await {
+        Ok(rule) => {
+            info!("Port forward updated: {}", rule.id);
+            Ok(ForwardResponse {
+                success: true,
+                forward: Some(rule.into()),
+                error: None,
+            })
+        }
+        Err(e) => {
+            warn!("Failed to update port forward: {}", e);
+            Ok(ForwardResponse {
+                success: false,
+                forward: None,
+                error: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+/// Get statistics for a port forward
+#[tauri::command]
+pub async fn get_port_forward_stats(
+    registry: State<'_, ForwardingRegistry>,
+    session_id: String,
+    forward_id: String,
+) -> Result<Option<ForwardStatsDto>, String> {
+    let manager = registry
+        .get(&session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    Ok(manager.get_forward_stats(&forward_id).await.map(|s| s.into()))
 }

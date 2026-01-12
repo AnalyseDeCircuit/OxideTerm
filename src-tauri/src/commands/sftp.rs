@@ -94,6 +94,22 @@ pub async fn sftp_preview(
     sftp.preview(&path).await
 }
 
+/// Preview more hex data (incremental loading)
+#[tauri::command]
+pub async fn sftp_preview_hex(
+    session_id: String,
+    path: String,
+    offset: u64,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+) -> Result<PreviewContent, SftpError> {
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    let sftp = sftp.lock().await;
+    sftp.preview_with_offset(&path, offset).await
+}
+
 /// Download file
 #[tauri::command]
 pub async fn sftp_download(

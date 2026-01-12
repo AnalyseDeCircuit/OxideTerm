@@ -172,8 +172,13 @@ export const api = {
   },
 
   sftpPreview: async (sessionId: string, path: string): Promise<PreviewContent> => {
-    if (USE_MOCK) return { Text: { data: 'Mock preview', mime_type: 'text/plain' } };
+    if (USE_MOCK) return { Text: { data: 'Mock preview', mime_type: 'text/plain', language: null } };
     return invoke('sftp_preview', { sessionId, path });
+  },
+
+  sftpPreviewHex: async (sessionId: string, path: string, offset: number): Promise<PreviewContent> => {
+    if (USE_MOCK) return { Hex: { data: '00000000  00 00 00 00 |....|', total_size: 16, offset: 0, chunk_size: 16, has_more: false } };
+    return invoke('sftp_preview_hex', { sessionId, path, offset });
   },
 
   sftpDownload: async (sessionId: string, remotePath: string, localPath: string): Promise<void> => {
@@ -267,6 +272,39 @@ export const api = {
   stopPortForward: async (sessionId: string, forwardId: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('stop_port_forward', { sessionId, forwardId });
+  },
+
+  deletePortForward: async (sessionId: string, forwardId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('delete_port_forward', { sessionId, forwardId });
+  },
+
+  restartPortForward: async (sessionId: string, forwardId: string): Promise<any> => {
+    if (USE_MOCK) return { success: true, forward: { id: forwardId } };
+    return invoke('restart_port_forward', { sessionId, forwardId });
+  },
+
+  updatePortForward: async (request: {
+    session_id: string;
+    forward_id: string;
+    bind_address?: string;
+    bind_port?: number;
+    target_host?: string;
+    target_port?: number;
+    description?: string;
+  }): Promise<any> => {
+    if (USE_MOCK) return { success: true };
+    return invoke('update_port_forward', { request });
+  },
+
+  getPortForwardStats: async (sessionId: string, forwardId: string): Promise<{
+    connection_count: number;
+    active_connections: number;
+    bytes_sent: number;
+    bytes_received: number;
+  } | null> => {
+    if (USE_MOCK) return null;
+    return invoke('get_port_forward_stats', { sessionId, forwardId });
   },
 
   stopAllForwards: async (sessionId: string): Promise<void> => {

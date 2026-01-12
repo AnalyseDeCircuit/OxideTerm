@@ -10,10 +10,56 @@ use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
 
-use super::local::{LocalForward, LocalForwardHandle, start_local_forward};
-use super::remote::{RemoteForward, RemoteForwardHandle, start_remote_forward};
-use super::dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward};
+use super::local::{LocalForward, LocalForwardHandle, start_local_forward, ForwardStats as LocalForwardStats};
+use super::remote::{RemoteForward, RemoteForwardHandle, start_remote_forward, ForwardStats as RemoteForwardStats};
+use super::dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward, ForwardStats as DynamicForwardStats};
 use crate::ssh::{HandleController, SshError};
+
+/// Forward statistics (unified for all types)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ForwardStats {
+    /// Total connection count
+    pub connection_count: u64,
+    /// Currently active connections
+    pub active_connections: u64,
+    /// Total bytes sent
+    pub bytes_sent: u64,
+    /// Total bytes received
+    pub bytes_received: u64,
+}
+
+impl From<LocalForwardStats> for ForwardStats {
+    fn from(s: LocalForwardStats) -> Self {
+        Self {
+            connection_count: s.connection_count,
+            active_connections: s.active_connections,
+            bytes_sent: s.bytes_sent,
+            bytes_received: s.bytes_received,
+        }
+    }
+}
+
+impl From<RemoteForwardStats> for ForwardStats {
+    fn from(s: RemoteForwardStats) -> Self {
+        Self {
+            connection_count: s.connection_count,
+            active_connections: s.active_connections,
+            bytes_sent: s.bytes_sent,
+            bytes_received: s.bytes_received,
+        }
+    }
+}
+
+impl From<DynamicForwardStats> for ForwardStats {
+    fn from(s: DynamicForwardStats) -> Self {
+        Self {
+            connection_count: s.connection_count,
+            active_connections: s.active_connections,
+            bytes_sent: s.bytes_sent,
+            bytes_received: s.bytes_received,
+        }
+    }
+}
 
 /// Type of port forward
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +164,21 @@ impl ForwardRule {
     }
 }
 
+/// Updates for an existing forward rule (for edit operation)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ForwardRuleUpdate {
+    /// New bind address
+    pub bind_address: Option<String>,
+    /// New bind port
+    pub bind_port: Option<u16>,
+    /// New target host
+    pub target_host: Option<String>,
+    /// New target port
+    pub target_port: Option<u16>,
+    /// New description
+    pub description: Option<String>,
+}
+
 /// Internal tracking for local forwards
 struct LocalForwardEntry {
     rule: ForwardRule,
@@ -152,6 +213,8 @@ pub struct ForwardingManager {
     remote_forwards: RwLock<HashMap<String, RemoteForwardEntry>>,
     /// Active dynamic (SOCKS5) forwards
     dynamic_forwards: RwLock<HashMap<String, DynamicForwardEntry>>,
+    /// Stopped forwards (preserved for restart/edit)
+    stopped_forwards: RwLock<HashMap<String, ForwardRule>>,
     /// Session ID for correlation
     session_id: String,
 }
@@ -164,6 +227,7 @@ impl ForwardingManager {
             local_forwards: RwLock::new(HashMap::new()),
             remote_forwards: RwLock::new(HashMap::new()),
             dynamic_forwards: RwLock::new(HashMap::new()),
+            stopped_forwards: RwLock::new(HashMap::new()),
             session_id: session_id.into(),
         }
     }
@@ -290,11 +354,15 @@ impl ForwardingManager {
         }
     }
 
-    /// Stop a forward by ID
+    /// Stop a forward by ID (preserves the rule for restart)
     pub async fn stop_forward(&self, forward_id: &str) -> Result<(), SshError> {
         // Try local forwards first
         if let Some(entry) = self.local_forwards.write().await.remove(forward_id) {
             entry.handle.stop().await;
+            // Save the rule for potential restart
+            let mut rule = entry.rule.clone();
+            rule.status = ForwardStatus::Stopped;
+            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
             info!("Stopped local forward: {}", forward_id);
             return Ok(());
         }
@@ -302,6 +370,10 @@ impl ForwardingManager {
         // Try remote forwards
         if let Some(entry) = self.remote_forwards.write().await.remove(forward_id) {
             entry.handle.stop().await;
+            // Save the rule for potential restart
+            let mut rule = entry.rule.clone();
+            rule.status = ForwardStatus::Stopped;
+            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
             info!("Stopped remote forward: {}", forward_id);
             return Ok(());
         }
@@ -309,6 +381,10 @@ impl ForwardingManager {
         // Try dynamic forwards
         if let Some(entry) = self.dynamic_forwards.write().await.remove(forward_id) {
             entry.handle.stop().await;
+            // Save the rule for potential restart
+            let mut rule = entry.rule.clone();
+            rule.status = ForwardStatus::Stopped;
+            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
             info!("Stopped dynamic forward: {}", forward_id);
             return Ok(());
         }
@@ -317,6 +393,87 @@ impl ForwardingManager {
             "Forward not found: {}",
             forward_id
         )))
+    }
+
+    /// Delete a forward by ID (permanently removes from both active and stopped)
+    pub async fn delete_forward(&self, forward_id: &str) -> Result<(), SshError> {
+        // First try to stop if it's still active
+        let _ = self.stop_forward(forward_id).await;
+        
+        // Now remove from stopped_forwards
+        if self.stopped_forwards.write().await.remove(forward_id).is_some() {
+            info!("Deleted forward: {}", forward_id);
+            return Ok(());
+        }
+
+        Err(SshError::ConnectionFailed(format!(
+            "Forward not found: {}",
+            forward_id
+        )))
+    }
+
+    /// Restart a stopped forward
+    pub async fn restart_forward(&self, forward_id: &str) -> Result<ForwardRule, SshError> {
+        // Get the rule from stopped_forwards
+        let rule = self.stopped_forwards.write().await.remove(forward_id)
+            .ok_or_else(|| SshError::ConnectionFailed(format!(
+                "Stopped forward not found: {}",
+                forward_id
+            )))?;
+
+        // Create a new forward with the same rule (keep the same ID)
+        self.create_forward(rule).await
+    }
+
+    /// Update a stopped forward's configuration
+    pub async fn update_forward(&self, forward_id: &str, updates: ForwardRuleUpdate) -> Result<ForwardRule, SshError> {
+        let mut stopped = self.stopped_forwards.write().await;
+        
+        let rule = stopped.get_mut(forward_id)
+            .ok_or_else(|| SshError::ConnectionFailed(format!(
+                "Stopped forward not found: {}. Only stopped forwards can be edited.",
+                forward_id
+            )))?;
+
+        // Apply updates
+        if let Some(bind_address) = updates.bind_address {
+            rule.bind_address = bind_address;
+        }
+        if let Some(bind_port) = updates.bind_port {
+            rule.bind_port = bind_port;
+        }
+        if let Some(target_host) = updates.target_host {
+            rule.target_host = target_host;
+        }
+        if let Some(target_port) = updates.target_port {
+            rule.target_port = target_port;
+        }
+        if let Some(description) = updates.description {
+            rule.description = Some(description);
+        }
+
+        info!("Updated forward: {}", forward_id);
+        Ok(rule.clone())
+    }
+
+    /// Get forward statistics
+    pub async fn get_forward_stats(&self, forward_id: &str) -> Option<ForwardStats> {
+        // Check local forwards
+        if let Some(entry) = self.local_forwards.read().await.get(forward_id) {
+            return Some(entry.handle.stats().into());
+        }
+        
+        // Check remote forwards
+        if let Some(entry) = self.remote_forwards.read().await.get(forward_id) {
+            return Some(entry.handle.stats().into());
+        }
+        
+        // Check dynamic forwards
+        if let Some(entry) = self.dynamic_forwards.read().await.get(forward_id) {
+            return Some(entry.handle.stats().into());
+        }
+        
+        None
     }
 
     /// List all active forwards
@@ -356,6 +513,11 @@ impl ForwardingManager {
             forwards.push(rule);
         }
 
+        // Add stopped forwards
+        for rule in self.stopped_forwards.read().await.values() {
+            forwards.push(rule.clone());
+        }
+
         forwards
     }
 
@@ -369,6 +531,9 @@ impl ForwardingManager {
         }
         if let Some(entry) = self.dynamic_forwards.read().await.get(forward_id) {
             return Some(entry.rule.clone());
+        }
+        if let Some(rule) = self.stopped_forwards.read().await.get(forward_id) {
+            return Some(rule.clone());
         }
         None
     }

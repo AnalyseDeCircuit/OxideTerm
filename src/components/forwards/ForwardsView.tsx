@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, ArrowLeft, Pencil, Activity, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -8,10 +8,27 @@ import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { api } from '../../lib/api';
 import { ForwardRule, ForwardType } from '../../types';
 
+interface ForwardStats {
+  connection_count: number;
+  active_connections: number;
+  bytes_sent: number;
+  bytes_received: number;
+}
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
 export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   const [forwards, setForwards] = useState<ForwardRule[]>([]);
+  const [forwardStats, setForwardStats] = useState<Record<string, ForwardStats>>({});
   const [loading, setLoading] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [editingForward, setEditingForward] = useState<ForwardRule | null>(null);
 
   // New Forward Form State
   const [forwardType, setForwardType] = useState<ForwardType>('local');
@@ -26,6 +43,18 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
       setLoading(true);
       const list = await api.listPortForwards(sessionId);
       setForwards(list);
+      
+      // Fetch stats for active forwards
+      const statsMap: Record<string, ForwardStats> = {};
+      for (const fw of list) {
+        if (fw.status === 'active') {
+          const stats = await api.getPortForwardStats(sessionId, fw.id);
+          if (stats) {
+            statsMap[fw.id] = stats;
+          }
+        }
+      }
+      setForwardStats(statsMap);
     } catch (error) {
       console.error("Failed to list forwards:", error);
     } finally {
@@ -157,34 +186,67 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                           ${fw.status === 'active' ? 'bg-green-500' : 
                             fw.status === 'stopped' ? 'bg-zinc-500' : 'bg-red-500'}`} />
                         <span className="capitalize text-zinc-400">{fw.status}</span>
+                        {/* Show stats for active forwards */}
+                        {fw.status === 'active' && forwardStats[fw.id] && (
+                          <span className="ml-2 text-xs text-zinc-500 flex items-center gap-1">
+                            <Activity className="h-3 w-3" />
+                            {forwardStats[fw.id].active_connections}/{forwardStats[fw.id].connection_count}
+                            <span className="text-zinc-600">|</span>
+                            ↑{formatBytes(forwardStats[fw.id].bytes_sent)} 
+                            ↓{formatBytes(forwardStats[fw.id].bytes_received)}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {fw.status === 'active' ? (
+                          // Active forward: show Stop button
                           <Button 
                             size="icon" 
                             variant="ghost" 
-                            className="h-7 w-7 text-zinc-400 hover:text-red-400"
+                            className="h-7 w-7 text-zinc-400 hover:text-yellow-400"
+                            title="Stop forward"
                             onClick={() => api.stopPortForward(sessionId, fw.id).then(fetchForwards)}
                           >
                             <Square className="h-3 w-3 fill-current" />
                           </Button>
                         ) : (
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            className="h-7 w-7 text-zinc-400 hover:text-green-400"
-                            disabled
-                          >
-                            <Play className="h-3 w-3 fill-current" />
-                          </Button>
+                          // Stopped forward: show Restart and Edit buttons
+                          <>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-7 w-7 text-zinc-400 hover:text-green-400"
+                              title="Restart forward"
+                              onClick={() => api.restartPortForward(sessionId, fw.id).then(fetchForwards)}
+                            >
+                              <Play className="h-3 w-3 fill-current" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-7 w-7 text-zinc-400 hover:text-blue-400"
+                              title="Edit forward"
+                              onClick={() => {
+                                setEditingForward(fw);
+                                setBindAddress(fw.bind_address);
+                                setBindPort(fw.bind_port.toString());
+                                setTargetHost(fw.target_host);
+                                setTargetPort(fw.target_port.toString());
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
                         )}
+                        {/* Delete button - always available */}
                         <Button 
                           size="icon" 
                           variant="ghost" 
                           className="h-7 w-7 text-zinc-400 hover:text-red-400"
-                          onClick={() => api.stopPortForward(sessionId, fw.id).then(fetchForwards)}
+                          title="Delete forward"
+                          onClick={() => api.deletePortForward(sessionId, fw.id).then(fetchForwards)}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -277,6 +339,102 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
 
                 <div className="flex justify-end">
                     <Button onClick={handleCreateForward}>Create Forward</Button>
+                </div>
+            </div>
+        )}
+
+        {/* Edit Forward Modal */}
+        {editingForward && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-oxide-panel border border-oxide-border rounded-lg p-6 w-[500px] space-y-4 animate-in fade-in zoom-in-95">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-zinc-300">Edit Forward Rule</h3>
+                        <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => setEditingForward(null)}
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    
+                    <div className="text-xs text-zinc-500">
+                        Type: <span className="text-zinc-400 capitalize">{editingForward.forward_type}</span>
+                        <span className="mx-2">|</span>
+                        ID: <span className="text-zinc-400 font-mono">{editingForward.id.slice(0, 8)}...</span>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-sm border border-oxide-border/50">
+                        <div className="flex-1 space-y-2">
+                            <Label className="text-xs">Bind Address</Label>
+                            <div className="flex gap-2">
+                                <Input 
+                                    placeholder="Host" 
+                                    value={bindAddress}
+                                    onChange={(e) => setBindAddress(e.target.value)}
+                                    className="font-mono"
+                                />
+                                <Input 
+                                    placeholder="Port" 
+                                    value={bindPort}
+                                    onChange={(e) => setBindPort(e.target.value)}
+                                    className="w-24 font-mono"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-6 text-zinc-500">
+                            <ArrowRight className="h-5 w-5" />
+                        </div>
+
+                        {editingForward.forward_type !== 'dynamic' && (
+                            <div className="flex-1 space-y-2">
+                                <Label className="text-xs">Target Address</Label>
+                                <div className="flex gap-2">
+                                    <Input 
+                                        placeholder="Host" 
+                                        value={targetHost}
+                                        onChange={(e) => setTargetHost(e.target.value)}
+                                        className="font-mono"
+                                    />
+                                    <Input 
+                                        placeholder="Port" 
+                                        value={targetPort}
+                                        onChange={(e) => setTargetPort(e.target.value)}
+                                        className="w-24 font-mono"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {createError && (
+                        <div className="text-red-400 text-xs">{createError}</div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setEditingForward(null)}>Cancel</Button>
+                        <Button onClick={async () => {
+                            setCreateError(null);
+                            try {
+                                await api.updatePortForward({
+                                    session_id: sessionId,
+                                    forward_id: editingForward.id,
+                                    bind_address: bindAddress,
+                                    bind_port: parseInt(bindPort),
+                                    target_host: targetHost,
+                                    target_port: parseInt(targetPort),
+                                });
+                                setEditingForward(null);
+                                fetchForwards();
+                            } catch (e: any) {
+                                setCreateError(e.toString());
+                            }
+                        }}>
+                            Save Changes
+                        </Button>
+                    </div>
                 </div>
             </div>
         )}

@@ -252,64 +252,360 @@ impl SftpSession {
 
     /// Preview file content
     pub async fn preview(&self, path: &str) -> Result<PreviewContent, SftpError> {
+        self.preview_with_offset(path, 0).await
+    }
+
+    /// Preview file content with offset (for incremental hex loading)
+    pub async fn preview_with_offset(&self, path: &str, offset: u64) -> Result<PreviewContent, SftpError> {
         let canonical_path = self.resolve_path(path).await?;
-        debug!("Previewing file: {}", canonical_path);
+        debug!("Previewing file: {} (offset: {})", canonical_path, offset);
 
         // Get file info first
         let info = self.stat(&canonical_path).await?;
+        let file_size = info.size;
 
-        // Check file size
-        if info.size > constants::MAX_PREVIEW_SIZE {
-            return Ok(PreviewContent::TooLarge {
-                size: info.size,
-                max_size: constants::MAX_PREVIEW_SIZE,
-            });
-        }
+        // Get file extension
+        let extension = Path::new(&canonical_path)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
 
         // Determine MIME type
         let mime_type = mime_guess::from_path(&canonical_path)
             .first_or_octet_stream()
             .to_string();
 
-        // Check if previewable
-        let is_text = mime_type.starts_with("text/")
+        // Priority 1: Check by extension first (more reliable for scripts/configs)
+        if is_text_extension(&extension) {
+            return self.preview_text(&canonical_path, &extension, &mime_type).await;
+        }
+
+        // Priority 2: PDF files
+        if is_pdf_extension(&extension) || mime_type == "application/pdf" {
+            return self.preview_pdf(&canonical_path, file_size).await;
+        }
+
+        // Priority 3: Office documents (requires LibreOffice)
+        if is_office_extension(&extension) {
+            return self.preview_office(&canonical_path, file_size).await;
+        }
+
+        // Priority 4: Images
+        if mime_type.starts_with("image/") {
+            return self.preview_image(&canonical_path, file_size, &mime_type).await;
+        }
+
+        // Priority 5: Video files
+        if is_video_mime(&mime_type) || matches!(extension.as_str(), "mp4" | "webm" | "ogg" | "mov" | "mkv" | "avi") {
+            return self.preview_video(&canonical_path, file_size, &mime_type).await;
+        }
+
+        // Priority 6: Audio files
+        if is_audio_mime(&mime_type) || matches!(extension.as_str(), "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a") {
+            return self.preview_audio(&canonical_path, file_size, &mime_type).await;
+        }
+
+        // Priority 7: Check MIME type for text
+        let is_text_mime = mime_type.starts_with("text/")
             || mime_type == "application/json"
             || mime_type == "application/xml"
             || mime_type == "application/javascript"
             || mime_type == "application/toml"
             || mime_type == "application/yaml";
 
-        let is_image = mime_type.starts_with("image/");
-
-        if !is_text && !is_image {
-            return Ok(PreviewContent::Unsupported { mime_type });
+        if is_text_mime {
+            return self.preview_text(&canonical_path, &extension, &mime_type).await;
         }
 
-        // Read file content using the simple read() API
-        let content = self
-            .sftp
-            .read(&canonical_path)
-            .await
+        // Fallback: Hex preview for unknown binary files
+        self.preview_hex(&canonical_path, file_size, offset).await
+    }
+
+    /// Preview text/code files with syntax highlighting hint
+    async fn preview_text(&self, path: &str, extension: &str, mime_type: &str) -> Result<PreviewContent, SftpError> {
+        let info = self.stat(path).await?;
+        
+        // Check size limit for text
+        if info.size > constants::MAX_TEXT_PREVIEW_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size: info.size,
+                max_size: constants::MAX_TEXT_PREVIEW_SIZE,
+                recommend_download: true,
+            });
+        }
+
+        let content = self.sftp.read(path).await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
-        if is_text {
-            // Text preview - convert to string
-            let text = String::from_utf8_lossy(&content).to_string();
-            
-            // Truncate if too large
-            if text.len() > constants::MAX_TEXT_PREVIEW_SIZE as usize {
-                Ok(PreviewContent::Text { 
-                    data: text[..constants::MAX_TEXT_PREVIEW_SIZE as usize].to_string(),
-                    mime_type: Some(mime_type)
-                })
-            } else {
-                Ok(PreviewContent::Text { data: text, mime_type: Some(mime_type) })
-            }
-        } else {
-            // Binary preview (images)
-            let data = base64::engine::general_purpose::STANDARD.encode(&content);
-            Ok(PreviewContent::Base64 { data, mime_type })
+        let text = String::from_utf8_lossy(&content).to_string();
+        let language = extension_to_language(extension);
+
+        Ok(PreviewContent::Text {
+            data: text,
+            mime_type: Some(mime_type.to_string()),
+            language,
+        })
+    }
+
+    /// Preview image files
+    async fn preview_image(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+        if size > constants::MAX_PREVIEW_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size,
+                max_size: constants::MAX_PREVIEW_SIZE,
+                recommend_download: true,
+            });
         }
+
+        let content = self.sftp.read(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        let data = base64::engine::general_purpose::STANDARD.encode(&content);
+        Ok(PreviewContent::Image { data, mime_type: mime_type.to_string() })
+    }
+
+    /// Preview video files
+    async fn preview_video(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+        if size > constants::MAX_MEDIA_PREVIEW_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size,
+                max_size: constants::MAX_MEDIA_PREVIEW_SIZE,
+                recommend_download: true,
+            });
+        }
+
+        let content = self.sftp.read(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        // Correct MIME type for common formats
+        let actual_mime = match Path::new(path).extension().and_then(|s| s.to_str()) {
+            Some("mp4") => "video/mp4",
+            Some("webm") => "video/webm",
+            Some("ogg") => "video/ogg",
+            Some("mov") => "video/quicktime",
+            Some("mkv") => "video/x-matroska",
+            Some("avi") => "video/x-msvideo",
+            _ => mime_type,
+        };
+
+        let data = base64::engine::general_purpose::STANDARD.encode(&content);
+        Ok(PreviewContent::Video { data, mime_type: actual_mime.to_string() })
+    }
+
+    /// Preview audio files
+    async fn preview_audio(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+        if size > constants::MAX_MEDIA_PREVIEW_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size,
+                max_size: constants::MAX_MEDIA_PREVIEW_SIZE,
+                recommend_download: true,
+            });
+        }
+
+        let content = self.sftp.read(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        // Correct MIME type for common formats
+        let actual_mime = match Path::new(path).extension().and_then(|s| s.to_str()) {
+            Some("mp3") => "audio/mpeg",
+            Some("wav") => "audio/wav",
+            Some("ogg") => "audio/ogg",
+            Some("flac") => "audio/flac",
+            Some("aac") => "audio/aac",
+            Some("m4a") => "audio/mp4",
+            _ => mime_type,
+        };
+
+        let data = base64::engine::general_purpose::STANDARD.encode(&content);
+        Ok(PreviewContent::Audio { data, mime_type: actual_mime.to_string() })
+    }
+
+    /// Preview PDF files
+    async fn preview_pdf(&self, path: &str, size: u64) -> Result<PreviewContent, SftpError> {
+        if size > constants::MAX_PREVIEW_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size,
+                max_size: constants::MAX_PREVIEW_SIZE,
+                recommend_download: true,
+            });
+        }
+
+        let content = self.sftp.read(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        let data = base64::engine::general_purpose::STANDARD.encode(&content);
+        Ok(PreviewContent::Pdf { data, original_mime: None })
+    }
+
+    /// Preview Office documents (convert to PDF via LibreOffice)
+    async fn preview_office(&self, path: &str, size: u64) -> Result<PreviewContent, SftpError> {
+        // Check size limit
+        if size > constants::MAX_OFFICE_CONVERT_SIZE {
+            return Ok(PreviewContent::TooLarge {
+                size,
+                max_size: constants::MAX_OFFICE_CONVERT_SIZE,
+                recommend_download: true,
+            });
+        }
+
+        // Check if LibreOffice is available
+        let soffice_path = Self::find_libreoffice();
+        if soffice_path.is_none() {
+            let extension = Path::new(path)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+            let mime_type = mime_guess::from_path(path)
+                .first_or_octet_stream()
+                .to_string();
+            return Ok(PreviewContent::Unsupported {
+                mime_type,
+                reason: format!(
+                    "LibreOffice not installed. Cannot preview {} files. Please download the file to view it.",
+                    extension.to_uppercase()
+                ),
+            });
+        }
+
+        // Download to temp file
+        let temp_dir = std::env::temp_dir().join("oxideterm_preview");
+        tokio::fs::create_dir_all(&temp_dir).await.map_err(SftpError::IoError)?;
+
+        let filename = Path::new(path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("document");
+        let temp_input = temp_dir.join(filename);
+        
+        // Get original MIME type before conversion
+        let original_mime = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+
+        // Download the file
+        let content = self.sftp.read(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+        tokio::fs::write(&temp_input, &content).await.map_err(SftpError::IoError)?;
+
+        // Convert to PDF
+        let soffice = soffice_path.unwrap();
+        let output = tokio::process::Command::new(&soffice)
+            .args([
+                "--headless",
+                "--convert-to", "pdf",
+                "--outdir", temp_dir.to_str().unwrap(),
+                temp_input.to_str().unwrap(),
+            ])
+            .output()
+            .await
+            .map_err(|e| SftpError::IoError(e))?;
+
+        // Clean up input file
+        let _ = tokio::fs::remove_file(&temp_input).await;
+
+        if !output.status.success() {
+            return Ok(PreviewContent::Unsupported {
+                mime_type: original_mime,
+                reason: format!(
+                    "LibreOffice conversion failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ),
+            });
+        }
+
+        // Read the converted PDF
+        let pdf_name = Path::new(filename)
+            .with_extension("pdf");
+        let pdf_path = temp_dir.join(&pdf_name);
+
+        let pdf_content = tokio::fs::read(&pdf_path).await.map_err(SftpError::IoError)?;
+        
+        // Clean up PDF file
+        let _ = tokio::fs::remove_file(&pdf_path).await;
+
+        let data = base64::engine::general_purpose::STANDARD.encode(&pdf_content);
+        Ok(PreviewContent::Pdf { data, original_mime: Some(original_mime) })
+    }
+
+    /// Preview binary files as hex dump (incremental)
+    async fn preview_hex(&self, path: &str, total_size: u64, offset: u64) -> Result<PreviewContent, SftpError> {
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+        
+        let chunk_size = constants::HEX_CHUNK_SIZE;
+        
+        // Don't read past end of file
+        if offset >= total_size {
+            return Ok(PreviewContent::Hex {
+                data: String::new(),
+                total_size,
+                offset,
+                chunk_size: 0,
+                has_more: false,
+            });
+        }
+
+        // Calculate actual bytes to read
+        let bytes_to_read = std::cmp::min(chunk_size, total_size - offset) as usize;
+
+        // Open file and seek to offset
+        let mut file = self.sftp.open(path).await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+        
+        if offset > 0 {
+            file.seek(std::io::SeekFrom::Start(offset)).await
+                .map_err(|e| SftpError::IoError(e))?;
+        }
+
+        // Read chunk
+        let mut buffer = vec![0u8; bytes_to_read];
+        let bytes_read = file.read(&mut buffer).await
+            .map_err(|e| SftpError::IoError(e))?;
+        buffer.truncate(bytes_read);
+
+        // Generate hex dump
+        let hex_data = generate_hex_dump(&buffer, offset);
+        let has_more = offset + (bytes_read as u64) < total_size;
+
+        Ok(PreviewContent::Hex {
+            data: hex_data,
+            total_size,
+            offset,
+            chunk_size: bytes_read as u64,
+            has_more,
+        })
+    }
+
+    /// Find LibreOffice executable
+    fn find_libreoffice() -> Option<String> {
+        // Check common paths
+        let paths = [
+            "/usr/bin/soffice",
+            "/usr/bin/libreoffice",
+            "/usr/local/bin/soffice",
+            "/usr/local/bin/libreoffice",
+            // macOS
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+            // Windows (would need adjustment for actual Windows paths)
+        ];
+
+        for path in &paths {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+
+        // Try which command as fallback
+        if let Ok(output) = std::process::Command::new("which").arg("soffice").output() {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Some(path);
+                }
+            }
+        }
+
+        None
     }
 
     /// Download file to local path with progress reporting (streaming)

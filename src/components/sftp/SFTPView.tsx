@@ -502,8 +502,26 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   const [remoteLastSelected, setRemoteLastSelected] = useState<string | null>(null);
 
   // Preview State
-  const [previewFile, setPreviewFile] = useState<{name: string, content: string, path: string} | null>(null);
+  const [previewFile, setPreviewFile] = useState<{
+    name: string;
+    path: string;
+    type: 'text' | 'image' | 'video' | 'audio' | 'pdf' | 'hex' | 'too-large' | 'unsupported';
+    data: string;
+    mimeType?: string;
+    language?: string | null;
+    // Hex specific
+    hexOffset?: number;
+    hexTotalSize?: number;
+    hexHasMore?: boolean;
+    // Too large specific
+    recommendDownload?: boolean;
+    maxSize?: number;
+    fileSize?: number;
+    // Unsupported specific
+    reason?: string;
+  } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [hexLoadingMore, setHexLoadingMore] = useState(false);
 
   // Dialog States
   const [renameDialog, setRenameDialog] = useState<{oldName: string, isRemote: boolean} | null>(null);
@@ -909,14 +927,6 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   };
 
   const handlePreview = async (file: FileInfo) => {
-      const MAX_PREVIEW_SIZE = 10 * 1024 * 1024; // 10MB - should match backend
-      
-      // Pre-check file size on client side
-      if (file.size > MAX_PREVIEW_SIZE) {
-          toastError('File Too Large', `${file.name} (${formatFileSize(file.size)}) exceeds preview limit (${formatFileSize(MAX_PREVIEW_SIZE)})`);
-          return;
-      }
-
       setPreviewLoading(true);
       try {
           const fullPath = `${remotePath}/${file.name}`;
@@ -924,34 +934,127 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           
           // Handle all response types from backend
           if ('TooLarge' in content) {
-              toastError('File Too Large', `${file.name} (${formatFileSize(content.TooLarge.size)}) cannot be previewed`);
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'too-large',
+                  data: '',
+                  fileSize: content.TooLarge.size,
+                  maxSize: content.TooLarge.max_size,
+                  recommendDownload: content.TooLarge.recommend_download,
+              });
               return;
           }
           
           if ('Unsupported' in content) {
-              toastError('Unsupported Format', `Cannot preview ${content.Unsupported.mime_type || 'unknown'} file type`);
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'unsupported',
+                  data: '',
+                  mimeType: content.Unsupported.mime_type,
+                  reason: content.Unsupported.reason,
+              });
               return;
           }
           
-          let text = "";
           if ('Text' in content) {
-              text = content.Text.data;
-          } else if ('Base64' in content) {
-              text = atob(content.Base64.data); // Decode for display if possible
-          } else {
-              text = "[Binary or Unsupported Content]";
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'text',
+                  data: content.Text.data,
+                  mimeType: content.Text.mime_type || undefined,
+                  language: content.Text.language,
+              });
+              return;
           }
-
-          setPreviewFile({
-              name: file.name,
-              path: fullPath,
-              content: text
-          });
+          
+          if ('Image' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'image',
+                  data: content.Image.data,
+                  mimeType: content.Image.mime_type,
+              });
+              return;
+          }
+          
+          if ('Video' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'video',
+                  data: content.Video.data,
+                  mimeType: content.Video.mime_type,
+              });
+              return;
+          }
+          
+          if ('Audio' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'audio',
+                  data: content.Audio.data,
+                  mimeType: content.Audio.mime_type,
+              });
+              return;
+          }
+          
+          if ('Pdf' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'pdf',
+                  data: content.Pdf.data,
+                  mimeType: content.Pdf.original_mime || 'application/pdf',
+              });
+              return;
+          }
+          
+          if ('Hex' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'hex',
+                  data: content.Hex.data,
+                  hexOffset: content.Hex.offset,
+                  hexTotalSize: content.Hex.total_size,
+                  hexHasMore: content.Hex.has_more,
+              });
+              return;
+          }
       } catch (e) {
           console.error("Preview failed:", e);
           toastError('Preview Failed', String(e));
       } finally {
           setPreviewLoading(false);
+      }
+  };
+
+  const handleLoadMoreHex = async () => {
+      if (!previewFile || previewFile.type !== 'hex' || !previewFile.hexHasMore) return;
+      
+      setHexLoadingMore(true);
+      try {
+          const newOffset = (previewFile.hexOffset || 0) + 16 * 1024; // 16KB chunks
+          const content = await api.sftpPreviewHex(sessionId, previewFile.path, newOffset);
+          
+          if ('Hex' in content) {
+              setPreviewFile({
+                  ...previewFile,
+                  data: previewFile.data + content.Hex.data,
+                  hexOffset: newOffset,
+                  hexHasMore: content.Hex.has_more,
+              });
+          }
+      } catch (e) {
+          console.error("Load more hex failed:", e);
+          toastError('Load More Failed', String(e));
+      } finally {
+          setHexLoadingMore(false);
       }
   };
 
@@ -1025,18 +1128,159 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
 
       {/* Preview Dialog */}
       <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
-        <DialogContent className="max-w-3xl h-[80vh] flex flex-col p-0 gap-0" aria-describedby="preview-desc">
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 gap-0" aria-describedby="preview-desc">
             <DialogHeader className="px-4 py-2 border-b border-oxide-border bg-oxide-panel flex flex-row items-center justify-between">
                 <div className="flex flex-col gap-1">
-                    <DialogTitle className="text-sm font-mono">{previewFile?.name}</DialogTitle>
+                    <DialogTitle className="text-sm font-mono flex items-center gap-2">
+                        {previewFile?.name}
+                        {previewFile?.type === 'hex' && previewFile.hexTotalSize && (
+                            <span className="text-xs text-zinc-500">
+                                ({formatFileSize(previewFile.hexTotalSize)})
+                            </span>
+                        )}
+                        {previewFile?.language && (
+                            <span className="text-xs px-1.5 py-0.5 bg-oxide-accent/20 text-oxide-accent rounded">
+                                {previewFile.language}
+                            </span>
+                        )}
+                    </DialogTitle>
                     <DialogDescription id="preview-desc" className="sr-only">File preview content</DialogDescription>
                 </div>
             </DialogHeader>
-            <div className="flex-1 overflow-auto bg-zinc-950 p-4 font-mono text-xs text-zinc-300 whitespace-pre">
-                {previewFile?.content}
+            
+            {/* Preview Content Area */}
+            <div className="flex-1 overflow-auto bg-zinc-950">
+                {/* Loading State */}
+                {previewLoading && (
+                    <div className="flex items-center justify-center h-full">
+                        <RefreshCw className="h-6 w-6 animate-spin text-zinc-400" />
+                    </div>
+                )}
+                
+                {/* Text Preview with syntax highlighting */}
+                {!previewLoading && previewFile?.type === 'text' && (
+                    <pre className="p-4 font-mono text-xs text-zinc-300 whitespace-pre overflow-x-auto">
+                        <code>{previewFile.data}</code>
+                    </pre>
+                )}
+                
+                {/* Image Preview */}
+                {!previewLoading && previewFile?.type === 'image' && (
+                    <div className="flex items-center justify-center h-full p-4">
+                        <img 
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                            alt={previewFile.name}
+                            className="max-w-full max-h-full object-contain"
+                        />
+                    </div>
+                )}
+                
+                {/* Video Preview */}
+                {!previewLoading && previewFile?.type === 'video' && (
+                    <div className="flex items-center justify-center h-full p-4">
+                        <video 
+                            controls
+                            className="max-w-full max-h-full"
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                        >
+                            Your browser does not support video playback.
+                        </video>
+                    </div>
+                )}
+                
+                {/* Audio Preview */}
+                {!previewLoading && previewFile?.type === 'audio' && (
+                    <div className="flex flex-col items-center justify-center h-full p-4 gap-4">
+                        <div className="text-6xl">🎵</div>
+                        <div className="text-zinc-400">{previewFile.name}</div>
+                        <audio 
+                            controls
+                            className="w-full max-w-md"
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                        >
+                            Your browser does not support audio playback.
+                        </audio>
+                    </div>
+                )}
+                
+                {/* PDF Preview */}
+                {!previewLoading && previewFile?.type === 'pdf' && (
+                    <iframe
+                        src={`data:application/pdf;base64,${previewFile.data}`}
+                        className="w-full h-full"
+                        title={previewFile.name}
+                    />
+                )}
+                
+                {/* Hex Preview */}
+                {!previewLoading && previewFile?.type === 'hex' && (
+                    <div className="p-4">
+                        <div className="text-xs text-zinc-500 mb-2 flex items-center gap-2">
+                            <span>Hex View</span>
+                            <span>•</span>
+                            <span>显示前 {formatFileSize((previewFile.hexOffset || 0) + 16384)}</span>
+                            {previewFile.hexTotalSize && (
+                                <>
+                                    <span>•</span>
+                                    <span>共 {formatFileSize(previewFile.hexTotalSize)}</span>
+                                </>
+                            )}
+                        </div>
+                        <pre className="font-mono text-xs text-zinc-300 whitespace-pre overflow-x-auto leading-5">
+                            {previewFile.data}
+                        </pre>
+                        {previewFile.hexHasMore && (
+                            <div className="mt-4 flex justify-center">
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    onClick={handleLoadMoreHex}
+                                    disabled={hexLoadingMore}
+                                >
+                                    {hexLoadingMore ? (
+                                        <>
+                                            <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                                            加载中...
+                                        </>
+                                    ) : (
+                                        '加载更多 (+16KB)'
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {/* Too Large */}
+                {!previewLoading && previewFile?.type === 'too-large' && (
+                    <div className="flex flex-col items-center justify-center h-full p-8 gap-4">
+                        <div className="text-6xl">📦</div>
+                        <div className="text-zinc-300 text-lg">文件过大</div>
+                        <div className="text-zinc-500 text-sm text-center">
+                            <p>文件大小: {formatFileSize(previewFile.fileSize || 0)}</p>
+                            <p>预览限制: {formatFileSize(previewFile.maxSize || 0)}</p>
+                        </div>
+                        {previewFile.recommendDownload && (
+                            <p className="text-zinc-400 text-sm">建议下载后在本地查看</p>
+                        )}
+                    </div>
+                )}
+                
+                {/* Unsupported */}
+                {!previewLoading && previewFile?.type === 'unsupported' && (
+                    <div className="flex flex-col items-center justify-center h-full p-8 gap-4">
+                        <div className="text-6xl">❓</div>
+                        <div className="text-zinc-300 text-lg">无法预览</div>
+                        <div className="text-zinc-500 text-sm text-center">
+                            <p>类型: {previewFile.mimeType}</p>
+                            {previewFile.reason && <p className="mt-2">{previewFile.reason}</p>}
+                        </div>
+                    </div>
+                )}
             </div>
+            
             <DialogFooter className="p-2 border-t border-oxide-border bg-oxide-panel justify-between sm:justify-between">
-                <div className="text-xs text-zinc-500 self-center px-2">
+                <div className="text-xs text-zinc-500 self-center px-2 truncate max-w-md">
                     {previewFile?.path}
                 </div>
                 <div className="flex gap-2">
@@ -1051,9 +1295,9 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                             console.error("Download failed:", e);
                         }
                     }}>
-                        <Download className="h-3 w-3 mr-2" /> Download
+                        <Download className="h-3 w-3 mr-2" /> 下载
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>Close</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>关闭</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

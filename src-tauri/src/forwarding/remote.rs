@@ -14,7 +14,7 @@
 //! which the ClientHandler can look up when it receives a forwarded connection.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use once_cell::sync::Lazy;
@@ -24,6 +24,19 @@ use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
 
 use crate::ssh::{HandleController, SshError};
+
+/// Forward statistics
+#[derive(Debug, Clone, Default)]
+pub struct ForwardStats {
+    /// Total connection count
+    pub connection_count: u64,
+    /// Currently active connections
+    pub active_connections: u64,
+    /// Total bytes sent (to remote)
+    pub bytes_sent: u64,
+    /// Total bytes received (from remote)
+    pub bytes_received: u64,
+}
 
 /// Remote port forwarding configuration
 #[derive(Debug, Clone)]
@@ -80,6 +93,32 @@ impl RemoteForward {
 pub struct RemoteForwardTarget {
     pub local_host: String,
     pub local_port: u16,
+    /// Stats tracking using atomics for lock-free updates from async handlers
+    pub stats: Arc<RemoteForwardStatsAtomic>,
+}
+
+/// Atomic stats for remote forwards (used for thread-safe updates from callbacks)
+#[derive(Debug, Default)]
+pub struct RemoteForwardStatsAtomic {
+    pub connection_count: AtomicU64,
+    pub active_connections: AtomicU64,
+    pub bytes_sent: AtomicU64,
+    pub bytes_received: AtomicU64,
+}
+
+impl RemoteForwardStatsAtomic {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn to_stats(&self) -> ForwardStats {
+        ForwardStats {
+            connection_count: self.connection_count.load(Ordering::Relaxed),
+            active_connections: self.active_connections.load(Ordering::Relaxed),
+            bytes_sent: self.bytes_sent.load(Ordering::Relaxed),
+            bytes_received: self.bytes_received.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// Global registry for remote forward configurations
@@ -101,11 +140,13 @@ impl RemoteForwardRegistry {
     }
 
     /// Register a remote forward
-    pub async fn register(&self, remote_addr: String, remote_port: u16, local_host: String, local_port: u16) {
+    pub async fn register(&self, remote_addr: String, remote_port: u16, local_host: String, local_port: u16) -> Arc<RemoteForwardStatsAtomic> {
         let key = (remote_addr.clone(), remote_port);
-        let target = RemoteForwardTarget { local_host, local_port };
+        let stats = Arc::new(RemoteForwardStatsAtomic::new());
+        let target = RemoteForwardTarget { local_host, local_port, stats: stats.clone() };
         self.forwards.write().await.insert(key, target);
         debug!("Registered remote forward: {}:{} -> target", remote_addr, remote_port);
+        stats
     }
 
     /// Unregister a remote forward
@@ -150,6 +191,8 @@ pub struct RemoteForwardHandle {
     stop_tx: mpsc::Sender<()>,
     /// Handle controller for cancellation
     handle_controller: HandleController,
+    /// Stats tracking
+    stats: Arc<RemoteForwardStatsAtomic>,
 }
 
 impl RemoteForwardHandle {
@@ -180,6 +223,11 @@ impl RemoteForwardHandle {
     /// Check if the forward is still running
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
+    }
+    
+    /// Get current stats
+    pub fn stats(&self) -> ForwardStats {
+        self.stats.to_stats()
     }
 }
 
@@ -214,7 +262,8 @@ pub async fn start_remote_forward(
     );
 
     // Register in the global registry so ClientHandler can find the target
-    REMOTE_FORWARD_REGISTRY
+    // This also returns the stats Arc for tracking
+    let stats = REMOTE_FORWARD_REGISTRY
         .register(
             config.remote_addr.clone(),
             actual_port as u16,
@@ -252,6 +301,7 @@ pub async fn start_remote_forward(
         running,
         stop_tx,
         handle_controller,
+        stats,
     })
 }
 
@@ -282,9 +332,16 @@ pub async fn handle_forwarded_connection(
             ))
         })?;
 
+    // Update connection stats
+    target.stats.connection_count.fetch_add(1, Ordering::Relaxed);
+    target.stats.active_connections.fetch_add(1, Ordering::Relaxed);
+    let stats = target.stats.clone();
+
     // Connect to local service
     let local_addr = format!("{}:{}", target.local_host, target.local_port);
     let local_stream = TcpStream::connect(&local_addr).await.map_err(|e| {
+        // Decrement active connections on connection failure
+        stats.active_connections.fetch_sub(1, Ordering::Relaxed);
         SshError::ConnectionFailed(format!("Failed to connect to {}: {}", local_addr, e))
     })?;
 
@@ -294,30 +351,42 @@ pub async fn handle_forwarded_connection(
     );
 
     // Bridge the connection
-    bridge_forwarded_connection(local_stream, channel).await
+    let result = bridge_forwarded_connection(local_stream, channel, stats.clone()).await;
+    
+    // Decrement active connections when done
+    stats.active_connections.fetch_sub(1, Ordering::Relaxed);
+    
+    result
 }
 
 /// Bridge data between local socket and SSH channel
 async fn bridge_forwarded_connection(
     mut local_stream: TcpStream,
     channel: russh::Channel<russh::client::Msg>,
+    stats: Arc<RemoteForwardStatsAtomic>,
 ) -> Result<(), SshError> {
     let (mut local_read, mut local_write) = local_stream.split();
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
+    
+    let stats_for_send = stats.clone();
+    let stats_for_recv = stats.clone();
 
-    // SSH channel -> Local
+    // SSH channel -> Local (receiving from remote)
     let channel_to_local = async {
         loop {
             let mut ch = channel_for_read.lock().await;
             match ch.wait().await {
                 Some(russh::ChannelMsg::Data { data }) => {
+                    let data_len = data.len();
                     drop(ch);
                     if let Err(e) = local_write.write_all(&data).await {
                         debug!("Local write error: {}", e);
                         break;
                     }
+                    // Update bytes received
+                    stats_for_recv.bytes_received.fetch_add(data_len as u64, Ordering::Relaxed);
                 }
                 Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) | None => {
                     break;
@@ -327,7 +396,7 @@ async fn bridge_forwarded_connection(
         }
     };
 
-    // Local -> SSH channel
+    // Local -> SSH channel (sending to remote)
     let local_to_channel = async {
         let mut buf = vec![0u8; 32768];
         loop {
@@ -339,6 +408,8 @@ async fn bridge_forwarded_connection(
                         debug!("Channel write error: {}", e);
                         break;
                     }
+                    // Update bytes sent
+                    stats_for_send.bytes_sent.fetch_add(n as u64, Ordering::Relaxed);
                 }
                 Err(e) => {
                     debug!("Local read error: {}", e);

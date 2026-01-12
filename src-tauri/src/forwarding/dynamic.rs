@@ -14,6 +14,19 @@ use tracing::{debug, error, info, warn};
 
 use crate::ssh::{HandleController, SshError};
 
+/// Forward statistics
+#[derive(Debug, Clone, Default)]
+pub struct ForwardStats {
+    /// Total connection count
+    pub connection_count: u64,
+    /// Currently active connections
+    pub active_connections: u64,
+    /// Total bytes sent (to remote)
+    pub bytes_sent: u64,
+    /// Total bytes received (from remote)
+    pub bytes_received: u64,
+}
+
 /// SOCKS5 protocol constants
 mod socks5 {
     pub const VERSION: u8 = 0x05;
@@ -75,6 +88,8 @@ pub struct DynamicForwardHandle {
     running: Arc<AtomicBool>,
     /// Channel to signal stop
     stop_tx: mpsc::Sender<()>,
+    /// Stats tracking
+    stats: Arc<parking_lot::RwLock<ForwardStats>>,
 }
 
 impl DynamicForwardHandle {
@@ -88,6 +103,11 @@ impl DynamicForwardHandle {
     /// Check if the proxy is still running
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
+    }
+    
+    /// Get current stats
+    pub fn stats(&self) -> ForwardStats {
+        self.stats.read().clone()
     }
 }
 
@@ -119,6 +139,8 @@ pub async fn start_dynamic_forward(
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
     let (stop_tx, mut stop_rx) = mpsc::channel::<()>(1);
+    let stats = Arc::new(parking_lot::RwLock::new(ForwardStats::default()));
+    let stats_clone = stats.clone();
 
     // Spawn the proxy task
     tokio::spawn(async move {
@@ -140,11 +162,27 @@ pub async fn start_dynamic_forward(
 
                             debug!("SOCKS5: Accepted connection from {}", peer_addr);
 
+                            // Update stats
+                            {
+                                let mut s = stats_clone.write();
+                                s.connection_count += 1;
+                                s.active_connections += 1;
+                            }
+
                             let controller = handle_controller.clone();
+                            let stats_for_conn = stats_clone.clone();
 
                             // Spawn a task to handle this SOCKS5 connection
                             tokio::spawn(async move {
-                                if let Err(e) = handle_socks5_connection(controller, stream).await {
+                                let result = handle_socks5_connection(controller, stream, stats_for_conn.clone()).await;
+                                
+                                // Decrement active connections when done
+                                {
+                                    let mut s = stats_for_conn.write();
+                                    s.active_connections = s.active_connections.saturating_sub(1);
+                                }
+                                
+                                if let Err(e) = result {
                                     warn!("SOCKS5 connection error from {}: {}", peer_addr, e);
                                 }
                             });
@@ -167,6 +205,7 @@ pub async fn start_dynamic_forward(
         bound_addr,
         running,
         stop_tx,
+        stats,
     })
 }
 
@@ -174,6 +213,7 @@ pub async fn start_dynamic_forward(
 async fn handle_socks5_connection(
     handle_controller: HandleController,
     mut stream: TcpStream,
+    stats: Arc<parking_lot::RwLock<ForwardStats>>,
 ) -> Result<(), SshError> {
     // Phase 1: Authentication negotiation
     let mut buf = [0u8; 258];
@@ -308,7 +348,7 @@ async fn handle_socks5_connection(
     debug!("SOCKS5: Tunnel established to {}:{}", dest_host, dest_port);
     
     // Bridge the connection
-    bridge_socks5_connection(stream, channel).await
+    bridge_socks5_connection(stream, channel, stats).await
 }
 
 /// Send a SOCKS5 reply
@@ -333,11 +373,15 @@ async fn send_socks5_reply(stream: &mut TcpStream, status: u8) -> Result<(), Ssh
 async fn bridge_socks5_connection(
     mut local_stream: TcpStream,
     channel: russh::Channel<russh::client::Msg>,
+    stats: Arc<parking_lot::RwLock<ForwardStats>>,
 ) -> Result<(), SshError> {
     let (mut local_read, mut local_write) = local_stream.split();
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
+    
+    let stats_for_send = stats.clone();
+    let stats_for_recv = stats.clone();
 
     // Local -> SSH channel
     let local_to_ssh = async {
@@ -351,6 +395,8 @@ async fn bridge_socks5_connection(
                         debug!("SSH channel write error: {}", e);
                         break;
                     }
+                    // Update bytes sent
+                    stats_for_send.write().bytes_sent += n as u64;
                 }
                 Err(e) => {
                     debug!("Local read error: {}", e);
@@ -369,11 +415,14 @@ async fn bridge_socks5_connection(
             let mut ch = channel_for_read.lock().await;
             match ch.wait().await {
                 Some(russh::ChannelMsg::Data { data }) => {
+                    let data_len = data.len();
                     drop(ch); // Release lock before writing
                     if let Err(e) = local_write.write_all(&data).await {
                         debug!("Local write error: {}", e);
                         break;
                     }
+                    // Update bytes received
+                    stats_for_recv.write().bytes_received += data_len as u64;
                 }
                 Some(russh::ChannelMsg::Eof) => {
                     debug!("SSH channel EOF");
