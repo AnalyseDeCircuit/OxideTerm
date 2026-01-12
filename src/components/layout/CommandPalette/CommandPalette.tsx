@@ -1,8 +1,12 @@
 /**
- * CommandPalette Component
- * 
+ * CommandPalette Component (Warp-Inspired)
+ *
  * Global command launcher (⌘K) for quick access to all app functionality.
- * Built on cmdk library with custom styling.
+ * Features:
+ * - Glassmorphism
+ * - Smooth animations
+ * - Rounded corners
+ * - Subtle shadows
  */
 
 import * as React from 'react';
@@ -154,7 +158,7 @@ export function CommandPalette({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="fixed inset-0 z-modal-backdrop bg-crust/60 backdrop-blur-sm"
+            className="fixed inset-0 z-modal-backdrop bg-crust/60 backdrop-blur-md"
             onClick={() => setCommandPaletteOpen(false)}
           />
 
@@ -172,37 +176,36 @@ export function CommandPalette({
           >
             <Command
               className={cn(
-                'rounded-xl border border-surface-1 bg-mantle shadow-2xl overflow-hidden',
+                'rounded-xl border border-glass-border bg-glass-bg backdrop-blur-md shadow-xl overflow-hidden',
                 '[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2',
                 '[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium',
-                '[&_[cmdk-group-heading]]:text-overlay-1 [&_[cmdk-group-heading]]:uppercase',
-                '[&_[cmdk-group-heading]]:tracking-wider'
+                '[&_[cmdk-group-heading]]:text-subtext-0 [&_[cmdk-group-heading]]:capitalize'
               )}
               shouldFilter={true}
             >
               {/* Search Input */}
-              <div className="flex items-center gap-2 px-3 border-b border-surface-0">
-                <Search size={16} className="text-overlay-1 shrink-0" />
+              <div className="flex items-center gap-2 px-3 border-b border-glass-border/50">
+                <Search size={16} className="text-subtext-1 shrink-0" />
                 <Command.Input
                   ref={inputRef}
                   value={search}
                   onValueChange={setSearch}
-                  placeholder="Type a command or search..."
+                  placeholder="Search commands..."
                   className={cn(
                     'flex-1 h-11 bg-transparent text-sm text-text',
-                    'placeholder:text-overlay-1',
+                    'placeholder:text-subtext-1 font-sans',
                     'focus:outline-none'
                   )}
                 />
-                <kbd className="text-[10px] text-overlay-0 bg-surface-0 px-1.5 py-0.5 rounded">
+                <kbd className="text-[10px] text-subtext-1 bg-surface-0 border border-glass-border rounded-lg px-1.5 py-0.5">
                   ESC
                 </kbd>
               </div>
 
               {/* Results */}
               <Command.List className="max-h-[300px] overflow-y-auto p-2">
-                <Command.Empty className="py-6 text-center text-sm text-overlay-1">
-                  No results found.
+                <Command.Empty className="py-6 text-center text-sm text-subtext-1">
+                  No commands found.
                 </Command.Empty>
 
                 {/* Recent Connections */}
@@ -211,7 +214,7 @@ export function CommandPalette({
                     {recentConnections.map((conn) => (
                       <CommandPaletteItem
                         key={conn.id}
-                        icon={<Clock size={14} className="text-overlay-1" />}
+                        icon={<Clock size={14} className="text-subtext-1" />}
                         label={conn.name}
                         hint={conn.host}
                         onSelect={() => {
@@ -239,11 +242,11 @@ export function CommandPalette({
                 {/* Theme Selection (when searching for theme) */}
                 {search.toLowerCase().includes('theme') && (
                   <Command.Group heading="Themes">
-                    {['Catppuccin Mocha', 'Dracula', 'Nord', 'Tokyo Night'].map(
+                    {['Purple', 'Blue', 'Dracula', 'Nord', 'Tokyo Night'].map(
                       (theme) => (
                         <CommandPaletteItem
                           key={theme}
-                          icon={<Palette size={14} className="text-mauve" />}
+                          icon={<Palette size={14} className="text-purple-500" />}
                           label={`Switch to ${theme}`}
                           onSelect={() => {
                             setCommandPaletteOpen(false);
@@ -257,15 +260,15 @@ export function CommandPalette({
               </Command.List>
 
               {/* Footer Hints */}
-              <div className="flex items-center gap-4 px-3 py-2 border-t border-surface-0 text-[10px] text-overlay-0">
+              <div className="flex items-center gap-4 px-3 py-2 border-t border-glass-border/50 text-[10px] text-subtext-1">
                 <span className="flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-surface-0 rounded">↑↓</kbd> Navigate
+                  <kbd className="px-1 py-0.5 bg-surface-0 border border-glass-border rounded-md">↑↓</kbd> Navigate
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-surface-0 rounded">↵</kbd> Select
+                  <kbd className="px-1 py-0.5 bg-surface-0 border border-glass-border rounded-md">↵</kbd> Select
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 bg-surface-0 rounded">ESC</kbd> Close
+                  <kbd className="px-1 py-0.5 bg-surface-0 border border-glass-border rounded-md">ESC</kbd> Close
                 </span>
               </div>
             </Command>
@@ -299,21 +302,21 @@ function CommandPaletteItem({
     <Command.Item
       onSelect={onSelect}
       className={cn(
-        'flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer',
-        'text-sm text-text',
-        'data-[selected=true]:bg-surface-0',
-        'transition-colors duration-fast'
+        'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer',
+        'text-sm text-text font-sans',
+        'data-[selected=true]:bg-purple-500/10 data-[selected=true]:text-purple-500',
+        'transition-all duration-200'
       )}
     >
-      <span className="shrink-0 text-overlay-1">{icon}</span>
+      <span className="shrink-0 text-subtext-1">{icon}</span>
       <span className="flex-1">{label}</span>
       {hint && (
-        <span className="text-xs text-overlay-0 truncate max-w-[150px]">
+        <span className="text-xs text-subtext-0 truncate max-w-[150px]">
           {hint}
         </span>
       )}
       {shortcut && (
-        <kbd className="text-[10px] text-overlay-0 bg-surface-0 px-1.5 py-0.5 rounded ml-2">
+        <kbd className="text-[10px] text-subtext-1 bg-surface-0 border border-glass-border rounded-lg px-1.5 py-0.5 ml-2">
           {shortcut}
         </kbd>
       )}

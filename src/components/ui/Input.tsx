@@ -1,9 +1,13 @@
 /**
  * Input Component
- * 
- * Text input field with consistent styling and variants.
- * Supports icons, error states, and sizing.
- * 
+ *
+ * Text input field with Warp-inspired styling.
+ * Features:
+ * - Soft rounded corners
+ * - Subtle borders
+ * - Glassmorphism background
+ * - Smooth focus transitions
+ *
  * @example
  * <Input placeholder="Search..." />
  * <Input leftIcon={<SearchIcon />} />
@@ -15,50 +19,60 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/cn';
 
 export const inputVariants = cva(
-  [
-    'flex w-full rounded-none border bg-transparent', // Industrial: rounded-none
-    'text-text placeholder:text-overlay-1',
-    'transition-colors duration-fast',
-    'focus:outline-none focus:ring-1 focus:ring-mauve focus:border-mauve', // Simpler focus
-    'disabled:cursor-not-allowed disabled:opacity-50',
-    'file:border-0 file:bg-transparent file:text-sm file:font-medium',
-  ],
-  {
-    variants: {
-      variant: {
-        default: [
-          'border-overlay-1 bg-mantle', // Harder border (overlay-1 is usually more visible than surface-1)
-          'hover:border-text', // High contrast hover
-          'focus:border-mauve',
-        ],
-        filled: [
-          'border-transparent bg-surface-0',
-          'hover:bg-surface-1',
-          'focus:bg-surface-0 focus:border-mauve',
-        ],
-        ghost: [
-          'border-transparent bg-transparent',
-          'hover:bg-surface-0',
-          'focus:bg-surface-0 focus:border-mauve',
-        ],
-      },
-      size: {
-        sm: 'h-7 px-2 text-xs',
-        md: 'h-8 px-3 text-sm',
-        lg: 'h-10 px-4 text-base',
-      },
-      hasError: {
-        true: 'border-red focus:ring-red',
-        false: '',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      size: 'md',
-      hasError: false,
-    },
-  }
-);
+   [
+     'flex w-full border',
+     'text-text placeholder:text-subtext-1',
+     'transition-all duration-200',
+     'focus:outline-none',
+     'disabled:cursor-not-allowed disabled:opacity-50',
+     'file:border-0 file:bg-transparent file:text-sm file:font-medium',
+     'rounded-md', // Warp-style: 8px border radius
+   ],
+   {
+     variants: {
+       variant: {
+         /**
+          * Default - subtle border
+          */
+         default: [
+           'border-glass-border bg-ui-surface-bg',
+           'hover:border-surface-1',
+           'focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:ring-offset-2 focus:ring-offset-base',
+         ],
+         /**
+          * Filled - darker background
+          */
+         filled: [
+           'border-transparent bg-surface-0',
+           'hover:bg-surface-1',
+           'focus:bg-surface-0 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20',
+         ],
+         /**
+          * Ghost - transparent
+          */
+         ghost: [
+           'border-transparent bg-transparent',
+           'hover:bg-ui-surface-hover',
+           'focus:bg-ui-surface-hover focus:border-purple-500/50',
+         ],
+       },
+       size: {
+         sm: 'h-7 px-2 text-xs',
+         md: 'h-9 px-3 text-sm',
+         lg: 'h-11 px-4 text-base',
+       },
+       hasError: {
+         true: 'border-red focus:border-red focus:ring-red focus:ring-red/20',
+         false: '',
+       },
+     },
+     defaultVariants: {
+       variant: 'default',
+       size: 'md',
+       hasError: false,
+     },
+   }
+ );
 
 export interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'>,
@@ -94,7 +108,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <div className={cn('relative flex flex-col gap-1', containerClassName)}>
         <div className="relative flex items-center">
           {leftIcon && (
-            <div className="absolute left-2.5 flex items-center text-overlay-1">
+            <div className="absolute left-3 flex items-center text-subtext-0">
               {leftIcon}
             </div>
           )}
@@ -103,20 +117,20 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             className={cn(
               inputVariants({ variant, size, hasError }),
-              leftIcon && 'pl-8',
-              rightIcon && 'pr-8',
+              leftIcon && 'pl-9',
+              rightIcon && 'pr-9',
               className
             )}
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-2.5 flex items-center text-overlay-1">
+            <div className="absolute right-3 flex items-center text-subtext-0">
               {rightIcon}
             </div>
           )}
         </div>
         {error && (
-          <span className="text-xs text-red">{error}</span>
+          <span className="text-xs text-red font-medium">{error}</span>
         )}
       </div>
     );

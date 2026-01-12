@@ -1,120 +1,138 @@
 /**
  * OxideTerm Design System - CSS Variables
- * 
- * THEME: INDUSTRIAL HUD / VOID
- * An ultra-high contrast, data-driven design system.
+ *
+ * THEME: WARP-INSPIRED MODERN
+ * A refined, professional aesthetic with subtle gradients, glassmorphism,
+ * and smooth animations inspired by Warp Terminal.
  */
 
 :root {
   /* ============================================
-     Color Palette - VOID (Industrial)
+     Color Palette - Warp-Inspired
      ============================================ */
-  
-  /* Base layers */
-  --crust:    #000000;
-  --mantle:   #050505;
-  --base:     #09090b;
 
-  /* Surface layers (for panels/borders) */
-  --surface0: #18181b;
-  --surface1: #27272a;
-  --surface2: #3f3f46;
-  
-  /* Text hierarchy (High Contrast) */
-  --text:     #ffffff;
-  --subtext1: #e4e4e7;
-  --subtext0: #a1a1aa;
-  --overlay2: #71717a;
-  --overlay1: #52525b;
-  --overlay0: #3f3f46;
-  
-  /* Accent colors (Neon/Hard) */
-  --mauve:     #ffffff; /* Deprecated mapping */
-  --blue:      #3b82f6; /* Information */
-  --sapphire:  #3b82f6;
-  --sky:       #0ea5e9;
-  --teal:      #14b8a6;
-  --green:     #4ade80; /* SUCCESS / ACTIVE / TERMINAL */
-  --yellow:    #facc15; /* WARNING */
-  --peach:     #fb923c;
-  --maroon:    #ef4444; 
-  --red:       #ef4444; /* ERROR / CRITICAL */
-  --pink:      #f472b6;
-  --flamingo:  #f43f5e;
-  --rosewater: #ffe4e6;
-  --lavender:  #a78bfa;
-  
+  /* Base layers */
+  --crust:    #0d0e12;
+  --mantle:   #14151a;
+  --base:     #181920;
+
+  /* Surface layers */
+  --surface0: #1e1f26;
+  --surface1: #2a2b36;
+  --surface2: #3e3f4e;
+
+  /* Text hierarchy */
+  --text:     #e4e5e8;
+  --subtext1: #a8adb8;
+  --subtext0: #6c7086;
+  --overlay2: #52525b;
+  --overlay1: #3f3f46;
+  --overlay0: #2e2e36;
+
+  /* Accent colors - Warp Purple/Blue */
+  --mauve:     #c792ea;
+  --blue:       #7aa2f7;
+  --sapphire:   #89b4fa;
+  --sky:        #91d7e3;
+  --teal:       #94e2d5;
+  --green:      #a6da95;
+  --yellow:     #f9e2af;
+  --peach:      #fab387;
+  --maroon:     #eba0ac;
+  --red:        #f38ba8;
+  --pink:       #f5c2e7;
+  --flamingo:   #f2cdcd;
+  --rosewater:  #f5e0dc;
+  --lavender:   #cba6f7;
+
   /* ============================================
      Semantic Colors
      ============================================ */
-  
-  /* Primary action color - NEON GREEN */
-  --color-primary:       var(--green);
-  --color-primary-hover: #86efac;
-  --color-primary-muted: rgba(74, 222, 128, 0.1);
-  
+
+  /* Primary action color - Warp Purple */
+  --color-primary:       rgba(139, 92, 246, 0.18);
+  --color-primary-hover: rgba(139, 92, 246, 0.28);
+  --color-primary-muted: rgba(139, 92, 246, 0.1);
+  --color-primary-solid: #8b5cf6;
+
   /* Status colors */
   --color-success:      var(--green);
-  --color-success-muted: rgba(74, 222, 128, 0.1);
+  --color-success-muted: rgba(166, 218, 149, 0.1);
   --color-warning:      var(--yellow);
-  --color-warning-muted: rgba(250, 204, 21, 0.1);
+  --color-warning-muted: rgba(249, 226, 175, 0.1);
   --color-error:        var(--red);
-  --color-error-muted:  rgba(239, 68, 68, 0.1);
+  --color-error-muted:  rgba(243, 139, 168, 0.1);
   --color-info:         var(--blue);
-  --color-info-muted:   rgba(59, 130, 246, 0.1);
-  
+  --color-info-muted:   rgba(122, 162, 247, 0.1);
+
+  /* ============================================
+     Warp-Style UI Surface System
+     ============================================ */
+
+  /* UI Surface with subtle transparency */
+  --ui-surface-bg: rgba(255, 255, 255, 0.04);
+  --ui-surface-border: rgba(255, 255, 255, 0.08);
+  --ui-surface-hover: rgba(255, 255, 255, 0.08);
+  --ui-surface-active: rgba(255, 255, 255, 0.12);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(49, 50, 68, 0.5);
+  --glass-bg-light: rgba(49, 50, 68, 0.7);
+  --glass-blur: 12px;
+  --glass-border: rgba(255, 255, 255, 0.1);
+
   /* ============================================
      Component-specific tokens
      ============================================ */
-  
+
   /* Sidebar */
   --sidebar-width:           240px;
-  --sidebar-width-collapsed: 48px;
-  --sidebar-bg:              #050505; /* Solid, no alpha */
-  --sidebar-bg-solid:        #050505;
-  --sidebar-border:          var(--surface1);
-  
+  --sidebar-width-collapsed: 64px;
+  --sidebar-bg:              #14151a;
+  --sidebar-bg-solid:        #14151a;
+  --sidebar-border:          rgba(255, 255, 255, 0.08);
+
   /* Tab bar */
-  --tabbar-height:     32px;
-  --tab-bg:            #000000;
-  --tab-bg-active:     #09090b;
-  --tab-bg-hover:      #09090b;
-  --tab-border:        var(--surface1);
-  
+  --tabbar-height:     40px;
+  --tab-bg:            transparent;
+  --tab-bg-active:     rgba(255, 255, 255, 0.08);
+  --tab-bg-hover:      rgba(255, 255, 255, 0.04);
+  --tab-border:        rgba(255, 255, 255, 0.08);
+
   /* Bottom panel */
   --panel-min-height:     0px;
   --panel-default-height: 200px;
   --panel-max-height:     50vh;
-  --panel-bg:             #050505;
-  --panel-border:         var(--surface1);
-  
+  --panel-bg:             #14151a;
+  --panel-border:         rgba(255, 255, 255, 0.08);
+
   /* Terminal */
-  --terminal-bg: #09090b;
-  --terminal-fg: #f4f4f5;
-  
+  --terminal-bg: #181920;
+  --terminal-fg: #e4e5e8;
+
   /* ============================================
-     Spacing System (Compact)
+     Spacing System (Breathable)
      ============================================ */
   --space-0:  0;
-  --space-1:  2px;
-  --space-2:  4px;
+  --space-1:  4px;
+  --space-2:  6px;
   --space-3:  8px;
   --space-4:  12px;
   --space-5:  16px;
   --space-6:  24px;
   --space-8:  32px;
   --space-10: 48px;
-  
+
   /* ============================================
-     Typography (Mono-Design)
+     Typography (Mixed)
      ============================================ */
-  
+
   /* Font families */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
-  
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
   /* Font sizes */
-  --text-xs:   10px;
+  --text-xs:   11px;
   --text-sm:   12px;
   --text-base: 13px;
   --text-md:   14px;
@@ -122,79 +140,77 @@
   --text-xl:   18px;
   --text-2xl:  24px;
   --text-3xl:  32px;
-  
+
   /* Font weights */
   --font-normal:   400;
   --font-medium:   500;
   --font-semibold: 600;
   --font-bold:     700;
-  
+
   /* Line heights */
   --leading-none:    1;
-  --leading-tight:   1.2;
-  --leading-snug:    1.3;
+  --leading-tight:   1.25;
+  --leading-snug:    1.375;
   --leading-normal:  1.5;
   --leading-relaxed: 1.625;
-  
+
   /* ============================================
-     Border Radius (HARD EDGES)
+     Border Radius (Warp-Style Rounded)
      ============================================ */
   --radius-none: 0;
-  --radius-sm:   0px;
-  --radius-md:   2px;
-  --radius-lg:   2px;
-  --radius-xl:   4px;
-  --radius-2xl:  4px;
-  --radius-full: 9999px; /* Only for pills/badges if strictly needed */
-  
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-full: 9999px;
+
   /* ============================================
-     Shadows (Subtle/Sharp)
+     Shadows (Soft, Subtle)
      ============================================ */
-  --shadow-xs:   0 1px 0 rgba(0, 0, 0, 1);
-  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.5);
-  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.5);
-  --shadow-xl:   0 0 0 1px rgba(255,255,255,0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.9);
-  
-  /* Glow effects (Neon) */
-  --shadow-glow-sm:    0 0 5px rgba(74, 222, 128, 0.2);
-  --shadow-glow:       0 0 10px rgba(74, 222, 128, 0.3);
-  --shadow-glow-lg:    0 0 20px rgba(74, 222, 128, 0.4);
-  --shadow-glow-blue:  0 0 10px rgba(59, 130, 246, 0.3);
-  --shadow-glow-green: 0 0 10px rgba(74, 222, 128, 0.3);
-  --shadow-glow-red:   0 0 10px rgba(239, 68, 68, 0.3);
-  
+  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-sm:   0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-xl:   0 0 0 1px rgba(255, 255, 255, 0.05), 0 20px 32px -5px rgba(0, 0, 0, 0.2);
+  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  /* Glow effects - Warp Purple */
+  --shadow-glow-sm:    0 0 5px rgba(139, 92, 246, 0.1);
+  --shadow-glow:       0 0 15px rgba(139, 92, 246, 0.15);
+  --shadow-glow-lg:    0 0 25px rgba(139, 92, 246, 0.2);
+  --shadow-glow-blue:  0 0 15px rgba(137, 180, 250, 0.15);
+  --shadow-glow-green: 0 0 15px rgba(166, 227, 161, 0.15);
+  --shadow-glow-red:   0 0 15px rgba(243, 139, 168, 0.15);
+
   /* Inner shadows */
-  --shadow-inner:      inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  --shadow-inner:      inset 0 2px 4px rgba(0, 0, 0, 0.3);
   --shadow-inner-glow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  
+
   /* ============================================
-     Animation & Transitions (Snappy)
+     Animation & Transitions (Smooth)
      ============================================ */
-  
+
   /* Durations */
-  --duration-fast:    75ms;
-  --duration-normal:  150ms;
-  --duration-slow:    250ms;
-  --duration-slower:  350ms;
-  
-  /* Easing curves (Mechanical) */
+  --duration-fast:    150ms;
+  --duration-normal:  250ms;
+  --duration-slow:    350ms;
+  --duration-slower:  500ms;
+
+  /* Easing curves (Smooth cubic-bezier) */
   --ease-linear:  linear;
   --ease-in:      cubic-bezier(0.4, 0, 1, 1);
   --ease-out:     cubic-bezier(0, 0, 0.2, 1);
-  --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
-  /* Deprecating bounces for HUD feel */
-  --ease-bounce:  cubic-bezier(0, 0, 0.2, 1); 
-  --ease-elastic: cubic-bezier(0, 0, 0.2, 1);
-  
+  --ease-in-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth:  cubic-bezier(0.16, 1, 0.3, 1);
+
   /* Common transitions */
   --transition-colors: color, background-color, border-color, text-decoration-color, fill, stroke;
   --transition-opacity: opacity;
   --transition-shadow: box-shadow;
   --transition-transform: transform;
   --transition-all: all;
-  
+
   /* ============================================
      Z-Index Scale
      ============================================ */
@@ -207,24 +223,23 @@
   --z-tooltip:    700;
   --z-toast:      800;
   --z-max:        9999;
-  
+
   /* ============================================
-     Overlay & Glass effects (REMOVED/HARDENED)
+     Overlay & Glass effects
      ============================================ */
-  --overlay-hover:  rgba(255, 255, 255, 0.05);
-  --overlay-active: rgba(255, 255, 255, 0.1);
-  --overlay-focus:  rgba(74, 222, 128, 0.15);
-  
-  /* Glass is now solid for performance/style */
-  --glass-bg:     #050505;
-  --glass-bg-light: #09090b;
-  --glass-blur:   0px;
-  --glass-border: var(--surface1);
-  
+  --overlay-hover:  rgba(255, 255, 255, 0.04);
+  --overlay-active: rgba(255, 255, 255, 0.08);
+  --overlay-focus:  rgba(139, 92, 246, 0.15);
+
+  /* Glass with blur */
+  --glass-bg-blurred: rgba(49, 50, 68, 0.6);
+  --glass-border-subtle: rgba(255, 255, 255, 0.06);
+
   /* ============================================
      Focus ring
      ============================================ */
-  --ring-width:  1px;
-  --ring-offset: 1px;
-  --ring-color:  var(--green);
+  --ring-width:  2px;
+  --ring-offset: 2px;
+  --ring-color:  rgba(139, 92, 246, 0.5);
+  --ring-color-solid: #8b5cf6;
 }

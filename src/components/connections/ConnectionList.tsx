@@ -1,6 +1,6 @@
 /**
- * ConnectionList Component (Refactored)
- * 
+ * ConnectionList Component (Warp-Inspired)
+ *
  * Displays connections organized by groups with search,
  * using new UI components and design system.
  */
@@ -19,7 +19,6 @@ import {
 import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
 import { Badge } from '@/components/ui/Badge';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { ConnectionCard, type ConnectionStatus } from './ConnectionCard';
@@ -173,11 +172,11 @@ export function ConnectionList({
   if (isLoading) {
     return (
       <div className={cn('flex flex-col gap-3 p-3', className)}>
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-10 w-full" />
+        <div className="h-7 w-full bg-ui-surface-bg/50 rounded-lg animate-pulse" />
+        <div className="h-9 w-full bg-ui-surface-bg/50 rounded-lg animate-pulse" />
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-14 w-full" />
+            <div key={i} className="h-14 w-full bg-ui-surface-bg/50 rounded-lg animate-pulse" />
           ))}
         </div>
       </div>
@@ -188,9 +187,9 @@ export function ConnectionList({
   if (error) {
     return (
       <div className={cn('flex flex-col items-center justify-center p-6 text-center', className)}>
-        <Server className="w-10 h-10 text-overlay-1 mb-3" />
-        <p className="text-sm text-red mb-2">Failed to load connections</p>
-        <p className="text-xs text-overlay-1 mb-4">{error}</p>
+        <Server className="w-10 h-10 text-subtext-1 mb-3" />
+        <p className="text-sm text-red mb-2 font-medium">Failed to load connections</p>
+        <p className="text-xs text-subtext-0 mb-4">{error}</p>
         <Button variant="secondary" size="sm" onClick={loadConnections}>
           Retry
         </Button>
@@ -207,7 +206,7 @@ export function ConnectionList({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           leftIcon={<Search size={14} />}
-          className="h-8"
+          className="h-9"
         />
 
         {/* New Connection Button */}
@@ -302,11 +301,11 @@ export function ConnectionList({
                 <ConnectionGroup
                   title="Ungrouped"
                   icon={<Server size={12} />}
-                  count={groupedConnections['Ungrouped'].length}
+                  count={groupedConnections['Ungrouped']?.length}
                   isExpanded={expandedGroups.has('Ungrouped')}
                   onToggle={() => toggleGroup('Ungrouped')}
                 >
-                  {groupedConnections['Ungrouped'].map((conn) => (
+                  {groupedConnections['Ungrouped']?.map((conn) => (
                     <ConnectionCard
                       key={conn.id}
                       connection={conn}
@@ -322,12 +321,12 @@ export function ConnectionList({
 
               {/* SSH Config Import */}
               {sshHosts.length > 0 && onImportFromSsh && (
-                <div className="mt-4 pt-4 border-t border-surface-0">
+                <div className="mt-4 pt-4 border-t border-glass-border/50">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onImportFromSsh(sshHosts)}
-                    className="w-full text-overlay-1 hover:text-text"
+                    className="w-full text-subtext-0 hover:text-text"
                   >
                     <Download size={14} />
                     Import from SSH Config ({sshHosts.length})
@@ -379,14 +378,13 @@ function ConnectionGroup({
   children,
 }: ConnectionGroupProps) {
   return (
-    <div className="mb-2">
+    <div className="mb-1">
       {/* Header */}
       <button
         onClick={onToggle}
         className={cn(
-          'flex items-center gap-1.5 w-full px-2 py-1.5 rounded-md',
-          'text-xs font-medium text-overlay-1 uppercase tracking-wider',
-          'hover:bg-surface-0/50 transition-colors'
+          'flex items-center gap-2 w-full px-2 py-2 rounded-lg',
+          'hover:bg-ui-surface-hover transition-colors duration-200'
         )}
       >
         <motion.div
@@ -395,8 +393,10 @@ function ConnectionGroup({
         >
           <ChevronRight size={12} />
         </motion.div>
-        {icon}
-        <span className="flex-1 text-left">{title}</span>
+        {icon && <span className="text-subtext-0">{icon}</span>}
+        <span className="flex-1 text-left text-xs font-medium text-subtext-0">
+          {title}
+        </span>
         <Badge variant="secondary" size="sm">
           {count}
         </Badge>
@@ -412,7 +412,7 @@ function ConnectionGroup({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="pl-2 space-y-0.5">{children}</div>
+            <div className="pl-2 space-y-1">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -434,9 +434,9 @@ interface EmptyStateProps {
 function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-8 text-center">
-      <div className="text-overlay-1 mb-3">{icon}</div>
+      <div className="text-subtext-0 mb-3">{icon}</div>
       <h3 className="text-sm font-medium text-text mb-1">{title}</h3>
-      <p className="text-xs text-overlay-1 mb-4 max-w-[200px]">{description}</p>
+      <p className="text-xs text-subtext-0 mb-4 max-w-[200px]">{description}</p>
       {action}
     </div>
   );

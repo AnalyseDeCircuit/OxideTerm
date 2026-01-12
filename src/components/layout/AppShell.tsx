@@ -1,9 +1,9 @@
 /**
- * AppShell Component
- * 
+ * AppShell Component (Warp-Inspired)
+ *
  * Main application layout framework with collapsible sidebar,
  * tab bar, terminal area, and bottom panel.
- * 
+ *
  * Layout Structure:
  * ┌──────────────────────────────────────────────────┐
  * │ [Sidebar] │ [TabBar]                             │
@@ -24,14 +24,14 @@ interface AppShellContextValue {
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
-  
+
   // Bottom panel
   bottomPanelOpen: boolean;
   setBottomPanelOpen: (open: boolean) => void;
   toggleBottomPanel: () => void;
   bottomPanelHeight: number;
   setBottomPanelHeight: (height: number) => void;
-  
+
   // Command palette
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -65,13 +65,13 @@ export function AppShellProvider({
     const stored = localStorage.getItem('oxideterm:sidebar-collapsed');
     return stored ? JSON.parse(stored) : defaultSidebarCollapsed;
   });
-  
+
   const [bottomPanelOpen, setBottomPanelOpen] = React.useState(defaultBottomPanelOpen);
   const [bottomPanelHeight, setBottomPanelHeight] = React.useState(() => {
     const stored = localStorage.getItem('oxideterm:panel-height');
     return stored ? JSON.parse(stored) : defaultBottomPanelHeight;
   });
-  
+
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
   // Persist sidebar state
@@ -100,17 +100,17 @@ export function AppShellProvider({
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // ⌘B - Toggle sidebar
-      if (e.metaKey && e.key === 'b') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
         e.preventDefault();
         toggleSidebar();
       }
       // ⌘J - Toggle bottom panel
-      if (e.metaKey && e.key === 'j') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
         e.preventDefault();
         toggleBottomPanel();
       }
       // ⌘K - Toggle command palette
-      if (e.metaKey && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         toggleCommandPalette();
       }
@@ -154,9 +154,7 @@ export function AppShell({ children, className }: AppShellProps) {
   return (
     <div
       className={cn(
-        'flex h-screen w-screen overflow-hidden bg-base text-text selection:bg-primary/20 selection:text-primary',
-        // Add subtle grid background to the whole app shell, masked by content usually
-        'bg-grid-pattern',
+        'flex h-screen w-screen overflow-hidden bg-base text-text selection:bg-purple-500/20 selection:text-text',
         className
       )}
     >
@@ -173,20 +171,16 @@ interface AppShellSidebarProps {
 
 export function AppShellSidebar({ children, className }: AppShellSidebarProps) {
   const { sidebarCollapsed } = useAppShell();
-  
+
   return (
     <aside
       className={cn(
-        'flex flex-col h-full shrink-0 overflow-hidden z-20', // Increased Z-index to sit above grid
-        'bg-sidebar-bg-solid border-r border-sidebar-border', // Solid BG mandatory now
-        // Removed transition for "Snappy" feel - instant width change could be jarring, 
-        // keeping fast transition but removing "ease-expo-out" for simpler one
-        'transition-[width] duration-fast ease-out',
-        sidebarCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar',
+        'flex flex-col h-full shrink-0 overflow-hidden z-20',
+        'bg-sidebar-bg-solid border-r border-glass-border rounded-r-xl', // Warp-style
         className
       )}
       style={{
-        width: sidebarCollapsed ? 'var(--sidebar-width-collapsed)' : 'var(--sidebar-width)',
+        width: sidebarCollapsed ? '64px' : '240px',
       }}
     >
       {children}

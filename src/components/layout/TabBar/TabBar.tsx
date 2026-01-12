@@ -1,9 +1,9 @@
 /**
- * TabBar Component (Redesigned)
- * 
+ * TabBar Component (Warp-Inspired)
+ *
  * Horizontal tab bar with session tabs, status indicators,
  * and action buttons. Supports drag-and-drop reordering.
- * 
+ *
  * Tab Status:
  * ● Green - Connected & healthy
  * ○ Yellow - High latency / connecting
@@ -17,7 +17,6 @@ import {
   Plus,
   Settings,
   Network,
-  Terminal,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
@@ -67,22 +66,22 @@ export function TabBar({
   className,
 }: TabBarProps) {
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          'flex items-center h-8 px-0 gap-0',
-          'bg-mantle border-b border-surface1',
+          'flex items-center h-10 px-0 gap-0',
+          'bg-mantle border-b border-glass-border',
           'shrink-0',
           className
         )}
       >
-        {/* Tabs - now tightly packed */}
-        <div className="flex-1 flex items-center gap-[1px] min-w-0 overflow-x-auto scrollbar-none pl-[1px]">
+        {/* Tabs */}
+        <div className="flex-1 flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-none pl-1">
           <Reorder.Group
             axis="x"
             values={tabs}
             onReorder={onTabsReorder || (() => {})}
-            className="flex items-center gap-[1px]"
+            className="flex items-center gap-1"
           >
             <AnimatePresence initial={false}>
               {tabs.map((tab) => (
@@ -99,7 +98,7 @@ export function TabBar({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 shrink-0 pl-2 border-l border-surface-0">
+        <div className="flex items-center gap-1 shrink-0 pl-2 border-l border-glass-border">
           {/* New Tab */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -107,7 +106,7 @@ export function TabBar({
                 variant="ghost"
                 size="icon-sm"
                 onClick={onNewTab}
-                className="text-subtext-1 hover:text-text"
+                className="text-subtext-1 hover:text-text rounded-md"
               >
                 <Plus size={14} />
               </Button>
@@ -124,7 +123,7 @@ export function TabBar({
                 variant="ghost"
                 size="icon-sm"
                 onClick={onOpenPortForwarding}
-                className="text-subtext-1 hover:text-text"
+                className="text-subtext-1 hover:text-text rounded-md"
               >
                 <Network size={14} />
               </Button>
@@ -139,7 +138,7 @@ export function TabBar({
                 variant="ghost"
                 size="icon-sm"
                 onClick={onOpenSettings}
-                className="text-subtext-1 hover:text-text"
+                className="text-subtext-1 hover:text-text rounded-md"
               >
                 <Settings size={14} />
               </Button>
@@ -186,30 +185,31 @@ function Tab({ tab, isActive, onSelect, onClose }: TabProps) {
       initial={{ opacity: 0, width: 0 }}
       animate={{ opacity: 1, width: 'auto' }}
       exit={{ opacity: 0, width: 0 }}
-      transition={{ duration: 0.1 }}
+      transition={{ duration: 0.15 }}
     >
       <div
         onClick={onSelect}
         onMouseDown={handleMouseDown}
         className={cn(
-          'group flex items-center gap-2 px-3 py-1.5 cursor-pointer relative',
-          'transition-colors duration-fast border-r border-surface1',
-          'max-w-[200px] min-w-[120px]',
+          'group relative flex items-center gap-2 px-4 py-2 cursor-pointer',
+          'transition-all duration-200',
+          'min-w-[140px] max-w-[220px]',
+          'rounded-t-md', // Warp-style: rounded top corners only
           isActive
-            ? 'bg-surface0 text-text font-semibold'
-            : 'bg-mantle text-subtext-0 hover:bg-surface0/50 hover:text-text'
+            ? 'bg-ui-surface-active text-text font-medium'
+            : 'bg-transparent text-subtext-0 hover:bg-ui-surface-hover hover:text-text'
         )}
       >
-        {/* Active Top Line Indicator */}
+        {/* Active Bottom Line Indicator - Warp style */}
         {isActive && (
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary" />
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-purple-500 rounded-t-full" />
         )}
 
-        {/* Status indicator - Square now */}
+        {/* Status indicator - Circle (Warp style) */}
         <TabStatusDot status={tab.status} sftpActive={tab.sftpActive} />
 
         {/* Title */}
-        <span className="flex-1 truncate text-[11px] font-mono tracking-wide">{tab.title}</span>
+        <span className="flex-1 truncate text-xs font-medium tracking-wide">{tab.title}</span>
 
         {/* Close button - Only visible on hover or active */}
         <button
@@ -217,11 +217,12 @@ function Tab({ tab, isActive, onSelect, onClose }: TabProps) {
           className={cn(
             'shrink-0 p-0.5',
             'opacity-0 group-hover:opacity-100',
-            'hover:text-red transition-opacity',
+            'hover:text-red transition-opacity duration-200',
+            'rounded-md hover:bg-ui-surface-hover',
             isActive && 'opacity-100' // Always show close on active
           )}
         >
-          <X size={10} strokeWidth={3} />
+          <X size={12} strokeWidth={2} />
         </button>
       </div>
     </Reorder.Item>
@@ -239,18 +240,18 @@ interface TabStatusDotProps {
 
 function TabStatusDot({ status, sftpActive }: TabStatusDotProps) {
   const colors = {
-    connected: 'bg-primary',
+    connected: 'bg-green',
     connecting: 'bg-yellow animate-pulse',
-    disconnected: 'bg-overlay-0',
+    disconnected: 'bg-subtext-1',
     error: 'bg-red',
   };
 
   return (
-    <div className="flex gap-0.5">
-      <span className={cn('block w-1.5 h-1.5 rounded-[1px]', colors[status])} />
+    <div className="flex gap-1">
+      <span className={cn('w-2 h-2 rounded-full', colors[status])} />
        {/* SFTP indicator */}
       {sftpActive && status === 'connected' && (
-        <span className="block w-1.5 h-1.5 rounded-[1px] bg-blue" />
+        <span className="w-2 h-2 rounded-full bg-blue" />
       )}
     </div>
   );

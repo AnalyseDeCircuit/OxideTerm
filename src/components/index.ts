@@ -1,7 +1,7 @@
 // Legacy exports (for backward compatibility during migration)
 export { TitleBar } from './TitleBar';
 export { ConnectModal } from './ConnectModal';
-export { Sidebar } from './Sidebar';
+//export { Sidebar } from './Sidebar';
 export { TabBar } from './TabBar';
 export { TerminalContainer, cleanupTerminalInstance, getTerminalInstance } from './TerminalContainer';
 export { ConnectionList } from './ConnectionList';

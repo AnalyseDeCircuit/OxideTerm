@@ -1,51 +1,39 @@
 /**
- * OxideTerm Animation System
- * 
+ * OxideTerm Animation System (Warp-Inspired)
+ *
  * Framer Motion animation variants for consistent UI animations.
- * Use these variants throughout the app for unified motion design.
+ * Uses smooth cubic-bezier easing for professional feel.
  */
 
 import type { Variants, Transition } from 'framer-motion';
 
 // ============================================
-// Transition Presets
+// Transition Presets (Warp-Style Smooth)
 // ============================================
 
 export const transitions = {
   /** Fast, snappy interactions (buttons, toggles) */
   fast: {
-    duration: 0.1,
-    ease: "easeOut", // Snappy
+    duration: 0.15,
+    ease: [0.16, 1, 0.3, 1], // Smooth cubic-bezier
   } satisfies Transition,
-  
+
   /** Default transition for most animations */
   normal: {
-    duration: 0.15, // Faster
-    ease: "easeOut",
-  } satisfies Transition,
-  
-  /** Slower, more deliberate animations (panels, modals) */
-  slow: {
-    duration: 0.2, // Faster
-    ease: "easeOut",
-  } satisfies Transition,
-  
-  /** Smooth exponential ease out - slightly faster now */
-  smooth: {
     duration: 0.25,
     ease: [0.16, 1, 0.3, 1],
   } satisfies Transition,
-  
-  /** Spring animation disabled - using fast linear/ease-out */
-  spring: {
-    duration: 0.15,
-    ease: "easeOut",
+
+  /** Slower, more deliberate animations (panels, modals) */
+  slow: {
+    duration: 0.35,
+    ease: [0.16, 1, 0.3, 1],
   } satisfies Transition,
-  
-  /** Bouncy spring disabled - using fast linear/ease-out */
-  bounce: {
-    duration: 0.15,
-    ease: "easeOut",
+
+  /** Smooth exponential ease out */
+  smooth: {
+    duration: 0.3,
+    ease: [0.16, 1, 0.3, 1],
   } satisfies Transition,
 };
 
@@ -54,31 +42,31 @@ export const transitions = {
 // ============================================
 
 export const fadeVariants: Variants = {
-  hidden: { 
-    opacity: 0 
+  hidden: {
+    opacity: 0
   },
-  visible: { 
+  visible: {
     opacity: 1,
     transition: transitions.normal,
   },
-  exit: { 
+  exit: {
     opacity: 0,
     transition: transitions.fast,
   },
 };
 
 export const fadeScaleVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    scale: 0.95 
+  hidden: {
+    opacity: 0,
+    scale: 0.95
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     scale: 1,
     transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     scale: 0.95,
     transition: transitions.normal,
   },
@@ -89,68 +77,68 @@ export const fadeScaleVariants: Variants = {
 // ============================================
 
 export const slideUpVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    y: 10 
+  hidden: {
+    opacity: 0,
+    y: 10
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     y: 10,
     transition: transitions.normal,
   },
 };
 
 export const slideDownVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    y: -10 
+  hidden: {
+    opacity: 0,
+    y: -10
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     y: -10,
     transition: transitions.normal,
   },
 };
 
 export const slideLeftVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    x: 20 
+  hidden: {
+    opacity: 0,
+    x: 20
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     x: 0,
     transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     x: 20,
     transition: transitions.normal,
   },
 };
 
 export const slideRightVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    x: -20 
+  hidden: {
+    opacity: 0,
+    x: -20
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     x: 0,
     transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     x: -20,
     transition: transitions.normal,
   },
@@ -161,18 +149,18 @@ export const slideRightVariants: Variants = {
 // ============================================
 
 export const sidebarVariants: Variants = {
-  collapsed: { 
-    width: 48,
+  collapsed: {
+    width: 64,
     transition: transitions.smooth,
   },
-  expanded: { 
-    width: 220,
+  expanded: {
+    width: 240,
     transition: transitions.smooth,
   },
 };
 
 export const bottomPanelVariants: Variants = {
-  hidden: { 
+  hidden: {
     height: 0,
     opacity: 0,
     transition: transitions.smooth,
@@ -185,16 +173,16 @@ export const bottomPanelVariants: Variants = {
 };
 
 export const drawerVariants: Variants = {
-  hidden: { 
+  hidden: {
     x: '100%',
     opacity: 0,
   },
-  visible: { 
+  visible: {
     x: 0,
     opacity: 1,
     transition: transitions.smooth,
   },
-  exit: { 
+  exit: {
     x: '100%',
     opacity: 0,
     transition: transitions.normal,
@@ -206,37 +194,36 @@ export const drawerVariants: Variants = {
 // ============================================
 
 export const modalBackdropVariants: Variants = {
-  hidden: { 
-    opacity: 0 
+  hidden: {
+    opacity: 0
   },
-  visible: { 
+  visible: {
     opacity: 1,
-    transition: { duration: 0.2 },
+    transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
   },
-  exit: { 
+  exit: {
     opacity: 0,
     transition: { duration: 0.15 },
   },
 };
 
 export const modalContentVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
+  hidden: {
+    opacity: 0,
     scale: 0.95,
     y: -10,
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     scale: 1,
     y: 0,
     transition: {
-      type: 'spring',
-      stiffness: 300,
-      damping: 30,
+      duration: 0.3,
+      ease: [0.16, 1, 0.3, 1],
     },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     scale: 0.95,
     y: 10,
     transition: transitions.normal,
@@ -248,25 +235,25 @@ export const modalContentVariants: Variants = {
 // ============================================
 
 export const commandPaletteVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
+  hidden: {
+    opacity: 0,
     scale: 0.98,
     y: -20,
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     scale: 1,
     y: 0,
     transition: {
-      duration: 0.2,
+      duration: 0.25,
       ease: [0.16, 1, 0.3, 1],
     },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     scale: 0.98,
     y: -10,
-    transition: { duration: 0.15 },
+    transition: { duration: 0.2 },
   },
 };
 
@@ -275,8 +262,8 @@ export const commandPaletteVariants: Variants = {
 // ============================================
 
 export const listContainerVariants: Variants = {
-  hidden: { 
-    opacity: 0 
+  hidden: {
+    opacity: 0
   },
   visible: {
     opacity: 1,
@@ -288,12 +275,12 @@ export const listContainerVariants: Variants = {
 };
 
 export const listItemVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    y: 10 
+  hidden: {
+    opacity: 0,
+    y: 10
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: transitions.normal,
   },
@@ -311,22 +298,22 @@ export const tabIndicatorVariants: Variants = {
   active: {
     opacity: 1,
     scale: 1,
-    transition: transitions.spring,
+    transition: transitions.normal,
   },
 };
 
 export const tabContentVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    x: 10 
+  hidden: {
+    opacity: 0,
+    x: 10
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     x: 0,
     transition: transitions.normal,
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     x: -10,
     transition: transitions.fast,
   },
@@ -337,20 +324,20 @@ export const tabContentVariants: Variants = {
 // ============================================
 
 export const toastVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    y: 50, 
-    scale: 0.9 
+  hidden: {
+    opacity: 0,
+    y: 50,
+    scale: 0.9
   },
-  visible: { 
-    opacity: 1, 
-    y: 0, 
+  visible: {
+    opacity: 1,
+    y: 0,
     scale: 1,
-    transition: transitions.bounce,
+    transition: transitions.smooth,
   },
-  exit: { 
-    opacity: 0, 
-    y: 20, 
+  exit: {
+    opacity: 0,
+    y: 20,
     scale: 0.9,
     transition: transitions.normal,
   },
@@ -361,17 +348,17 @@ export const toastVariants: Variants = {
 // ============================================
 
 export const tooltipVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
-    scale: 0.95 
+  hidden: {
+    opacity: 0,
+    scale: 0.95
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     scale: 1,
-    transition: { duration: 0.15 },
+    transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     scale: 0.95,
     transition: { duration: 0.1 },
   },
@@ -382,25 +369,25 @@ export const tooltipVariants: Variants = {
 // ============================================
 
 export const dropdownVariants: Variants = {
-  hidden: { 
-    opacity: 0, 
+  hidden: {
+    opacity: 0,
     scale: 0.95,
     y: -5,
   },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     scale: 1,
     y: 0,
     transition: {
-      duration: 0.15,
+      duration: 0.2,
       ease: [0.16, 1, 0.3, 1],
     },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     scale: 0.95,
     y: -5,
-    transition: { duration: 0.1 },
+    transition: { duration: 0.15 },
   },
 };
 
@@ -421,8 +408,8 @@ export const skeletonVariants: Variants = {
 
 export const pulseVariants: Variants = {
   pulse: {
-    scale: [1, 1.05, 1],
-    opacity: [1, 0.8, 1],
+    scale: [1, 1.02, 1],
+    opacity: [1, 0.9, 1],
     transition: {
       duration: 2,
       repeat: Infinity,
@@ -442,11 +429,11 @@ export const pressVariants: Variants = {
 };
 
 export const hoverGlowVariants: Variants = {
-  rest: { 
-    boxShadow: '0 0 0 rgba(203, 166, 247, 0)' 
+  rest: {
+    boxShadow: '0 0 0 rgba(139, 92, 246, 0)'
   },
-  hover: { 
-    boxShadow: '0 0 20px rgba(203, 166, 247, 0.15)',
+  hover: {
+    boxShadow: '0 0 20px rgba(139, 92, 246, 0.15)',
     transition: { duration: 0.2 },
   },
 };
@@ -456,12 +443,12 @@ export const hoverGlowVariants: Variants = {
 // ============================================
 
 export const connectionDotVariants: Variants = {
-  disconnected: { 
-    scale: 1, 
-    backgroundColor: '#6c7086' 
+  disconnected: {
+    scale: 1,
+    backgroundColor: '#6c7086'
   },
   connecting: {
-    scale: [1, 1.2, 1],
+    scale: [1, 1.15, 1],
     backgroundColor: '#f9e2af',
     transition: {
       duration: 1,
@@ -469,13 +456,13 @@ export const connectionDotVariants: Variants = {
       ease: 'easeInOut',
     },
   },
-  connected: { 
-    scale: 1, 
-    backgroundColor: '#a6e3a1' 
+  connected: {
+    scale: 1,
+    backgroundColor: '#a6e3a1'
   },
-  error: { 
-    scale: 1, 
-    backgroundColor: '#f38ba8' 
+  error: {
+    scale: 1,
+    backgroundColor: '#f38ba8'
   },
 };
 

@@ -1,9 +1,13 @@
 /**
  * Sheet Component
- * 
- * Slide-out panel/drawer built on Radix UI Dialog.
- * Can slide from any edge of the screen.
- * 
+ *
+ * Slide-out panel/drawer built on Radix UI with Warp-inspired styling.
+ * Features:
+ * - Glassmorphism
+ * - Soft rounded corners
+ * - Smooth slide animations
+ * - Subtle shadows
+ *
  * @example
  * <Sheet>
  *   <SheetTrigger asChild>
@@ -36,7 +40,7 @@ const SheetOverlay = React.forwardRef<
   <SheetPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-modal-backdrop bg-crust/80 backdrop-blur-sm',
+      'fixed inset-0 z-modal-backdrop bg-crust/60 backdrop-blur-md',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
@@ -48,28 +52,29 @@ SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
 const sheetVariants = cva(
   [
-    'fixed z-modal gap-4 bg-mantle p-6 shadow-xl transition ease-in-out',
+    'fixed z-modal gap-4 bg-glass-bg backdrop-blur-md p-6 shadow-xl transition duration-300',
     'data-[state=open]:animate-in data-[state=closed]:animate-out',
-    'data-[state=closed]:duration-200 data-[state=open]:duration-300',
   ],
   {
     variants: {
       side: {
         top: [
-          'inset-x-0 top-0 border-b border-surface-1',
+          'inset-x-0 top-0 border-b border-glass-border',
           'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
         ],
         bottom: [
-          'inset-x-0 bottom-0 border-t border-surface-1',
+          'inset-x-0 bottom-0 border-t border-glass-border',
           'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
         ],
         left: [
-          'inset-y-0 left-0 h-full w-3/4 border-r border-surface-1 sm:max-w-sm',
+          'inset-y-0 left-0 h-full w-[380px] max-w-full border-r border-glass-border',
           'data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left',
+          'rounded-r-xl',
         ],
         right: [
-          'inset-y-0 right-0 h-full w-3/4 border-l border-surface-1 sm:max-w-sm',
+          'inset-y-0 right-0 h-full w-[380px] max-w-full border-l border-glass-border',
           'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
+          'rounded-l-xl',
         ],
       },
     },
@@ -97,12 +102,12 @@ const SheetContent = React.forwardRef<
       {children}
       <SheetPrimitive.Close
         className={cn(
-          'absolute right-4 top-4 rounded-sm opacity-70',
-          'ring-offset-base transition-opacity',
-          'hover:opacity-100',
-          'focus:outline-none focus:ring-2 focus:ring-mauve focus:ring-offset-2',
+          'absolute right-4 top-4 rounded-lg opacity-70',
+          'ring-offset-base transition-opacity duration-200',
+          'hover:opacity-100 hover:bg-ui-surface-hover',
+          'focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:ring-offset-2',
           'disabled:pointer-events-none',
-          'data-[state=open]:bg-surface-1'
+          'data-[state=open]:bg-ui-surface-bg data-[state=open]:text-subtext-0'
         )}
       >
         <X className="h-4 w-4" />
@@ -118,7 +123,7 @@ const SheetHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn('flex flex-col space-y-2 text-center sm:text-left', className)}
+    className={cn('flex flex-col space-y-2', className)}
     {...props}
   />
 );
@@ -130,7 +135,7 @@ const SheetFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-3 mt-6',
       className
     )}
     {...props}
@@ -156,7 +161,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-subtext-0', className)}
+    className={cn('text-sm text-subtext-0 leading-relaxed', className)}
     {...props}
   />
 ));

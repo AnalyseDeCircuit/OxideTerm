@@ -1,8 +1,13 @@
 /**
  * Dialog Component
- * 
- * Modal dialog built on Radix UI Dialog.
- * 
+ *
+ * Modal dialog built on Radix UI with Warp-inspired styling.
+ * Features:
+ * - Glassmorphism backdrop
+ * - Soft rounded corners
+ * - Smooth animations
+ * - Subtle shadows
+ *
  * @example
  * <Dialog>
  *   <DialogTrigger asChild>
@@ -38,7 +43,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-modal-backdrop bg-crust/80 backdrop-blur-sm',
+      'fixed inset-0 z-modal-backdrop bg-crust/60 backdrop-blur-md',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
@@ -59,13 +64,13 @@ const DialogContent = React.forwardRef<
       className={cn(
         'fixed left-[50%] top-[50%] z-modal',
         'grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4',
-        'border border-surface-1 bg-mantle p-6 shadow-xl rounded-lg',
-        'duration-200',
+        'border border-glass-border bg-glass-bg backdrop-blur-md p-6 shadow-xl rounded-xl',
+        'duration-250',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-        'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
-        'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+        'data-[state=closed]:slide-out-to-top-[48%]',
+        'data-[state=open]:slide-in-from-top-[48%]',
         className
       )}
       {...props}
@@ -73,12 +78,12 @@ const DialogContent = React.forwardRef<
       {children}
       <DialogPrimitive.Close
         className={cn(
-          'absolute right-4 top-4 rounded-sm opacity-70',
-          'ring-offset-base transition-opacity',
-          'hover:opacity-100',
-          'focus:outline-none focus:ring-2 focus:ring-mauve focus:ring-offset-2',
+          'absolute right-4 top-4 rounded-lg opacity-70',
+          'ring-offset-base transition-opacity duration-200',
+          'hover:opacity-100 hover:bg-ui-surface-hover',
+          'focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:ring-offset-2',
           'disabled:pointer-events-none',
-          'data-[state=open]:bg-surface-0 data-[state=open]:text-subtext-1'
+          'data-[state=open]:bg-ui-surface-bg data-[state=open]:text-subtext-0'
         )}
       >
         <X className="h-4 w-4" />
@@ -94,7 +99,7 @@ const DialogHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)}
+    className={cn('flex flex-col space-y-2 text-center sm:text-left', className)}
     {...props}
   />
 );
@@ -106,7 +111,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-3 mt-6',
       className
     )}
     {...props}
@@ -132,7 +137,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-subtext-0', className)}
+    className={cn('text-sm text-subtext-0 leading-relaxed', className)}
     {...props}
   />
 ));

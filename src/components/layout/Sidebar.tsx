@@ -1,8 +1,12 @@
 /**
- * Sidebar Component (Redesigned)
- * 
+ * Sidebar Component (Warp-Inspired)
+ *
  * Collapsible sidebar with connection list, search, and actions.
- * Supports both expanded (220px) and collapsed (48px) states.
+ * Features:
+ * - Normal title case (no uppercase)
+ * - Smooth rounded corners
+ * - Subtle hover states
+ * - Clean spacing
  */
 
 import * as React from 'react';
@@ -10,27 +14,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   Plus,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Clock,
   Folder,
   Server,
   Import,
-  HelpCircle,
+  Settings,
   User,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { useAppShell } from '../AppShell';
+import { useAppShell } from './AppShell';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/Tooltip';
-import { sidebarVariants } from '@/lib/animations';
 
 interface SidebarProps {
   onNewConnection?: () => void;
@@ -53,11 +54,12 @@ export function Sidebar({
   return (
     <TooltipProvider delayDuration={200}>
       <motion.aside
-        variants={sidebarVariants}
-        animate={sidebarCollapsed ? 'collapsed' : 'expanded'}
+        initial={false}
+        animate={{ width: sidebarCollapsed ? 64 : 240 }}
+        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
           'flex flex-col h-full shrink-0 overflow-hidden',
-          'bg-sidebar-bg-solid border-r border-sidebar-border',
+          'bg-sidebar-bg-solid border-r border-glass-border',
           className
         )}
       >
@@ -112,7 +114,7 @@ function SidebarHeader({
   onToggle,
 }: SidebarHeaderProps) {
   return (
-    <div className="p-0 border-b border-sidebar-border bg-mantle">
+    <div className="p-0 border-b border-glass-border bg-mantle">
       <AnimatePresence mode="wait">
         {collapsed ? (
           <motion.div
@@ -122,20 +124,20 @@ function SidebarHeader({
             exit={{ opacity: 0 }}
             className="flex flex-col items-center gap-2 py-2"
           >
-           {/* ... existing toggle button code ... */}
+            {/* Toggle button */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onToggle}
-                  className="text-subtext-1 hover:text-text rounded-none"
+                  className="text-subtext-1 hover:text-text rounded-lg"
                 >
                   <ChevronRight size={16} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                Expand <kbd className="ml-1 text-xs">⌘B</kbd>
+                Expand <kbd className="ml-1">⌘B</kbd>
               </TooltipContent>
             </Tooltip>
           </motion.div>
@@ -147,39 +149,46 @@ function SidebarHeader({
             exit={{ opacity: 0 }}
             className="flex flex-col"
           >
-            {/* Hard-edge Search Bar */}
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={14} className="text-overlay-1 group-focus-within:text-primary transition-colors duration-fast" />
+            {/* Search Bar - Warp style */}
+            <div className="relative group px-2 py-3">
+              <div className="relative flex items-center">
+                <Search
+                  size={14}
+                  className="absolute left-3 text-subtext-1 group-focus-within:text-purple-500 transition-colors duration-200"
+                />
+                <input
+                  type="text"
+                  className={cn(
+                    'w-full bg-ui-surface-bg border border-glass-border rounded-lg text-xs h-9 pl-9 pr-9',
+                    'focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20',
+                    'text-text placeholder:text-subtext-1 font-sans'
+                  )}
+                  placeholder="Search connections..."
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                />
+                <div className="absolute right-3 flex items-center pointer-events-none">
+                  <kbd className="text-[9px] text-subtext-1 bg-surface-0 border border-glass-border rounded-md px-1.5 py-0.5">
+                    ⌘K
+                  </kbd>
+                </div>
               </div>
-              <input
-                type="text"
-                className="w-full bg-transparent border-none text-xs h-10 pl-9 pr-10 focus:ring-0 text-text placeholder:text-overlay-0 font-mono tracking-wide"
-                placeholder="FIND_CONNECTION..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-              />
-               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                 <kbd className="text-[9px] text-overlay-0 font-mono border border-overlay-0 px-1 rounded-sm">
-                   ⌘K
-                 </kbd>
-              </div>
-              {/* Bottom active line instead of ring */}
-              <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-sidebar-border group-focus-within:bg-primary transition-colors duration-fast" />
             </div>
-            
-            {/* Header Actions Row */}
-             <div className="flex items-center justify-between px-2 h-8 bg-surface-0/30 border-b border-sidebar-border">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-overlay-1 pl-2">Explorer</span>
-                 <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={onToggle}
-                    className="text-overlay-1 hover:text-text hover:bg-transparent h-6 w-6 rounded-none"
-                  >
-                    <ChevronLeft size={12} />
-                  </Button>
-             </div>
+
+            {/* Header Actions */}
+            <div className="flex items-center justify-between px-3 py-2 bg-ui-surface-bg border-b border-glass-border/50">
+              <span className="text-xs font-medium text-subtext-0">
+                Connections
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onToggle}
+                className="text-subtext-1 hover:text-text hover:bg-transparent h-7 w-7 rounded-md"
+              >
+                <ChevronLeft size={12} />
+              </Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -205,7 +214,7 @@ function CollapsedNav({ onNewConnection, onOpenSettings }: CollapsedNavProps) {
             variant="ghost"
             size="icon"
             onClick={onNewConnection}
-            className="text-mauve hover:bg-primary-muted"
+            className="text-purple-500 hover:bg-purple-500/10 rounded-lg"
           >
             <Plus size={18} />
           </Button>
@@ -217,7 +226,7 @@ function CollapsedNav({ onNewConnection, onOpenSettings }: CollapsedNavProps) {
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-subtext-1">
+          <Button variant="ghost" size="icon" className="text-subtext-1 hover:text-text hover:bg-ui-surface-hover rounded-lg">
             <Clock size={18} />
           </Button>
         </TooltipTrigger>
@@ -226,7 +235,7 @@ function CollapsedNav({ onNewConnection, onOpenSettings }: CollapsedNavProps) {
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-subtext-1">
+          <Button variant="ghost" size="icon" className="text-subtext-1 hover:text-text hover:bg-ui-surface-hover rounded-lg">
             <Folder size={18} />
           </Button>
         </TooltipTrigger>
@@ -241,7 +250,7 @@ function CollapsedNav({ onNewConnection, onOpenSettings }: CollapsedNavProps) {
             variant="ghost"
             size="icon"
             onClick={onOpenSettings}
-            className="text-subtext-1"
+            className="text-subtext-1 hover:text-text hover:bg-ui-surface-hover rounded-lg"
           >
             <Settings size={18} />
           </Button>
@@ -266,27 +275,31 @@ interface ExpandedContentProps {
 function ExpandedContent({ searchQuery: _searchQuery, children }: ExpandedContentProps) {
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
-      {/* Quick Actions - Removed primary button, replaced with subtle text action */}
-      <div className="p-0 border-b border-sidebar-border/50">
+      {/* Quick Actions */}
+      <div className="p-2 border-b border-glass-border/50">
         <button
-          className="w-full flex items-center gap-3 px-4 py-3 text-xs font-mono text-primary hover:bg-primary-muted transition-colors duration-fast group text-left"
+          onClick={() => {}}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 text-xs font-sans text-purple-500 rounded-lg',
+            'hover:bg-purple-500/10 transition-colors duration-200 group'
+          )}
         >
-          <span className="flex items-center justify-center w-4 h-4 border border-primary/50 text-white rounded-[1px] group-hover:bg-primary group-hover:text-black transition-all">
+          <span className="flex items-center justify-center w-5 h-5 bg-purple-500/20 text-purple-500 rounded-md group-hover:bg-purple-500/30 transition-all">
             <Plus size={10} strokeWidth={3} />
           </span>
-          <span className="tracking-wide font-semibold">NEW_CONNECTION</span>
+          <span className="font-medium">New Connection</span>
         </button>
       </div>
 
       {/* Connection Groups */}
       <div className="flex-1">
-        {/* Recent Section - No padding to keep strict lines */}
-        <SidebarSection icon={<Clock size={10} />} title="RECENT_LOGS">
+        {/* Recent Section */}
+        <SidebarSection icon={<Clock size={12} />} title="Recent">
           {/* Connection items will be rendered by parent */}
         </SidebarSection>
 
         {/* Saved Section */}
-        <SidebarSection icon={<Folder size={10} />} title="SAVED_HOSTS" defaultOpen>
+        <SidebarSection icon={<Folder size={12} />} title="Saved" defaultOpen>
           {children}
         </SidebarSection>
       </div>
@@ -305,7 +318,7 @@ interface SidebarSectionProps {
   children?: React.ReactNode;
 }
 
-function SidebarSection({
+export function SidebarSection({
   icon,
   title,
   defaultOpen = true,
@@ -314,22 +327,23 @@ function SidebarSection({
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   return (
-    <div className="mb-0 border-b border-sidebar-border/30 last:border-0">
+    <div className="mb-0 border-b border-glass-border/30 last:border-0">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 w-full px-3 py-2 group',
-          'hover:bg-surface-0/50 transition-colors'
+          'flex items-center gap-2 w-full px-3 py-2.5 rounded-lg',
+          'hover:bg-ui-surface-hover transition-colors duration-200'
         )}
       >
-        <ChevronRight 
-          size={14} 
+        <ChevronRight
+          size={14}
           className={cn(
-            "text-subtext-1 group-hover:text-text transition-transform duration-200",
+            "text-subtext-0 hover:text-text transition-transform duration-200",
             isOpen && "rotate-90"
-          )} 
+          )}
         />
-        <span className="text-xs font-semibold text-subtext-0 group-hover:text-text">{title}</span>
+        {icon && <span className="text-subtext-0">{icon}</span>}
+        <span className="text-xs font-medium text-subtext-0 hover:text-text">{title}</span>
       </button>
       <AnimatePresence initial={false}>
         {isOpen && (
@@ -337,11 +351,10 @@ function SidebarSection({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            // Use faster transition
-            transition={{ duration: 0.1 }}
+            transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="py-0">{children}</div>
+            <div className="py-1">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -369,30 +382,30 @@ export function ConnectionItem({
   onClick,
 }: ConnectionItemProps) {
   const statusColors = {
-    online: 'text-green-400',
-    offline: 'text-overlay-1',
-    connecting: 'text-yellow-400 animate-pulse',
+    online: 'text-green',
+    offline: 'text-subtext-1',
+    connecting: 'text-yellow animate-pulse',
   };
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        'group relative flex items-center gap-3 w-full px-3 py-1.5 text-left rounded-md mx-1 mb-0.5',
-        'transition-colors duration-fast',
+        'group relative flex items-center gap-3 w-full px-3 py-2 text-left rounded-lg mx-1 mb-0.5',
+        'transition-all duration-200',
         isActive
-          ? 'bg-surface2 text-white'
-          : 'text-subtext-0 hover:bg-surface-0 hover:text-text'
+          ? 'bg-ui-surface-active text-white'
+          : 'text-subtext-0 hover:bg-ui-surface-hover hover:text-text'
       )}
     >
       <Server size={14} className={cn("shrink-0 transition-colors", isActive ? "text-white" : statusColors[status])} />
-      
+
       <div className="flex-1 min-w-0">
-        <div className={cn("text-sm font-sans font-medium truncate leading-tight")}>
-            {name}
+        <div className="text-sm font-medium font-sans truncate leading-tight">
+          {name}
         </div>
-        <div className={cn("text-xs font-mono truncate opacity-80", isActive ? "text-white/80" : "text-overlay-1")}>
-            {host}
+        <div className="text-xs font-mono truncate opacity-70">
+          {host}
         </div>
       </div>
     </button>
@@ -409,7 +422,7 @@ interface SidebarFooterProps {
   onImportSSH?: () => void;
 }
 
-function SidebarFooter({
+export function SidebarFooter({
   collapsed,
   onOpenSettings,
   onImportSSH,
@@ -419,30 +432,41 @@ function SidebarFooter({
   }
 
   return (
-    <div className="border-t border-sidebar-border bg-mantle">
-       {/* Settings Row - Hard edged */}
-       <div className="flex">
+    <div className="border-t border-glass-border bg-mantle">
+      {/* Settings Row */}
+      <div className="flex">
         <button
-            onClick={onImportSSH}
-            className="flex-1 flex items-center justify-center gap-2 py-3 border-r border-sidebar-border text-[10px] uppercase font-mono text-overlay-1 hover:text-text hover:bg-surface-0 transition-colors"
+          onClick={onImportSSH}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-2 py-3 border-r border-glass-border',
+            'text-xs font-medium text-subtext-1',
+            'hover:text-text hover:bg-ui-surface-hover transition-colors rounded-bl-lg'
+          )}
         >
-            <Import size={10} />
-            Import Config
+          <Import size={12} />
+          Import
         </button>
         <button
-            onClick={onOpenSettings}
-             className="w-12 flex items-center justify-center py-3 border-r border-sidebar-border text-overlay-1 hover:text-text hover:bg-surface-0 transition-colors"
+          onClick={onOpenSettings}
+          className={cn(
+            'w-12 flex items-center justify-center py-3 border-r border-glass-border',
+            'text-subtext-1 hover:text-text hover:bg-ui-surface-hover transition-colors rounded-br-lg'
+          )}
         >
-             <Settings size={12} />
+          <Settings size={12} />
         </button>
-         <button
-             className="w-12 flex items-center justify-center py-3 text-overlay-1 hover:text-text hover:bg-surface-0 transition-colors"
+        <button
+          className={cn(
+            'w-12 flex items-center justify-center py-3',
+            'text-subtext-1 hover:text-text hover:bg-ui-surface-hover transition-colors rounded-tr-lg'
+          )}
         >
-             <User size={12} />
+          <User size={12} />
         </button>
-       </div>
+      </div>
     </div>
   );
 }
 
-export { SidebarSection, SidebarHeader, SidebarFooter };
+// Export types
+export type { SidebarHeaderProps, CollapsedNavProps, ExpandedContentProps, SidebarSectionProps, ConnectionItemProps, SidebarFooterProps };

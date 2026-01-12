@@ -1,29 +1,23 @@
 /**
- * Layout Components - Barrel Export
- * 
- * Main layout infrastructure for OxideTerm:
- * - AppShell: Root layout with context provider
- * - Sidebar: Connection list and navigation
- * - TabBar: Session tabs with drag support
- * - BottomPanel: SFTP, transfers, port forwarding
- * - CommandPalette: Global command launcher
+ * Layout Components - Direct Exports
+ *
+ * Exports all layout components directly from subdirectories.
  */
 
 // AppShell (root layout)
 export { AppShell, useAppShell } from './AppShell';
 
 // Sidebar
-export {
-  Sidebar,
-  SidebarSection,
-  ConnectionItem,
-} from './Sidebar';
+export { Sidebar, SidebarSection, ConnectionItem, SidebarFooter } from './Sidebar';
 
 // TabBar
-export { TabBar, TabContextMenu, type TabItem } from './TabBar';
+export { TabBar, TabContextMenu, type TabItem } from './TabBar/TabBar';
 
 // BottomPanel
-export { BottomPanel, BottomPanelToggle } from './BottomPanel';
+export { BottomPanel, BottomPanelToggle } from './BottomPanel/BottomPanel';
 
 // CommandPalette
-export { CommandPalette, CommandPaletteItem } from './CommandPalette';
+export { CommandPalette, type CommandPaletteItem } from './CommandPalette/CommandPalette';
+
+// Command Center
+export { CommandCenter } from './CommandCenter';

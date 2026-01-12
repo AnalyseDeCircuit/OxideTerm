@@ -1,6 +1,6 @@
 /**
- * ConnectionCard Component
- * 
+ * ConnectionCard Component (Warp-Inspired)
+ *
  * Individual connection item with status indicator,
  * quick actions, and context menu support.
  */
@@ -14,9 +14,8 @@ import {
   Trash2,
   Copy,
   ExternalLink,
-  Key,
-  KeyRound,
   Lock,
+  KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
@@ -77,34 +76,38 @@ export function ConnectionCard({
     onDuplicate?.(connection);
   };
 
-  // Auth type icon
-  const AuthIcon = {
-    password: Lock,
-    key: Key,
-    agent: KeyRound,
-  }[connection.authType] || Key;
+  // Auth type icon as function
+  const renderAuthIcon = () => {
+    if (connection.authType === 'password') {
+      return <Lock size={10} className="shrink-0 text-subtext-1" />;
+    }
+    if (connection.authType === 'key' || connection.authType === 'agent') {
+      return <KeyRound size={10} className="shrink-0 text-subtext-1" />;
+    }
+    return <Lock size={10} className="shrink-0 text-subtext-1" />;
+  };
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={200}>
       <motion.div
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -5 }}
-        whileHover={{ backgroundColor: 'var(--surface-0)' }}
+        whileHover={{ backgroundColor: 'var(--ui-surface-hover)' }}
         onClick={handleConnect}
         className={cn(
-          'group relative flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer',
-          'transition-colors duration-fast',
-          isActive && 'bg-surface-0',
+          'group relative flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer',
+          'transition-all duration-200',
+          isActive && 'bg-ui-surface-active text-white',
           className
         )}
       >
-        {/* Status Indicator */}
+        {/* Status Indicator - Circle (Warp style) */}
         <StatusDot status={status} />
 
         {/* Connection Icon with Color */}
         <div
-          className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center"
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
           style={{
             backgroundColor: `${connection.color || 'var(--mauve)'}20`,
             color: connection.color || 'var(--mauve)',
@@ -116,12 +119,12 @@ export function ConnectionCard({
         {/* Connection Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-text truncate">
+            <span className="text-sm font-medium text-text font-sans truncate">
               {connection.name}
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <AuthIcon size={10} className="shrink-0 text-overlay-1" />
+                {renderAuthIcon()}
               </TooltipTrigger>
               <TooltipContent>
                 {connection.authType === 'password' && 'Password auth'}
@@ -130,14 +133,14 @@ export function ConnectionCard({
               </TooltipContent>
             </Tooltip>
           </div>
-          <div className="text-xs text-overlay-1 truncate">
+          <div className="text-xs font-mono truncate text-subtext-0">
             {connection.username}@{connection.host}
             {connection.port !== 22 && `:${connection.port}`}
           </div>
         </div>
 
         {/* Actions (visible on hover) */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {onEdit && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -145,7 +148,7 @@ export function ConnectionCard({
                   variant="ghost"
                   size="icon-sm"
                   onClick={handleEdit}
-                  className="text-overlay-1 hover:text-text"
+                  className="text-subtext-1 hover:text-text rounded-md"
                 >
                   <Pencil size={12} />
                 </Button>
@@ -160,7 +163,7 @@ export function ConnectionCard({
                 variant="ghost"
                 size="icon-sm"
                 onClick={(e) => e.stopPropagation()}
-                className="text-overlay-1 hover:text-text"
+                className="text-subtext-1 hover:text-text rounded-md"
               >
                 <MoreVertical size={12} />
               </Button>
@@ -203,7 +206,7 @@ export function ConnectionCard({
 }
 
 // ============================================
-// Status Dot Component
+// Status Dot Component (Circle - Warp style)
 // ============================================
 
 interface StatusDotProps {
@@ -221,7 +224,7 @@ function StatusDot({ status }: StatusDotProps) {
       pulse: true,
     },
     disconnected: {
-      color: 'bg-overlay-0',
+      color: 'bg-subtext-1',
       pulse: false,
     },
     error: {
