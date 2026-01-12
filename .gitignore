@@ -29,7 +29,7 @@ src-tauri/.cargo/
 # Environment
 .env
 .env.local
-
+.cursorrules
 # OS
 .DS_Store
 Thumbs.db

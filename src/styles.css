@@ -1,463 +1,73 @@
 @import "tailwindcss";
-@import "./styles/variables.css";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ============================================
-   OxideTerm Design System
-   Theme: Warp-Inspired Modern
-   ============================================ */
+@theme {
+  /* Oxide-Industrial Palette */
+  --color-oxide-bg: #09090b;       /* Deep Void */
+  --color-oxide-panel: #18181b;    /* Machine Grey */
+  --color-oxide-border: #27272a;   /* Structural Steel */
+  --color-oxide-accent: #ea580c;   /* Rust/Oxide Orange */
+  --color-oxide-accent-hover: #c2410c;
+  --color-oxide-text: #f4f4f5;     /* Zinc 100 */
+  --color-oxide-text-muted: #a1a1aa; /* Zinc 400 */
+  
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
 
-/* Local Nerd Font Override */
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
+  /* Spacing - High Density overrides if needed, or just use standard tight scales */
+  
+  /* Borders */
+  --radius-sm: 2px;
+  --radius-md: 0px; /* Force sharp corners generally */
+  --radius-lg: 0px;
 }
 
-/* ============================================
-   Font Rendering Optimization
-   ============================================ */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  image-rendering: -webkit-optimize-contrast;
-}
-
-/* Terminal-specific rendering */
-.xterm {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "kern" 0;
-  text-rendering: geometricPrecision;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
-.xterm-screen {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-
-.xterm canvas {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  shape-rendering: crispEdges;
-}
-
-/* ============================================
-   GRID BACKGROUND - REMOVED for Warp style
-   ============================================ */
-.bg-grid-pattern {
-  display: none;
-}
-
-/* ============================================
-   CSS Variables (Design Tokens)
-   ============================================ */
+/* Reset & Base Styles */
 :root {
-  /* Legacy mappings for safety */
-  --color-base: var(--base);
-  --color-mantle: var(--mantle);
-  --color-text: var(--text);
-
-  /* Legacy Overrides */
-  --sidebar-bg: var(--sidebar-bg-solid);
-  --titlebar-bg: var(--mantle);
-
-  /* Glass enabled */
-  --glass-blur: var(--glass-blur);
-  --glass-bg: var(--glass-bg);
-}
-
-/* ============================================
-   Base Reset & Defaults
-   ============================================ */
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+  color-scheme: dark;
+  --background: var(--color-oxide-bg);
+  --foreground: var(--color-oxide-text);
 }
 
 body {
+  background-color: var(--background);
+  color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  background-color: var(--color-base);
-  color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* App-like feel */
 }
 
-/* ============================================
-   Glassmorphism Utilities (Warp Style)
-   ============================================ */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-}
-
-.glass-light {
-  background: var(--glass-bg-light);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-}
-
-/* ============================================
-   Custom Scrollbar (macOS style - subtle)
-   ============================================ */
+/* Scrollbar styling for WebKit */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--color-oxide-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: var(--color-oxide-border);
+  border: 2px solid var(--color-oxide-bg); /* Padding effect */
+  border-radius: 0px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-  background-clip: content-box;
+  background: #3f3f46;
 }
 
 ::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--color-oxide-bg);
 }
 
-/* ============================================
-   Button Components (Warp Style)
-   ============================================ */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--duration-normal);
-  outline: none;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
+/* Utility classes for the Industrial look */
+.industrial-border {
+  border: 1px solid var(--color-oxide-border);
 }
 
-.btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(137, 180, 250, 0.25);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.btn:active {
-  transform: scale(0.98) translateY(0);
-}
-
-.btn:focus-visible {
-  box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.3);
-}
-
-.btn-primary {
-  background: linear-gradient(to bottom, rgba(139, 92, 246, 0.18), rgba(139, 92, 246, 0.08));
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  color: var(--color-primary-solid);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-}
-
-.btn-primary:hover {
-  background: linear-gradient(to bottom, rgba(139, 92, 246, 0.28), rgba(139, 92, 246, 0.12));
-  border-color: rgba(139, 92, 246, 0.4);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.15);
-  transform: translateY(-1px);
-}
-
-.btn-primary:active {
-  transform: scale(0.98) translateY(0);
-}
-
-.btn-secondary {
-  background: var(--color-surface-0);
-  color: var(--color-text);
-  border-radius: var(--radius-md);
-}
-
-.btn-secondary:hover {
-  background: var(--color-surface-1);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--color-subtext-0);
-  border-radius: var(--radius-md);
-  border: none;
-}
-
-.btn-ghost:hover {
-  background: var(--ui-surface-hover);
-  color: var(--color-text);
-}
-
-.btn-danger {
-  background: var(--color-red);
-  color: var(--color-crust);
-  border-radius: var(--radius-md);
-}
-
-.btn-danger:hover {
-  background: #f5a0b4;
-}
-
-.btn-icon {
-  padding: 0.5rem;
-  border-radius: var(--radius-md);
-}
-
-/* ============================================
-   Input Fields (Warp Style)
-   ============================================ */
-.input-field {
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  background: var(--color-surface-0);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  transition: all var(--duration-fast);
-}
-
-.input-field::placeholder {
-  color: var(--color-overlay-0);
-}
-
-.input-field:focus {
-  outline: none;
-  border-color: var(--color-primary-solid);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-}
-
-.input-field:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ============================================
-   Terminal Container
-   ============================================ */
-.terminal-container {
-  width: 100%;
-  height: 100%;
-  background: var(--color-base);
-}
-
-/* ============================================
-   Traffic Light Buttons (Optional macOS style)
-   ============================================ */
-.traffic-lights {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-}
-
-.traffic-light {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.traffic-light:hover {
-  filter: brightness(1.1);
-}
-
-.traffic-light.close {
-  background: #ff5f57;
-}
-
-.traffic-light.minimize {
-  background: #febc2e;
-}
-
-.traffic-light.maximize {
-  background: #28c840;
-}
-
-.traffic-lights:hover .traffic-light.close {
-  background: #ff5f57;
-}
-
-.traffic-lights:hover .traffic-light.minimize {
-  background: #febc2e;
-}
-
-.traffic-lights:hover .traffic-light.maximize {
-  background: #28c840;
-}
-
-.traffic-lights.inactive .traffic-light {
-  background: var(--color-surface-1);
-}
-
-/* ============================================
-   Sidebar Resize Handle
-   ============================================ */
-.resize-handle {
-  position: absolute;
-  top: 0;
-  right: -3px;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 10;
-}
-
-.resize-handle::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 2px;
-  width: 2px;
-  height: 100%;
-  background: transparent;
-  transition: background var(--duration-fast);
-}
-
-.resize-handle:hover::after,
-.resize-handle:active::after {
-  background: var(--color-primary-solid);
-}
-
-/* ============================================
-   Drawer / Slide Panel
-   ============================================ */
-.drawer {
-  position: fixed;
-  top: var(--titlebar-height);
-  right: 0;
-  bottom: 0;
-  width: 400px;
-  max-width: 50vw;
-  background: var(--sidebar-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-left: 1px solid var(--glass-border);
-  transform: translateX(100%);
-  transition: transform var(--duration-normal);
-  z-index: 50;
-}
-
-.drawer.open {
-  transform: translateX(0);
-}
-
-/* ============================================
-   Tooltip
-   ============================================ */
-.tooltip {
-  position: relative;
-}
-
-.tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  background: var(--color-surface-0);
-  color: var(--color-text);
-  border-radius: var(--radius-md);
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-fast);
-}
-
-.tooltip:hover::after {
-  opacity: 1;
-}
-
-/* ============================================
-   Animations
-   ============================================ */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-@keyframes slideInUp {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.animate-fade-in {
-  animation: fadeIn var(--duration-normal) ease-out;
-}
-
-.animate-slide-up {
-  animation: slideInUp var(--duration-normal) ease-out;
-}
-
-/* ============================================
-   Selection Highlight
-   ============================================ */
-::selection {
-  background: rgba(137, 180, 250, 0.3);
-  color: inherit;
-}
-
-/* ============================================
-   Focus Visible (Accessibility)
-   ============================================ */
-:focus-visible {
-  outline: 2px solid var(--color-primary-solid);
-  outline-offset: 2px;
-}
-
-/* ============================================
-   Drag Region (for Tauri frameless window)
-   ============================================ */
-[data-tauri-drag-region] {
-  -webkit-app-region: drag;
-}
-
-[data-tauri-drag-region] button,
-[data-tauri-drag-region] a,
-[data-tauri-drag-region] input {
-  -webkit-app-region: no-drag;
+.industrial-panel {
+  background-color: var(--color-oxide-panel);
+  border: 1px solid var(--color-oxide-border);
 }
