@@ -7,7 +7,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use russh::*;
 use russh_keys::PublicKey;
-use tracing::{info, debug};
+use tracing::{info, debug, warn};
 
 use super::config::{SshConfig, AuthMethod};
 use super::error::SshError;
@@ -102,6 +102,10 @@ impl SshClient {
 }
 
 /// Client handler for russh callbacks
+/// 
+/// This handler processes server-initiated events, including:
+/// - Host key verification
+/// - Remote port forwarding (forwarded-tcpip channels)
 pub struct ClientHandler;
 
 #[async_trait]
@@ -117,4 +121,47 @@ impl client::Handler for ClientHandler {
         debug!("Server key check - accepting (TODO: implement proper verification)");
         Ok(true)
     }
+
+    /// Called when the server opens a channel for a new remote port forwarding connection.
+    /// This happens when someone connects to the forwarded port on the remote server.
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<client::Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        originator_address: &str,
+        originator_port: u32,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        info!(
+            "Server opened forwarded-tcpip channel: {}:{} from {}:{}",
+            connected_address, connected_port, originator_address, originator_port
+        );
+
+        // Import the handler function from forwarding module
+        use crate::forwarding::remote::handle_forwarded_connection;
+
+        let connected_address = connected_address.to_string();
+        let originator_address = originator_address.to_string();
+
+        // Spawn a task to handle this forwarded connection
+        // We can't block here as this is called from the SSH event loop
+        tokio::spawn(async move {
+            if let Err(e) = handle_forwarded_connection(
+                channel,
+                &connected_address,
+                connected_port,
+                &originator_address,
+                originator_port,
+            ).await {
+                warn!(
+                    "Failed to handle forwarded connection {}:{}: {}",
+                    connected_address, connected_port, e
+                );
+            }
+        });
+
+        Ok(())
+    }
 }
+

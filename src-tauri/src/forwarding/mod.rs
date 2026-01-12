@@ -4,9 +4,11 @@
 //! Designed for HPC/supercomputing workflows (Jupyter, TensorBoard, etc.)
 
 mod local;
-mod remote;
+pub mod remote;
+mod dynamic;
 mod manager;
 
 pub use local::{LocalForward, LocalForwardHandle, start_local_forward};
-pub use remote::{RemoteForward, RemoteForwardHandle, start_remote_forward};
+pub use remote::{RemoteForward, RemoteForwardHandle, start_remote_forward, RemoteForwardRegistry};
+pub use dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward};
 pub use manager::{ForwardingManager, ForwardRule, ForwardStatus, ForwardType};

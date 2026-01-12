@@ -4,12 +4,11 @@
 //! Uses SSH keepalive responses to track connection quality.
 
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Connection health status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

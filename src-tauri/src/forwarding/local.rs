@@ -7,13 +7,12 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use russh::client::Handle;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::ssh::{ClientHandler, SshError};
+use crate::ssh::{HandleController, SshError};
 
 /// Local port forwarding configuration
 #[derive(Debug, Clone)]
@@ -98,8 +97,10 @@ impl LocalForwardHandle {
 /// 1. Listens on the local address
 /// 2. For each incoming connection, opens a direct-tcpip channel through SSH
 /// 3. Bridges data between the local socket and the SSH channel
+/// 
+/// Uses HandleController to communicate with Handle Owner Task for opening channels.
 pub async fn start_local_forward(
-    ssh_handle: Arc<Handle<ClientHandler>>,
+    handle_controller: HandleController,
     config: LocalForward,
 ) -> Result<LocalForwardHandle, SshError> {
     // Bind to local address
@@ -147,13 +148,13 @@ pub async fn start_local_forward(
                             debug!("Accepted connection from {} for forward", peer_addr);
                             
                             // Clone for the connection handler
-                            let ssh_handle_clone = ssh_handle.clone();
+                            let controller = handle_controller.clone();
                             let remote_host_clone = remote_host.clone();
                             
                             // Spawn a task to handle this connection
                             tokio::spawn(async move {
                                 if let Err(e) = handle_forward_connection(
-                                    ssh_handle_clone,
+                                    controller,
                                     stream,
                                     &remote_host_clone,
                                     remote_port,
@@ -186,26 +187,20 @@ pub async fn start_local_forward(
 
 /// Handle a single forwarded connection
 async fn handle_forward_connection(
-    ssh_handle: Arc<Handle<ClientHandler>>,
+    handle_controller: HandleController,
     mut local_stream: TcpStream,
     remote_host: &str,
     remote_port: u16,
 ) -> Result<(), SshError> {
-    // Open direct-tcpip channel to remote
-    let channel = ssh_handle
-        .channel_open_direct_tcpip(
+    // Open direct-tcpip channel to remote via Handle Owner Task
+    let channel = handle_controller
+        .open_direct_tcpip(
             remote_host,
             remote_port as u32,
             "127.0.0.1",
             0,
         )
-        .await
-        .map_err(|e| {
-            SshError::ConnectionFailed(format!(
-                "Failed to open channel to {}:{}: {}",
-                remote_host, remote_port, e
-            ))
-        })?;
+        .await?;
 
     debug!("Opened channel for forward to {}:{}", remote_host, remote_port);
 
@@ -225,7 +220,7 @@ async fn handle_forward_connection(
             match local_read.read(&mut buf).await {
                 Ok(0) => break, // EOF
                 Ok(n) => {
-                    let mut ch = channel_for_write.lock().await;
+                    let ch = channel_for_write.lock().await;
                     if let Err(e) = ch.data(&buf[..n]).await {
                         debug!("Channel write error: {}", e);
                         break;
@@ -238,7 +233,7 @@ async fn handle_forward_connection(
             }
         }
         // Signal EOF to remote
-        let mut ch = channel_for_write.lock().await;
+        let ch = channel_for_write.lock().await;
         let _ = ch.eof().await;
     };
 
@@ -279,7 +274,7 @@ async fn handle_forward_connection(
 
     // Close the channel
     {
-        let mut ch = channel.lock().await;
+        let ch = channel.lock().await;
         let _ = ch.close().await;
     }
 

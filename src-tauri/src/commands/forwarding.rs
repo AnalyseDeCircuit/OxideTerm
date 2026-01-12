@@ -11,7 +11,6 @@ use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
 use crate::forwarding::{ForwardingManager, ForwardRule, ForwardStatus, ForwardType};
-use crate::ssh::SshError;
 
 /// Global registry of forwarding managers (one per session)
 pub struct ForwardingRegistry {
@@ -136,7 +135,7 @@ pub async fn create_port_forward(
         _ => return Err(format!("Invalid forward type: {}", request.forward_type)),
     };
 
-    let mut rule = ForwardRule {
+    let rule = ForwardRule {
         id: uuid::Uuid::new_v4().to_string(),
         forward_type,
         bind_address: request.bind_address,

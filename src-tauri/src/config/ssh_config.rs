@@ -217,7 +217,7 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
     let mut hosts = Vec::new();
     let mut current_host: Option<SshConfigHost> = None;
     
-    for (line_num, line) in content.lines().enumerate() {
+    for (_line_num, line) in content.lines().enumerate() {
         let line = line.trim();
         
         // Skip empty lines and comments

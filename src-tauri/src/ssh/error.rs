@@ -30,6 +30,9 @@ pub enum SshError {
 
     #[error("Session not found: {0}")]
     SessionNotFound(String),
+
+    #[error("Disconnected")]
+    Disconnected,
 }
 
 impl From<russh::Error> for SshError {

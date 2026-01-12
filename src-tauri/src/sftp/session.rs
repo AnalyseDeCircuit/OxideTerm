@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use base64::Engine;
 use parking_lot::RwLock;
-use russh::client::Handle;
 use russh_sftp::client::SftpSession as RusshSftpSession;
 use russh_sftp::client::error::Error as SftpErrorInner;
 use tokio::sync::mpsc;
@@ -16,7 +15,7 @@ use tracing::{debug, info};
 
 use super::error::SftpError;
 use super::types::*;
-use crate::ssh::ClientHandler;
+use crate::ssh::HandleController;
 
 /// SFTP Session wrapper
 pub struct SftpSession {
@@ -29,16 +28,16 @@ pub struct SftpSession {
 }
 
 impl SftpSession {
-    /// Create a new SFTP session from an SSH handle
+    /// Create a new SFTP session from a HandleController
     pub async fn new(
-        handle: &Handle<ClientHandler>,
+        handle_controller: HandleController,
         session_id: String,
     ) -> Result<Self, SftpError> {
         info!("Opening SFTP subsystem for session {}", session_id);
 
-        // Open a new channel for SFTP
-        let channel = handle
-            .channel_open_session()
+        // Open a new channel for SFTP via Handle Owner Task
+        let channel = handle_controller
+            .open_session_channel()
             .await
             .map_err(|e| SftpError::ChannelError(e.to_string()))?;
 
@@ -313,13 +312,15 @@ impl SftpSession {
         }
     }
 
-    /// Download file to local path with progress reporting
+    /// Download file to local path with progress reporting (streaming)
     pub async fn download(
         &self,
         remote_path: &str,
         local_path: &str,
         progress_tx: Option<mpsc::Sender<TransferProgress>>,
     ) -> Result<(), SftpError> {
+        use tokio::io::AsyncReadExt;
+        
         let canonical_path = self.resolve_path(remote_path).await?;
         info!("Downloading {} to {}", canonical_path, local_path);
 
@@ -334,6 +335,13 @@ impl SftpSession {
         }
 
         let total_bytes = info.size;
+        let start_time = std::time::Instant::now();
+        let mut transferred_bytes: u64 = 0;
+        
+        // For instantaneous speed calculation
+        let mut last_speed_time = std::time::Instant::now();
+        let mut last_speed_bytes: u64 = 0;
+        let mut current_speed: u64 = 0;
 
         // Send initial progress
         if let Some(ref tx) = progress_tx {
@@ -353,29 +361,98 @@ impl SftpSession {
                 .await;
         }
 
-        let start_time = std::time::Instant::now();
-
-        // Use simple read API for smaller files, streaming for larger ones
-        let content = self
+        // Open remote file for streaming read
+        let mut remote_file = self
             .sftp
-            .read(&canonical_path)
+            .open(&canonical_path)
             .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
-        // Write to local file
-        tokio::fs::write(local_path, &content)
+        // Create local file for writing
+        let mut local_file = tokio::fs::File::create(local_path)
             .await
             .map_err(SftpError::IoError)?;
 
-        let transferred_bytes = content.len() as u64;
+        // Stream transfer with progress updates
+        let chunk_size = constants::STREAM_BUFFER_SIZE;
+        let mut buffer = vec![0u8; chunk_size];
+        let mut last_progress_time = std::time::Instant::now();
 
-        // Send completion progress
+        loop {
+            let bytes_read = remote_file.read(&mut buffer).await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+            
+            if bytes_read == 0 {
+                break; // EOF
+            }
+
+            // Write to local file
+            tokio::io::AsyncWriteExt::write_all(&mut local_file, &buffer[..bytes_read])
+                .await
+                .map_err(SftpError::IoError)?;
+
+            transferred_bytes += bytes_read as u64;
+
+            // Send progress update (throttled to every 100ms or 1% progress)
+            let should_send_progress = progress_tx.is_some() && (
+                last_progress_time.elapsed().as_millis() >= 100 ||
+                (total_bytes > 0 && (transferred_bytes * 100 / total_bytes) != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes))
+            );
+
+            if should_send_progress {
+                if let Some(ref tx) = progress_tx {
+                    // Calculate instantaneous speed (bytes transferred since last update)
+                    let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
+                    if speed_elapsed > 0.0 {
+                        let bytes_since_last = transferred_bytes - last_speed_bytes;
+                        let instant_speed = (bytes_since_last as f64 / speed_elapsed) as u64;
+                        // Smooth speed using exponential moving average
+                        if current_speed == 0 {
+                            current_speed = instant_speed;
+                        } else {
+                            current_speed = (current_speed * 7 + instant_speed * 3) / 10;
+                        }
+                        last_speed_time = std::time::Instant::now();
+                        last_speed_bytes = transferred_bytes;
+                    }
+                    
+                    let eta_seconds = if current_speed > 0 && total_bytes > transferred_bytes {
+                        Some((total_bytes - transferred_bytes) / current_speed)
+                    } else {
+                        None
+                    };
+
+                    let _ = tx
+                        .send(TransferProgress {
+                            id: transfer_id.clone(),
+                            remote_path: canonical_path.clone(),
+                            local_path: local_path.to_string(),
+                            direction: TransferDirection::Download,
+                            state: TransferState::InProgress,
+                            total_bytes,
+                            transferred_bytes,
+                            speed: current_speed,
+                            eta_seconds,
+                            error: None,
+                        })
+                        .await;
+                    last_progress_time = std::time::Instant::now();
+                }
+            }
+        }
+
+        // Flush and close local file
+        tokio::io::AsyncWriteExt::flush(&mut local_file)
+            .await
+            .map_err(SftpError::IoError)?;
+
+        // Send completion progress with average speed
         if let Some(ref tx) = progress_tx {
             let elapsed = start_time.elapsed().as_secs_f64();
-            let speed = if elapsed > 0.0 {
+            let avg_speed = if elapsed > 0.0 {
                 (transferred_bytes as f64 / elapsed) as u64
             } else {
-                0
+                current_speed
             };
 
             let _ = tx
@@ -387,7 +464,7 @@ impl SftpSession {
                     state: TransferState::Completed,
                     total_bytes,
                     transferred_bytes,
-                    speed,
+                    speed: avg_speed,
                     eta_seconds: Some(0),
                     error: None,
                 })
@@ -401,13 +478,15 @@ impl SftpSession {
         Ok(())
     }
 
-    /// Upload file from local path with progress reporting
+    /// Upload file from local path with progress reporting (streaming)
     pub async fn upload(
         &self,
         local_path: &str,
         remote_path: &str,
         progress_tx: Option<mpsc::Sender<TransferProgress>>,
     ) -> Result<(), SftpError> {
+        use tokio::io::AsyncReadExt;
+        
         let canonical_path = self.resolve_path(remote_path).await.unwrap_or_else(|_| {
             // If path doesn't exist yet, construct it
             if remote_path.starts_with('/') {
@@ -420,12 +499,19 @@ impl SftpSession {
 
         let transfer_id = uuid::Uuid::new_v4().to_string();
 
-        // Read local file
-        let content = tokio::fs::read(local_path)
+        // Get local file metadata
+        let local_metadata = tokio::fs::metadata(local_path)
             .await
             .map_err(SftpError::IoError)?;
+        let total_bytes = local_metadata.len();
 
-        let total_bytes = content.len() as u64;
+        let start_time = std::time::Instant::now();
+        let mut transferred_bytes: u64 = 0;
+        
+        // For instantaneous speed calculation
+        let mut last_speed_time = std::time::Instant::now();
+        let mut last_speed_bytes: u64 = 0;
+        let mut current_speed: u64 = 0;
 
         // Send initial progress
         if let Some(ref tx) = progress_tx {
@@ -445,23 +531,103 @@ impl SftpSession {
                 .await;
         }
 
-        let start_time = std::time::Instant::now();
+        // Open local file for reading
+        let mut local_file = tokio::fs::File::open(local_path)
+            .await
+            .map_err(SftpError::IoError)?;
 
-        // Write to remote using simple write API
-        self.sftp
-            .write(&canonical_path, &content)
+        // Create remote file for writing
+        let mut remote_file = self
+            .sftp
+            .create(&canonical_path)
             .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
-        let transferred_bytes = total_bytes;
+        // Stream transfer with progress updates
+        let chunk_size = constants::STREAM_BUFFER_SIZE;
+        let mut buffer = vec![0u8; chunk_size];
+        let mut last_progress_time = std::time::Instant::now();
 
-        // Send completion progress
+        loop {
+            let bytes_read = local_file.read(&mut buffer).await
+                .map_err(SftpError::IoError)?;
+            
+            if bytes_read == 0 {
+                break; // EOF
+            }
+
+            // Write to remote file
+            tokio::io::AsyncWriteExt::write_all(&mut remote_file, &buffer[..bytes_read])
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+            transferred_bytes += bytes_read as u64;
+
+            // Send progress update (throttled to every 100ms or 1% progress)
+            let should_send_progress = progress_tx.is_some() && (
+                last_progress_time.elapsed().as_millis() >= 100 ||
+                (total_bytes > 0 && (transferred_bytes * 100 / total_bytes) != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes))
+            );
+
+            if should_send_progress {
+                if let Some(ref tx) = progress_tx {
+                    // Calculate instantaneous speed (bytes transferred since last update)
+                    let speed_elapsed = last_speed_time.elapsed().as_secs_f64();
+                    if speed_elapsed > 0.0 {
+                        let bytes_since_last = transferred_bytes - last_speed_bytes;
+                        let instant_speed = (bytes_since_last as f64 / speed_elapsed) as u64;
+                        // Smooth speed using exponential moving average
+                        if current_speed == 0 {
+                            current_speed = instant_speed;
+                        } else {
+                            current_speed = (current_speed * 7 + instant_speed * 3) / 10;
+                        }
+                        last_speed_time = std::time::Instant::now();
+                        last_speed_bytes = transferred_bytes;
+                    }
+                    
+                    let eta_seconds = if current_speed > 0 && total_bytes > transferred_bytes {
+                        Some((total_bytes - transferred_bytes) / current_speed)
+                    } else {
+                        None
+                    };
+
+                    let _ = tx
+                        .send(TransferProgress {
+                            id: transfer_id.clone(),
+                            remote_path: canonical_path.clone(),
+                            local_path: local_path.to_string(),
+                            direction: TransferDirection::Upload,
+                            state: TransferState::InProgress,
+                            total_bytes,
+                            transferred_bytes,
+                            speed: current_speed,
+                            eta_seconds,
+                            error: None,
+                        })
+                        .await;
+                    last_progress_time = std::time::Instant::now();
+                }
+            }
+        }
+
+        // Flush remote file (will call fsync if supported)
+        tokio::io::AsyncWriteExt::flush(&mut remote_file)
+            .await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        // Properly close the remote file handle
+        tokio::io::AsyncWriteExt::shutdown(&mut remote_file)
+            .await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        // Send completion progress with average speed
         if let Some(ref tx) = progress_tx {
             let elapsed = start_time.elapsed().as_secs_f64();
-            let speed = if elapsed > 0.0 {
+            let avg_speed = if elapsed > 0.0 {
                 (transferred_bytes as f64 / elapsed) as u64
             } else {
-                0
+                current_speed
             };
 
             let _ = tx
@@ -473,7 +639,7 @@ impl SftpSession {
                     state: TransferState::Completed,
                     total_bytes,
                     transferred_bytes,
-                    speed,
+                    speed: avg_speed,
                     eta_seconds: Some(0),
                     error: None,
                 })

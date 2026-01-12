@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tracing::{info, error};
+use tracing::info;
 
 use crate::session::SessionRegistry;
 use crate::sftp::{
@@ -32,13 +32,13 @@ pub async fn sftp_init(
         }
     }
 
-    // Reuse the existing SSH handle instead of creating a new connection
-    let handle = session_registry
-        .get_ssh_handle(&session_id)
+    // Get the HandleController to open a new channel
+    let handle_controller = session_registry
+        .get_handle_controller(&session_id)
         .ok_or_else(|| SftpError::SessionNotFound(session_id.clone()))?;
 
-    // Create SFTP session
-    let sftp = SftpSession::new(&handle, session_id.clone()).await?;
+    // Create SFTP session using HandleController
+    let sftp = SftpSession::new(handle_controller, session_id.clone()).await?;
     let cwd = sftp.cwd().to_string();
 
     // Register SFTP session

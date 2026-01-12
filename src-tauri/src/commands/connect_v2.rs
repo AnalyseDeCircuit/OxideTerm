@@ -11,7 +11,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::time::timeout;
-use tracing::{info, warn, error};
+use tracing::info;
 
 use crate::session::{SessionRegistry, SessionConfig, AuthMethod, SessionInfo, SessionStats, KeyAuth};
 use crate::ssh::{SshClient, SshConfig, AuthMethod as SshAuthMethod};
@@ -168,13 +168,11 @@ async fn connect_with_timeout(
     .map_err(|_| format!("Connection timeout after {}s", HANDSHAKE_TIMEOUT_SECS))?
     .map_err(|e| format!("Connection failed: {}", e))?;
 
-    // Get shared handle for reuse (e.g., SFTP) before consuming the session
-    let shared_handle = session.shared_handle();
-
     // Request shell with auth timeout
+    // This will spawn the Handle Owner Task and return both the shell handle and controller
     let shell_future = session.request_shell_extended();
     
-    let session_handle = timeout(
+    let (session_handle, handle_controller) = timeout(
         Duration::from_secs(AUTH_TIMEOUT_SECS),
         shell_future
     )
@@ -190,14 +188,15 @@ async fn connect_with_timeout(
         .await
         .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
+    // Clone the handle controller for the forwarding manager
+    let forwarding_controller = handle_controller.clone();
+
     // Update registry with success
-    registry.connect_success(session_id, ws_port, cmd_tx, shared_handle.clone())
+    registry.connect_success(session_id, ws_port, cmd_tx, handle_controller)
         .map_err(|e| format!("Failed to update session state: {}", e))?;
 
     // Register ForwardingManager for port forwarding support
-    // Note: ForwardingManager needs Handle<ClientHandler>, not Arc<Handle<ClientHandler>>
-    // We use the inner reference to create a new handle clone
-    let forwarding_manager = ForwardingManager::new_from_arc(shared_handle, session_id.to_string());
+    let forwarding_manager = ForwardingManager::new(forwarding_controller, session_id.to_string());
     forwarding_registry.register(session_id.to_string(), forwarding_manager).await;
     info!("ForwardingManager registered for session {}", session_id);
 

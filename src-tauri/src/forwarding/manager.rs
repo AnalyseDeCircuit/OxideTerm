@@ -4,17 +4,16 @@
 //! Provides lifecycle management, status tracking, and cleanup.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use russh::client::Handle;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::info;
 use uuid::Uuid;
 
 use super::local::{LocalForward, LocalForwardHandle, start_local_forward};
 use super::remote::{RemoteForward, RemoteForwardHandle, start_remote_forward};
-use crate::ssh::{ClientHandler, SshError};
+use super::dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward};
+use crate::ssh::{HandleController, SshError};
 
 /// Type of port forward
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +91,20 @@ impl ForwardRule {
         }
     }
 
+    /// Create a dynamic (SOCKS5) forward rule
+    pub fn dynamic(bind_addr: impl Into<String>, bind_port: u16) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            forward_type: ForwardType::Dynamic,
+            bind_address: bind_addr.into(),
+            bind_port,
+            target_host: String::new(), // Not used for dynamic
+            target_port: 0,             // Not used for dynamic
+            status: ForwardStatus::Starting,
+            description: Some("SOCKS5 Proxy".into()),
+        }
+    }
+
     /// Set description
     pub fn with_description(mut self, desc: impl Into<String>) -> Self {
         self.description = Some(desc.into());
@@ -117,40 +130,40 @@ struct RemoteForwardEntry {
     handle: RemoteForwardHandle,
 }
 
+/// Internal tracking for dynamic (SOCKS5) forwards
+struct DynamicForwardEntry {
+    rule: ForwardRule,
+    handle: DynamicForwardHandle,
+}
+
 /// Port forwarding manager
 /// 
 /// Manages all port forwards for a session. Thread-safe and designed
 /// for concurrent access from multiple Tauri commands.
+/// 
+/// Uses `HandleController` (message-passing) to communicate with the
+/// Handle Owner Task, avoiding direct Handle access and mutex locks.
 pub struct ForwardingManager {
-    /// SSH handle for creating new forwards (wrapped in Arc for cloning)
-    ssh_handle: Arc<Handle<ClientHandler>>,
+    /// Handle controller for SSH operations
+    handle_controller: HandleController,
     /// Active local forwards
     local_forwards: RwLock<HashMap<String, LocalForwardEntry>>,
     /// Active remote forwards
     remote_forwards: RwLock<HashMap<String, RemoteForwardEntry>>,
+    /// Active dynamic (SOCKS5) forwards
+    dynamic_forwards: RwLock<HashMap<String, DynamicForwardEntry>>,
     /// Session ID for correlation
     session_id: String,
 }
 
 impl ForwardingManager {
     /// Create a new forwarding manager
-    pub fn new(ssh_handle: Handle<ClientHandler>, session_id: impl Into<String>) -> Self {
+    pub fn new(handle_controller: HandleController, session_id: impl Into<String>) -> Self {
         Self {
-            ssh_handle: Arc::new(ssh_handle),
+            handle_controller,
             local_forwards: RwLock::new(HashMap::new()),
             remote_forwards: RwLock::new(HashMap::new()),
-            session_id: session_id.into(),
-        }
-    }
-
-    /// Create a new forwarding manager from an Arc<Handle>
-    /// 
-    /// This is useful when the handle is already wrapped in Arc (e.g., from SessionRegistry)
-    pub fn new_from_arc(ssh_handle: Arc<Handle<ClientHandler>>, session_id: impl Into<String>) -> Self {
-        Self {
-            ssh_handle,
-            local_forwards: RwLock::new(HashMap::new()),
-            remote_forwards: RwLock::new(HashMap::new()),
+            dynamic_forwards: RwLock::new(HashMap::new()),
             session_id: session_id.into(),
         }
     }
@@ -158,6 +171,11 @@ impl ForwardingManager {
     /// Get session ID
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    /// Get a clone of the handle controller
+    pub fn handle_controller(&self) -> HandleController {
+        self.handle_controller.clone()
     }
 
     /// Create a local port forward
@@ -178,7 +196,7 @@ impl ForwardingManager {
             config.local_addr, config.remote_host, config.remote_port
         );
 
-        let handle = start_local_forward(self.ssh_handle.clone(), config).await?;
+        let handle = start_local_forward(self.handle_controller.clone(), config).await?;
         
         // Update rule with actual bound address
         rule.bind_address = handle.bound_addr.ip().to_string();
@@ -215,7 +233,7 @@ impl ForwardingManager {
             config.remote_addr, config.remote_port, config.local_host, config.local_port
         );
 
-        let handle = start_remote_forward(self.ssh_handle.clone(), config).await?;
+        let handle = start_remote_forward(self.handle_controller.clone(), config).await?;
         rule.status = ForwardStatus::Active;
 
         let entry = RemoteForwardEntry {
@@ -229,14 +247,46 @@ impl ForwardingManager {
         Ok(rule)
     }
 
+    /// Create a dynamic (SOCKS5) port forward
+    pub async fn create_dynamic_forward(&self, mut rule: ForwardRule) -> Result<ForwardRule, SshError> {
+        if rule.forward_type != ForwardType::Dynamic {
+            return Err(SshError::ConnectionFailed("Invalid forward type".into()));
+        }
+
+        let config = DynamicForward {
+            local_addr: format!("{}:{}", rule.bind_address, rule.bind_port),
+            description: rule.description.clone(),
+        };
+
+        info!(
+            "Creating dynamic (SOCKS5) forward on {}",
+            config.local_addr
+        );
+
+        let handle = start_dynamic_forward(self.handle_controller.clone(), config).await?;
+        
+        // Update rule with actual bound address
+        rule.bind_address = handle.bound_addr.ip().to_string();
+        rule.bind_port = handle.bound_addr.port();
+        rule.status = ForwardStatus::Active;
+
+        let entry = DynamicForwardEntry {
+            rule: rule.clone(),
+            handle,
+        };
+
+        self.dynamic_forwards.write().await.insert(rule.id.clone(), entry);
+
+        info!("Dynamic forward created: {}", rule.id);
+        Ok(rule)
+    }
+
     /// Create a forward (dispatches to appropriate type)
     pub async fn create_forward(&self, rule: ForwardRule) -> Result<ForwardRule, SshError> {
         match rule.forward_type {
             ForwardType::Local => self.create_local_forward(rule).await,
             ForwardType::Remote => self.create_remote_forward(rule).await,
-            ForwardType::Dynamic => {
-                Err(SshError::ConnectionFailed("Dynamic forwarding not yet implemented".into()))
-            }
+            ForwardType::Dynamic => self.create_dynamic_forward(rule).await,
         }
     }
 
@@ -253,6 +303,13 @@ impl ForwardingManager {
         if let Some(entry) = self.remote_forwards.write().await.remove(forward_id) {
             entry.handle.stop().await;
             info!("Stopped remote forward: {}", forward_id);
+            return Ok(());
+        }
+
+        // Try dynamic forwards
+        if let Some(entry) = self.dynamic_forwards.write().await.remove(forward_id) {
+            entry.handle.stop().await;
+            info!("Stopped dynamic forward: {}", forward_id);
             return Ok(());
         }
 
@@ -288,6 +345,17 @@ impl ForwardingManager {
             forwards.push(rule);
         }
 
+        // Add dynamic forwards
+        for entry in self.dynamic_forwards.read().await.values() {
+            let mut rule = entry.rule.clone();
+            rule.status = if entry.handle.is_running() {
+                ForwardStatus::Active
+            } else {
+                ForwardStatus::Stopped
+            };
+            forwards.push(rule);
+        }
+
         forwards
     }
 
@@ -297,6 +365,9 @@ impl ForwardingManager {
             return Some(entry.rule.clone());
         }
         if let Some(entry) = self.remote_forwards.read().await.get(forward_id) {
+            return Some(entry.rule.clone());
+        }
+        if let Some(entry) = self.dynamic_forwards.read().await.get(forward_id) {
             return Some(entry.rule.clone());
         }
         None
@@ -322,12 +393,22 @@ impl ForwardingManager {
             }
         }
 
+        // Stop dynamic forwards
+        let dynamic_ids: Vec<String> = self.dynamic_forwards.read().await.keys().cloned().collect();
+        for id in dynamic_ids {
+            if let Some(entry) = self.dynamic_forwards.write().await.remove(&id) {
+                entry.handle.stop().await;
+            }
+        }
+
         info!("All forwards stopped for session {}", self.session_id);
     }
 
     /// Count active forwards
     pub async fn count(&self) -> usize {
-        self.local_forwards.read().await.len() + self.remote_forwards.read().await.len()
+        self.local_forwards.read().await.len() 
+            + self.remote_forwards.read().await.len()
+            + self.dynamic_forwards.read().await.len()
     }
 
     // === Quick shortcuts for common HPC use cases ===
