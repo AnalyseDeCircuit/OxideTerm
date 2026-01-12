@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -26,6 +27,7 @@ import {
   SelectValue 
 } from '../ui/select';
 import { ConnectRequest } from '../../types';
+import { api } from '../../lib/api';
 
 export const NewConnectionModal = () => {
   const { modals, toggleModal, connect } = useAppStore();
@@ -40,7 +42,31 @@ export const NewConnectionModal = () => {
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [saveConnection, setSaveConnection] = useState(false);
-  const [group, setGroup] = useState('Production');
+  const [group, setGroup] = useState('');
+  const [groups, setGroups] = useState<string[]>([]);
+
+  // Load groups when modal opens
+  useEffect(() => {
+    if (modals.newConnection) {
+      api.getGroups().then(setGroups).catch(() => setGroups([]));
+    }
+  }, [modals.newConnection]);
+
+  const handleBrowseKey = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Select SSH Key',
+        defaultPath: '~/.ssh'
+      });
+      if (selected && typeof selected === 'string') {
+        setKeyPath(selected);
+      }
+    } catch (e) {
+      console.error('Failed to open file dialog:', e);
+    }
+  };
 
   const handleConnect = async () => {
     if (!host || !username) return;
@@ -80,7 +106,7 @@ export const NewConnectionModal = () => {
           </DialogDescription>
         </DialogHeader>
         
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 px-6">
           <div className="grid gap-2">
             <Label htmlFor="name">Name (Optional)</Label>
             <Input 
@@ -158,7 +184,7 @@ export const NewConnectionModal = () => {
                         onChange={(e) => setKeyPath(e.target.value)}
                         placeholder="~/.ssh/id_rsa"
                       />
-                     <Button variant="outline">Browse</Button>
+                     <Button variant="outline" onClick={handleBrowseKey}>Browse</Button>
                   </div>
                  </div>
               </TabsContent>
@@ -172,9 +198,12 @@ export const NewConnectionModal = () => {
                 <SelectValue placeholder="Select a group" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Production">Production</SelectItem>
-                <SelectItem value="Development">Development</SelectItem>
-                <SelectItem value="Testing">Testing</SelectItem>
+                {groups.map(g => (
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
+                ))}
+                {groups.length === 0 && (
+                  <SelectItem value="_none" disabled>No groups - create in Settings</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>

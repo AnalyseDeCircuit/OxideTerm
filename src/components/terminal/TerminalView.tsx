@@ -10,13 +10,48 @@ import { api } from '../../lib/api';
 
 interface TerminalViewProps {
   sessionId: string;
+  isActive?: boolean;
 }
 
-// Protocol Constants
+// Protocol Constants - Wire Protocol v1
+// Frame Format: [Type: 1 byte][Length: 4 bytes big-endian][Payload: n bytes]
 const MSG_TYPE_DATA = 0x00;
 const MSG_TYPE_RESIZE = 0x01;
+const MSG_TYPE_HEARTBEAT = 0x02;
+const HEADER_SIZE = 5; // 1 byte type + 4 bytes length
 
-export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
+// Helper function to encode a heartbeat response frame
+const encodeHeartbeatFrame = (seq: number): Uint8Array => {
+  const frame = new Uint8Array(HEADER_SIZE + 4); // 4 bytes for sequence number
+  const view = new DataView(frame.buffer);
+  view.setUint8(0, MSG_TYPE_HEARTBEAT);  // Type
+  view.setUint32(1, 4, false);           // Length (4 bytes payload)
+  view.setUint32(5, seq, false);         // Sequence number (big-endian)
+  return frame;
+};
+
+// Helper function to encode a data frame
+const encodeDataFrame = (payload: Uint8Array): Uint8Array => {
+  const frame = new Uint8Array(HEADER_SIZE + payload.length);
+  const view = new DataView(frame.buffer);
+  view.setUint8(0, MSG_TYPE_DATA);           // Type
+  view.setUint32(1, payload.length, false);  // Length (big-endian)
+  frame.set(payload, HEADER_SIZE);           // Payload
+  return frame;
+};
+
+// Helper function to encode a resize frame
+const encodeResizeFrame = (cols: number, rows: number): Uint8Array => {
+  const frame = new Uint8Array(HEADER_SIZE + 4); // 4 bytes for cols + rows
+  const view = new DataView(frame.buffer);
+  view.setUint8(0, MSG_TYPE_RESIZE);  // Type
+  view.setUint32(1, 4, false);        // Length (4 bytes payload)
+  view.setUint16(5, cols, false);     // Cols (big-endian)
+  view.setUint16(7, rows, false);     // Rows (big-endian)
+  return frame;
+};
+
+export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive = true }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -54,6 +89,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
     window.addEventListener('settings-changed', handleSettingsChange as EventListener);
     return () => window.removeEventListener('settings-changed', handleSettingsChange as EventListener);
   }, []);
+
+  // Focus terminal when it becomes active (tab switch)
+  useEffect(() => {
+    if (isActive && terminalRef.current) {
+      // Small delay to ensure DOM is ready
+      const focusTimeout = setTimeout(() => {
+        terminalRef.current?.focus();
+        fitAddonRef.current?.fit();
+      }, 50);
+      return () => clearTimeout(focusTimeout);
+    }
+  }, [isActive]);
 
   const getFontFamily = (val: string) => {
       switch(val) {
@@ -111,17 +158,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
 
     // Try WebGL, fallback to canvas/dom if needed
     try {
+        // Pass devicePixelRatio for crisp rendering on HiDPI displays
         const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(e => {
+        webglAddon.onContextLoss(() => {
             webglAddon.dispose();
         });
         term.loadAddon(webglAddon);
     } catch (e) {
-        console.warn("WebGL addon failed to load", e);
+        console.warn("WebGL addon failed to load, falling back to canvas renderer", e);
     }
 
     term.open(containerRef.current);
     fitAddon.fit();
+    term.focus(); // Focus immediately after opening
 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -149,23 +198,38 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
                         return;
                     }
                     term.writeln("Connected.\r\n");
-                    // Initial resize
-                    const cols = term.cols;
-                    const rows = term.rows;
-                    sendResize(ws, cols, rows);
+                    // Initial resize using Wire Protocol v1
+                    const frame = encodeResizeFrame(term.cols, term.rows);
+                    ws.send(frame);
+                    // Focus terminal after connection
+                    term.focus();
                 };
 
                 ws.onmessage = (event) => {
                     if (!isMountedRef.current) return;
                     const data = event.data;
                     if (data instanceof ArrayBuffer) {
-                        const view = new Uint8Array(data);
-                        const type = view[0];
-                        const payload = view.subarray(1);
-
+                        // Parse Wire Protocol v1 frame: [Type: 1][Length: 4][Payload: n]
+                        const view = new DataView(data);
+                        if (data.byteLength < HEADER_SIZE) return;
+                        
+                        const type = view.getUint8(0);
+                        const length = view.getUint32(1, false); // big-endian
+                        
+                        if (data.byteLength < HEADER_SIZE + length) return;
+                        
                         if (type === MSG_TYPE_DATA) {
+                            const payload = new Uint8Array(data, HEADER_SIZE, length);
                             term.write(payload);
+                        } else if (type === MSG_TYPE_HEARTBEAT) {
+                            // Heartbeat ping from server - respond with pong
+                            if (length === 4) {
+                                const seq = view.getUint32(HEADER_SIZE, false); // big-endian
+                                const response = encodeHeartbeatFrame(seq);
+                                ws.send(response);
+                            }
                         }
+                        // MSG_TYPE_ERROR (0x03) can be handled here if needed
                     }
                 };
 
@@ -193,12 +257,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
     term.onData(data => {
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            // Frame: [0x00][bytes...]
+            // Encode as Wire Protocol v1 Data frame
             const encoder = new TextEncoder();
             const payload = encoder.encode(data);
-            const frame = new Uint8Array(1 + payload.length);
-            frame[0] = MSG_TYPE_DATA;
-            frame.set(payload, 1);
+            const frame = encodeDataFrame(payload);
             ws.send(frame);
         }
     });
@@ -206,7 +268,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
     term.onResize((size) => {
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
-            sendResize(ws, size.cols, size.rows);
+            // Send resize frame using Wire Protocol v1
+            const frame = encodeResizeFrame(size.cols, size.rows);
+            ws.send(frame);
             api.resizeSession(sessionId, size.cols, size.rows);
         }
     });
@@ -240,18 +304,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId }) => {
     };
   }, [sessionId]); // Only re-mount if sessionId changes absolutely
 
-  const sendResize = (ws: WebSocket, cols: number, rows: number) => {
-      const buffer = new ArrayBuffer(5); // 1 type + 2 cols + 2 rows
-      const view = new DataView(buffer);
-      view.setUint8(0, MSG_TYPE_RESIZE);
-      view.setUint16(1, cols, false); // Big Endian
-      view.setUint16(3, rows, false);
-      ws.send(buffer);
+  const handleContainerClick = () => {
+    terminalRef.current?.focus();
   };
 
   return (
-    <div className="h-full w-full bg-oxide-bg p-1 overflow-hidden">
-       <div ref={containerRef} className="h-full w-full" />
+    <div 
+      className="terminal-container h-full w-full bg-oxide-bg overflow-hidden" 
+      style={{ padding: '4px' }}
+      onClick={handleContainerClick}
+    >
+       <div 
+         ref={containerRef} 
+         className="h-full w-full"
+         style={{
+           contain: 'strict',
+           isolation: 'isolate'
+         }}
+       />
     </div>
   );
 };

@@ -1,24 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Folder, 
   File, 
   ArrowUp, 
   RefreshCw, 
   Home, 
-  Search,
-  HardDrive,
   Download,
-  X
+  Upload,
+  Trash2,
+  Edit3,
+  Copy,
+  Eye,
+  FolderPlus
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { cn } from '../../lib/utils';
-import { Separator } from '../ui/separator';
 import { TransferQueue } from './TransferQueue';
 import { api } from '../../lib/api';
-import { FileInfo, PreviewContent } from '../../types';
+import { FileInfo } from '../../types';
 import { listen } from '@tauri-apps/api/event';
+import { readDir, stat } from '@tauri-apps/plugin-fs';
+import { homeDir } from '@tauri-apps/api/path';
 import { 
   Dialog, 
   DialogContent, 
@@ -44,7 +48,15 @@ const FileList = ({
   onRefresh,
   active,
   onActivate,
-  onPreview
+  onPreview,
+  onTransfer,
+  onDelete,
+  onRename,
+  onNewFolder,
+  selected,
+  setSelected,
+  lastSelected,
+  setLastSelected
 }: { 
   title: string, 
   path: string, 
@@ -53,10 +65,18 @@ const FileList = ({
   onRefresh: () => void,
   active: boolean,
   onActivate: () => void,
-  onPreview?: (file: FileInfo) => void
+  onPreview?: (file: FileInfo) => void,
+  onTransfer?: (files: string[], direction: 'upload' | 'download') => void,
+  onDelete?: (files: string[]) => void,
+  onRename?: (oldName: string) => void,
+  onNewFolder?: () => void,
+  selected: Set<string>,
+  setSelected: (s: Set<string>) => void,
+  lastSelected: string | null,
+  setLastSelected: (s: string | null) => void
 }) => {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [lastSelected, setLastSelected] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number, file?: FileInfo} | null>(null);
 
   const handleSelect = (name: string, multi: boolean, range: boolean) => {
     onActivate();
@@ -83,6 +103,69 @@ const FileList = ({
     setLastSelected(name);
   };
 
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!active) return;
+    
+    const selectedFiles = Array.from(selected);
+    const isLocal = title === 'Local';
+    
+    // Ctrl/Cmd + A: Select all
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+      e.preventDefault();
+      setSelected(new Set(files.map(f => f.name)));
+      return;
+    }
+    
+    // Arrow keys for transfer
+    if (e.key === 'ArrowRight' && isLocal && selectedFiles.length > 0 && onTransfer) {
+      e.preventDefault();
+      onTransfer(selectedFiles, 'upload');
+      return;
+    }
+    if (e.key === 'ArrowLeft' && !isLocal && selectedFiles.length > 0 && onTransfer) {
+      e.preventDefault();
+      onTransfer(selectedFiles, 'download');
+      return;
+    }
+    
+    // Delete key
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.length > 0 && onDelete) {
+      e.preventDefault();
+      onDelete(selectedFiles);
+      return;
+    }
+    
+    // F2: Rename
+    if (e.key === 'F2' && selectedFiles.length === 1 && onRename) {
+      e.preventDefault();
+      onRename(selectedFiles[0]);
+      return;
+    }
+  }, [active, selected, files, title, onTransfer, onDelete, onRename, setSelected]);
+
+  // Context menu handler
+  const handleContextMenu = (e: React.MouseEvent, file?: FileInfo) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (file && !selected.has(file.name)) {
+      setSelected(new Set([file.name]));
+      setLastSelected(file.name);
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, file });
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
+
+  const isLocal = title === 'Local';
+
   return (
     <div 
       className={cn(
@@ -90,6 +173,7 @@ const FileList = ({
         active ? "border-oxide-accent/50" : "border-oxide-border"
       )}
       onClick={onActivate}
+      onContextMenu={(e) => handleContextMenu(e)}
     >
       {/* Header */}
       <div className={cn(
@@ -119,7 +203,13 @@ const FileList = ({
       </div>
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onClick={() => setSelected(new Set())}>
+      <div 
+        ref={listRef}
+        className="flex-1 overflow-y-auto outline-none" 
+        tabIndex={0} 
+        onClick={() => setSelected(new Set())}
+        onKeyDown={handleKeyDown}
+      >
         {files.map((file) => {
           const isSelected = selected.has(file.name);
           return (
@@ -146,6 +236,7 @@ const FileList = ({
                       onPreview(file);
                   }
               }}
+              onContextMenu={(e) => handleContextMenu(e, file)}
               className={cn(
                 "flex items-center px-2 py-1 text-xs cursor-default select-none border-b border-transparent hover:bg-zinc-800",
                 isSelected && "bg-oxide-accent/20 text-oxide-accent"
@@ -165,6 +256,96 @@ const FileList = ({
           );
         })}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-oxide-panel border border-oxide-border rounded-sm shadow-lg py-1 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {/* Transfer */}
+          {onTransfer && selected.size > 0 && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onTransfer(Array.from(selected), isLocal ? 'upload' : 'download');
+                setContextMenu(null);
+              }}
+            >
+              {isLocal ? <Upload className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+              {isLocal ? 'Upload →' : '← Download'}
+            </button>
+          )}
+          
+          {/* Preview (only for files) */}
+          {contextMenu.file && contextMenu.file.file_type !== 'Directory' && onPreview && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onPreview(contextMenu.file!);
+                setContextMenu(null);
+              }}
+            >
+              <Eye className="h-3 w-3" /> Preview
+            </button>
+          )}
+          
+          {/* Rename */}
+          {contextMenu.file && selected.size === 1 && onRename && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onRename(contextMenu.file!.name);
+                setContextMenu(null);
+              }}
+            >
+              <Edit3 className="h-3 w-3" /> Rename
+            </button>
+          )}
+          
+          {/* Copy Path */}
+          {contextMenu.file && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                const fullPath = `${path}/${contextMenu.file!.name}`;
+                navigator.clipboard.writeText(fullPath);
+                setContextMenu(null);
+              }}
+            >
+              <Copy className="h-3 w-3" /> Copy Path
+            </button>
+          )}
+          
+          {/* Delete */}
+          {selected.size > 0 && onDelete && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2 text-red-400"
+              onClick={() => {
+                onDelete(Array.from(selected));
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
+          )}
+          
+          <div className="border-t border-oxide-border my-1" />
+          
+          {/* New Folder */}
+          {onNewFolder && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onNewFolder();
+                setContextMenu(null);
+              }}
+            >
+              <FolderPlus className="h-3 w-3" /> New Folder
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,14 +357,37 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   const [remotePath, setRemotePath] = useState('/home/' + (session?.username || 'user'));
   
   const [localFiles, setLocalFiles] = useState<FileInfo[]>([]);
-  const [localPath, setLocalPath] = useState('/Users/dominical');
+  const [localPath, setLocalPath] = useState('');
+  const [localHome, setLocalHome] = useState('');
 
   const [activePane, setActivePane] = useState<'local' | 'remote'>('remote');
   const [sftpInitialized, setSftpInitialized] = useState(false);
 
+  // Selection state (lifted up for cross-pane operations)
+  const [localSelected, setLocalSelected] = useState<Set<string>>(new Set());
+  const [localLastSelected, setLocalLastSelected] = useState<string | null>(null);
+  const [remoteSelected, setRemoteSelected] = useState<Set<string>>(new Set());
+  const [remoteLastSelected, setRemoteLastSelected] = useState<string | null>(null);
+
   // Preview State
   const [previewFile, setPreviewFile] = useState<{name: string, content: string, path: string} | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Dialog States
+  const [renameDialog, setRenameDialog] = useState<{oldName: string, isRemote: boolean} | null>(null);
+  const [newFolderDialog, setNewFolderDialog] = useState<{isRemote: boolean} | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{files: string[], isRemote: boolean} | null>(null);
+  const [inputValue, setInputValue] = useState('');
+
+  // Initialize local home directory
+  useEffect(() => {
+    homeDir().then(home => {
+      setLocalHome(home);
+      setLocalPath(home);
+    }).catch(() => {
+      setLocalPath('/');
+    });
+  }, []);
 
   // Initialize SFTP on mount
   useEffect(() => {
@@ -215,14 +419,52 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
         .catch(err => console.error("SFTP List Error:", err));
   }, [sessionId, remotePath, session, sftpInitialized]);
 
-  // Mock local refresh (Replace with real API when available)
-  useEffect(() => {
-     setLocalFiles([
-         { name: 'Documents', path: '/Users/dominical/Documents', file_type: 'Directory', size: 0, modified: Date.now(), permissions: '' },
-         { name: 'Downloads', path: '/Users/dominical/Downloads', file_type: 'Directory', size: 0, modified: Date.now(), permissions: '' },
-         { name: 'upload_me.txt', path: '/Users/dominical/upload_me.txt', file_type: 'File', size: 1024, modified: Date.now(), permissions: '' },
-     ]);
+  // Refresh local files using Tauri fs plugin
+  const refreshLocalFiles = useCallback(async () => {
+    if (!localPath) return;
+    try {
+      const entries = await readDir(localPath);
+      const files: FileInfo[] = await Promise.all(
+        entries.map(async (entry) => {
+          const fullPath = `${localPath}/${entry.name}`;
+          try {
+            const info = await stat(fullPath);
+            return {
+              name: entry.name,
+              path: fullPath,
+              file_type: entry.isDirectory ? 'Directory' : 'File',
+              size: info.size || 0,
+              modified: info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0,
+              permissions: ''
+            } as FileInfo;
+          } catch {
+            return {
+              name: entry.name,
+              path: fullPath,
+              file_type: entry.isDirectory ? 'Directory' : 'File',
+              size: 0,
+              modified: 0,
+              permissions: ''
+            } as FileInfo;
+          }
+        })
+      );
+      // Sort: directories first, then alphabetically
+      files.sort((a, b) => {
+        if (a.file_type === 'Directory' && b.file_type !== 'Directory') return -1;
+        if (a.file_type !== 'Directory' && b.file_type === 'Directory') return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setLocalFiles(files);
+    } catch (err) {
+      console.error("Local list error:", err);
+      setLocalFiles([]);
+    }
   }, [localPath]);
+
+  useEffect(() => {
+    refreshLocalFiles();
+  }, [refreshLocalFiles]);
 
   // Event Listener for Progress
   useEffect(() => {
@@ -233,6 +475,93 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
       return () => { unlisten.then(f => f()); };
   }, [sessionId]);
 
+  // Transfer handler (upload/download)
+  const handleTransfer = async (files: string[], direction: 'upload' | 'download', basePath: string) => {
+    try {
+      if (direction === 'upload') {
+        for (const file of files) {
+          const localFilePath = `${basePath}/${file}`;
+          const remoteFilePath = `${remotePath}/${file}`;
+          console.log(`Uploading ${localFilePath} -> ${remoteFilePath}`);
+          await api.sftpUpload(sessionId, localFilePath, remoteFilePath);
+        }
+        // Refresh remote
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+      } else {
+        for (const file of files) {
+          const remoteFilePath = `${basePath}/${file}`;
+          const localFilePath = `${localPath}/${file}`;
+          console.log(`Downloading ${remoteFilePath} -> ${localFilePath}`);
+          await api.sftpDownload(sessionId, remoteFilePath, localFilePath);
+        }
+        // Refresh local
+        refreshLocalFiles();
+      }
+    } catch (err) {
+      console.error("Transfer failed:", err);
+    }
+  };
+
+  // Delete handler
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    const { files, isRemote } = deleteConfirm;
+    try {
+      if (isRemote) {
+        for (const file of files) {
+          await api.sftpDelete(sessionId, `${remotePath}/${file}`);
+        }
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        setRemoteSelected(new Set());
+      } else {
+        // Local delete not implemented - would need tauri fs write permissions
+        console.log("Local delete not implemented yet");
+      }
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+    setDeleteConfirm(null);
+  };
+
+  // Rename handler
+  const handleRename = async () => {
+    if (!renameDialog || !inputValue.trim()) return;
+    const { oldName, isRemote } = renameDialog;
+    try {
+      if (isRemote) {
+        await api.sftpRename(sessionId, `${remotePath}/${oldName}`, `${remotePath}/${inputValue}`);
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        setRemoteSelected(new Set());
+      } else {
+        // Local rename not implemented
+        console.log("Local rename not implemented yet");
+      }
+    } catch (err) {
+      console.error("Rename failed:", err);
+    }
+    setRenameDialog(null);
+    setInputValue('');
+  };
+
+  // New folder handler
+  const handleNewFolder = async () => {
+    if (!newFolderDialog || !inputValue.trim()) return;
+    const { isRemote } = newFolderDialog;
+    try {
+      if (isRemote) {
+        await api.sftpMkdir(sessionId, `${remotePath}/${inputValue}`);
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+      } else {
+        // Local mkdir not implemented
+        console.log("Local mkdir not implemented yet");
+      }
+    } catch (err) {
+      console.error("New folder failed:", err);
+    }
+    setNewFolderDialog(null);
+    setInputValue('');
+  };
+
   const handleDrop = async (e: React.DragEvent, target: 'local' | 'remote') => {
       e.preventDefault();
       try {
@@ -242,18 +571,9 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           if (source === target) return; // Ignore self-drop
 
           if (source === 'local' && target === 'remote') {
-              // Upload
-              for (const file of files) {
-                  const localFilePath = `${basePath}/${file}`;
-                  const remoteFilePath = `${remotePath}/${file}`;
-                  console.log(`Uploading ${localFilePath} -> ${remoteFilePath}`);
-                  await api.sftpUpload(sessionId, localFilePath, remoteFilePath);
-              }
-              // Refresh remote
-              api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+              await handleTransfer(files, 'upload', basePath);
           } else if (source === 'remote' && target === 'local') {
-              // Download (Mock implementation until api.sftpDownload is ready)
-              console.log(`Downloading ${files.length} files to ${localPath}`);
+              await handleTransfer(files, 'download', basePath);
           }
       } catch (err) {
           console.error("Drop failed:", err);
@@ -306,10 +626,18 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
              title="Local" 
              path={localPath} 
              files={localFiles}
-             onNavigate={(p) => setLocalPath(p === '..' ? localPath.split('/').slice(0,-1).join('/') || '/' : p === '~' ? '/Users/dominical' : p)}
-             onRefresh={() => {}}
+             onNavigate={(p) => setLocalPath(p === '..' ? localPath.split('/').slice(0,-1).join('/') || '/' : p === '~' ? localHome : p)}
+             onRefresh={refreshLocalFiles}
              active={activePane === 'local'}
              onActivate={() => setActivePane('local')}
+             onTransfer={(files, dir) => handleTransfer(files, dir, localPath)}
+             onDelete={(files) => setDeleteConfirm({ files, isRemote: false })}
+             onRename={(name) => { setRenameDialog({ oldName: name, isRemote: false }); setInputValue(name); }}
+             onNewFolder={() => setNewFolderDialog({ isRemote: false })}
+             selected={localSelected}
+             setSelected={setLocalSelected}
+             lastSelected={localLastSelected}
+             setLastSelected={setLocalLastSelected}
            />
         </div>
 
@@ -328,6 +656,14 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
              active={activePane === 'remote'}
              onActivate={() => setActivePane('remote')}
              onPreview={handlePreview}
+             onTransfer={(files, dir) => handleTransfer(files, dir, remotePath)}
+             onDelete={(files) => setDeleteConfirm({ files, isRemote: true })}
+             onRename={(name) => { setRenameDialog({ oldName: name, isRemote: true }); setInputValue(name); }}
+             onNewFolder={() => setNewFolderDialog({ isRemote: true })}
+             selected={remoteSelected}
+             setSelected={setRemoteSelected}
+             lastSelected={remoteLastSelected}
+             setLastSelected={setRemoteLastSelected}
            />
         </div>
       </div>
@@ -352,15 +688,82 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                     {previewFile?.path}
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => {
-                        // TODO: Implement download from preview
-                        console.log("Download", previewFile?.path);
+                    <Button variant="secondary" size="sm" onClick={async () => {
+                        if (!previewFile) return;
+                        try {
+                            const localDest = `${localPath}/${previewFile.name}`;
+                            await api.sftpDownload(sessionId, previewFile.path, localDest);
+                            refreshLocalFiles();
+                            setPreviewFile(null);
+                        } catch (e) {
+                            console.error("Download failed:", e);
+                        }
                     }}>
                         <Download className="h-3 w-3 mr-2" /> Download
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>Close</Button>
                 </div>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={!!renameDialog} onOpenChange={(open) => !open && setRenameDialog(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="rename-desc">
+          <DialogHeader>
+            <DialogTitle>Rename</DialogTitle>
+            <DialogDescription id="rename-desc">Enter a new name</DialogDescription>
+          </DialogHeader>
+          <Input 
+            value={inputValue} 
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRenameDialog(null)}>Cancel</Button>
+            <Button onClick={handleRename}>Rename</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Folder Dialog */}
+      <Dialog open={!!newFolderDialog} onOpenChange={(open) => !open && setNewFolderDialog(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="newfolder-desc">
+          <DialogHeader>
+            <DialogTitle>New Folder</DialogTitle>
+            <DialogDescription id="newfolder-desc">Enter folder name</DialogDescription>
+          </DialogHeader>
+          <Input 
+            value={inputValue} 
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleNewFolder()}
+            placeholder="folder-name"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNewFolderDialog(null)}>Cancel</Button>
+            <Button onClick={handleNewFolder}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="delete-desc">
+          <DialogHeader>
+            <DialogTitle>Delete</DialogTitle>
+            <DialogDescription id="delete-desc">
+              Are you sure you want to delete {deleteConfirm?.files.length} item(s)?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-32 overflow-auto text-xs text-zinc-400 bg-zinc-950 p-2 rounded">
+            {deleteConfirm?.files.map(f => <div key={f}>{f}</div>)}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

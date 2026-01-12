@@ -42,7 +42,7 @@ export const AppLayout = () => {
                    key={tab.id} 
                    className={`absolute inset-0 ${tab.id === activeTabId ? 'z-10 block' : 'z-0 hidden'}`}
                  >
-                   {tab.type === 'terminal' && <TerminalView sessionId={tab.sessionId} />}
+                   {tab.type === 'terminal' && <TerminalView sessionId={tab.sessionId} isActive={tab.id === activeTabId} />}
                    {tab.type === 'sftp' && <SFTPView sessionId={tab.sessionId} />}
                    {tab.type === 'forwards' && <ForwardsView sessionId={tab.sessionId} />}
                  </div>

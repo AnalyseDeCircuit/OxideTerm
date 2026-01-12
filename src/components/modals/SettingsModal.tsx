@@ -73,33 +73,62 @@ export const SettingsModal = () => {
   useEffect(() => {
       if (modals.settings) {
           if (activeTab === 'ssh') {
-              api.checkSshKeys().then(setKeys);
+              api.checkSshKeys()
+                .then(setKeys)
+                .catch((e) => {
+                  console.error('Failed to load SSH keys:', e);
+                  setKeys([]);
+                });
           } else if (activeTab === 'connections') {
-              api.getGroups().then(setGroups);
-              api.listSshConfigHosts().then(setSshHosts);
+              api.getGroups()
+                .then(setGroups)
+                .catch((e) => {
+                  console.error('Failed to load groups:', e);
+                  setGroups([]);
+                });
+              api.listSshConfigHosts()
+                .then(setSshHosts)
+                .catch((e) => {
+                  console.error('Failed to load SSH hosts:', e);
+                  setSshHosts([]);
+                });
           }
       }
   }, [activeTab, modals.settings]);
 
   const handleCreateGroup = async () => {
-      if (newGroup) {
-          await api.createGroup(newGroup);
+      if (!newGroup.trim()) return;
+      try {
+          await api.createGroup(newGroup.trim());
           setNewGroup('');
-          api.getGroups().then(setGroups);
+          const updatedGroups = await api.getGroups();
+          setGroups(updatedGroups);
+      } catch (e) {
+          console.error('Failed to create group:', e);
+          alert(`Failed to create group: ${e}`);
       }
   };
 
   const handleDeleteGroup = async (name: string) => {
-      await api.deleteGroup(name);
-      api.getGroups().then(setGroups);
+      try {
+          await api.deleteGroup(name);
+          const updatedGroups = await api.getGroups();
+          setGroups(updatedGroups);
+      } catch (e) {
+          console.error('Failed to delete group:', e);
+          alert(`Failed to delete group: ${e}`);
+      }
   };
 
   const handleImportHost = async (alias: string) => {
       try {
-          await api.importSshHost(alias);
-          // Show toast?
+          const imported = await api.importSshHost(alias);
+          alert(`Successfully imported "${imported.name}" as a saved connection!`);
+          // Remove from list to show it's imported
+          setSshHosts(prev => prev.filter(h => h.alias !== alias));
       } catch (e) {
-          console.error(e);
+          console.error('Failed to import SSH host:', e);
+          alert(`Failed to import host: ${e}`);
       }
   };
 

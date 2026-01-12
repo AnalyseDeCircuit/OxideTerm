@@ -1,7 +1,21 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Terminal, FolderOpen, GitFork } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
+
+const TabIcon = ({ type }: { type: string }) => {
+  const iconClass = "h-3.5 w-3.5 opacity-70";
+  switch (type) {
+    case 'terminal':
+      return <Terminal className={iconClass} />;
+    case 'sftp':
+      return <FolderOpen className={iconClass} />;
+    case 'forwards':
+      return <GitFork className={iconClass} />;
+    default:
+      return null;
+  }
+};
 
 export const TabBar = () => {
   const { tabs, activeTabId, setActiveTab, closeTab } = useAppStore();
@@ -21,7 +35,7 @@ export const TabBar = () => {
                 : "bg-oxide-bg text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent"
             )}
           >
-            {tab.icon && <span className="text-xs opacity-70">{tab.icon}</span>}
+            <TabIcon type={tab.type} />
             <span className="truncate flex-1">{tab.title}</span>
             <button
               onClick={(e) => {

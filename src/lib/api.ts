@@ -130,10 +130,24 @@ export const api = {
     return invoke('get_ssh_config_path');
   },
   
-  checkSshKeys: async (): Promise<string[]> => {
-    if (USE_MOCK) return mockSshKeys.map(k => k.path);
-    // Backend returns Vec<String> of key paths
-    return invoke('check_ssh_keys');
+  checkSshKeys: async (): Promise<SshKeyInfo[]> => {
+    if (USE_MOCK) return mockSshKeys;
+    // Backend returns Vec<String> of key paths, transform to SshKeyInfo[]
+    const paths: string[] = await invoke('check_ssh_keys');
+    return paths.map(path => {
+      const name = path.split('/').pop() || path;
+      let key_type = 'Unknown';
+      if (name.includes('ed25519')) key_type = 'ED25519';
+      else if (name.includes('ecdsa')) key_type = 'ECDSA';
+      else if (name.includes('rsa')) key_type = 'RSA';
+      else if (name.includes('dsa')) key_type = 'DSA';
+      return {
+        name,
+        path,
+        key_type,
+        has_passphrase: false // Cannot determine without trying to load
+      };
+    });
   },
 
   // ============ SFTP ============

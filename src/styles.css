@@ -71,3 +71,41 @@ body {
   background-color: var(--color-oxide-panel);
   border: 1px solid var(--color-oxide-border);
 }
+
+/* Terminal Pixel-Perfect Rendering */
+.terminal-container {
+  /* GPU acceleration for smooth rendering */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  
+  /* Contain layout recalculations */
+  contain: layout style;
+  
+  /* Prevent text selection issues */
+  user-select: none;
+}
+
+/* xterm.js specific optimizations */
+.xterm {
+  /* Use subpixel antialiasing for clearer text on macOS */
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+  
+  /* Ensure monospace grid integrity - CRITICAL */
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+}
+
+.xterm-viewport {
+  /* Prevent scroll-induced repaints */
+  contain: layout style;
+}
+
+.xterm-screen {
+  /* Let xterm.js handle canvas sizing */
+}
+
+.xterm canvas {
+  /* Do NOT set image-rendering on text canvas - it causes blur */
+  /* xterm.js WebGL addon handles DPI scaling internally */
+}
