@@ -1,26 +1,71 @@
-import { useState, useCallback } from 'react';
+/**
+ * OxideTerm - Main Application Entry
+ * 
+ * Refactored to use new UI component system (Phase 0-4).
+ * Uses AppShell layout with integrated Sidebar, TabBar, and BottomPanel.
+ */
+
+import { useState, useCallback, useMemo } from 'react';
+import { AnimatePresence } from 'framer-motion';
+
+// New Layout Components (Phase 2)
+import {
+  AppShellProvider,
+  AppShell,
+  AppShellSidebar,
+  AppShellMain,
+  AppShellContent,
+  useAppShell,
+} from './components/layout/AppShell';
+import { Sidebar } from './components/layout/Sidebar';
+import { TabBar, type TabItem } from './components/layout/TabBar';
+import { BottomPanel } from './components/layout/BottomPanel';
+import { CommandPalette } from './components/layout/CommandPalette';
+
+// New UI Components (Phase 1 & 4)
+import {
+  TooltipProvider,
+  Toaster,
+  EmptyState,
+  PageTransition,
+} from './components/ui';
+
+// Legacy components (still needed)
 import { 
-  Sidebar, 
   ConnectModal, 
-  TabBar, 
-  TerminalContainer, 
+  TerminalContainer,
   TerminalSettings,
-  SftpDrawer,
-  PortForwardingPanel,
 } from './components';
+
+// Store & utilities
 import { useSessionStore } from './store';
-import { ConnectionInfo, getConnectionPassword } from './lib/config';
 import { useKeyboardShortcuts } from './hooks';
 
+// ============================================
+// Main App Wrapper with Providers
+// ============================================
+
 function App() {
+  return (
+    <TooltipProvider>
+      <AppShellProvider>
+        <AppContent />
+        <Toaster />
+      </AppShellProvider>
+    </TooltipProvider>
+  );
+}
+
+// ============================================
+// App Content (inside providers)
+// ============================================
+
+function AppContent() {
+  const { toggleBottomPanel } = useAppShell();
+  
   // Modal states
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSftpOpen, setIsSftpOpen] = useState(false);
-  const [isPortForwardingOpen, setIsPortForwardingOpen] = useState(false);
-  
-  // Sidebar state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Connection prefill
   const [prefillConnection, setPrefillConnection] = useState<{
@@ -36,43 +81,29 @@ function App() {
   const tabs = useSessionStore((state) => state.tabs);
   const activeTabId = useSessionStore((state) => state.activeTabId);
   const sessions = useSessionStore((state) => state.sessions);
+  const setActiveTab = useSessionStore((state) => state.setActiveTab);
+  const disconnect = useSessionStore((state) => state.disconnect);
   const hasSessions = tabs.length > 0;
   
-  // Get active session info for SFTP
-  const activeTab = tabs.find(t => t.id === activeTabId);
-  const activeSession = activeTab ? sessions.get(activeTab.sessionId) : undefined;
-
-  // Handle connecting from saved connection
-  const handleConnectSaved = useCallback(async (conn: ConnectionInfo) => {
-    try {
-      let password: string | undefined;
-      
-      if (conn.authType === 'password') {
-        password = await getConnectionPassword(conn.id);
+  // Convert store tabs to TabBar format
+  const tabBarTabs: TabItem[] = useMemo(() => {
+    return tabs.map((tab) => {
+      const session = sessions.get(tab.sessionId);
+      let status: TabItem['status'] = 'disconnected';
+      if (session) {
+        if (session.state === 'connected') status = 'connected';
+        else if (session.state === 'connecting') status = 'connecting';
+        else if (session.state === 'error') status = 'error';
       }
-      
-      setPrefillConnection({
-        host: conn.host,
-        port: conn.port,
-        username: conn.username,
-        authType: conn.authType === 'agent' ? 'key' : conn.authType,
-        password: password,
-        keyPath: conn.keyPath || undefined,
-      });
-      
-      setIsConnectModalOpen(true);
-    } catch (err) {
-      console.error('Failed to prepare connection:', err);
-      setPrefillConnection({
-        host: conn.host,
-        port: conn.port,
-        username: conn.username,
-        authType: conn.authType === 'agent' ? 'key' : conn.authType,
-        keyPath: conn.keyPath || undefined,
-      });
-      setIsConnectModalOpen(true);
-    }
-  }, []);
+      return {
+        id: tab.id,
+        title: tab.title,
+        status,
+        hasActivity: false,
+        sftpActive: false,
+      };
+    });
+  }, [tabs, sessions]);
 
   const handleCloseModal = useCallback(() => {
     setIsConnectModalOpen(false);
@@ -84,57 +115,74 @@ function App() {
     setIsConnectModalOpen(true);
   }, []);
 
+  // Tab actions
+  const handleTabSelect = useCallback((id: string) => {
+    setActiveTab(id);
+  }, [setActiveTab]);
+  
+  const handleTabClose = useCallback((id: string) => {
+    // Find the tab's sessionId to disconnect
+    const tab = tabs.find(t => t.id === id);
+    if (tab) {
+      disconnect(tab.sessionId);
+    }
+  }, [tabs, disconnect]);
+
   // Register keyboard shortcuts
   useKeyboardShortcuts({
     onNewTab: openNewConnection,
   });
 
   return (
-    <div 
-      className="flex flex-col h-screen w-screen overflow-hidden"
-      style={{ background: 'var(--color-base)' }}
-    >
-      {/* Main Content Area */}
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar */}
-        <Sidebar 
+    <AppShell>
+      {/* Sidebar */}
+      <AppShellSidebar>
+        <Sidebar
           onNewConnection={openNewConnection}
-          onConnectSaved={handleConnectSaved}
-          isCollapsed={isSidebarCollapsed}
-          onCollapsedChange={setIsSidebarCollapsed}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
+      </AppShellSidebar>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Tab Bar */}
-          {hasSessions && (
-            <TabBar 
-              onNewTab={openNewConnection}
-              onOpenSftp={() => setIsSftpOpen(true)}
-              onOpenPortForwarding={() => setIsPortForwardingOpen(!isPortForwardingOpen)}
-            />
-          )}
+      {/* Main Content Area */}
+      <AppShellMain>
+        {/* Tab Bar - Only show when there are sessions */}
+        {hasSessions && (
+          <TabBar
+            tabs={tabBarTabs}
+            activeTabId={activeTabId}
+            onTabSelect={handleTabSelect}
+            onTabClose={handleTabClose}
+            onNewTab={openNewConnection}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenPortForwarding={toggleBottomPanel}
+          />
+        )}
 
-          {/* Port Forwarding Panel (collapsible) */}
-          {hasSessions && isPortForwardingOpen && activeTab && (
-            <PortForwardingPanel 
-              sessionId={activeTab.sessionId}
-              isExpanded={true}
-              onToggle={() => setIsPortForwardingOpen(false)}
-            />
-          )}
-
-          {/* Terminal Area */}
-          <div className="flex-1 relative min-h-0">
+        {/* Terminal Area */}
+        <AppShellContent>
+          <AnimatePresence mode="wait">
             {!hasSessions ? (
-              <WelcomeScreen onNewConnection={openNewConnection} />
+              <PageTransition key="welcome" pageKey="welcome">
+                <WelcomeScreen onNewConnection={openNewConnection} />
+              </PageTransition>
             ) : (
-              <TerminalContainer className="h-full" />
+              <PageTransition key="terminal" pageKey="terminal">
+                <TerminalContainer className="h-full" />
+              </PageTransition>
             )}
-          </div>
-        </div>
-      </div>
+          </AnimatePresence>
+        </AppShellContent>
+
+        {/* Bottom Panel (SFTP/Transfers/Port Forward) */}
+        {hasSessions && <BottomPanel />}
+      </AppShellMain>
+
+      {/* Command Palette - uses internal state from useAppShell */}
+      <CommandPalette
+        onNewConnection={openNewConnection}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenPortForwarding={toggleBottomPanel}
+      />
 
       {/* Connect Modal */}
       <ConnectModal
@@ -148,77 +196,50 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
-
-      {/* SFTP Drawer */}
-      <SftpDrawer
-        isOpen={isSftpOpen}
-        onClose={() => setIsSftpOpen(false)}
-        sessionId={activeTab?.sessionId}
-        hostName={activeSession?.config.host}
-      />
-    </div>
+    </AppShell>
   );
 }
 
 // ============================================
-// Welcome Screen Component
+// Welcome Screen Component (Redesigned)
 // ============================================
 
 function WelcomeScreen({ onNewConnection }: { onNewConnection: () => void }) {
   return (
-    <div 
-      className="flex flex-col items-center justify-center h-full text-center px-8 py-12"
-      style={{ background: 'var(--color-base)' }}
-    >
-      {/* Logo - Refined with soft outer glow */}
-      <div className="relative mb-10">
-        {/* Outer glow layer */}
-        <div className="absolute -inset-10 bg-gradient-to-r from-blue/15 via-mauve/10 to-blue/15 rounded-full blur-3xl opacity-70" />
-        {/* Icon container */}
-        <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-blue/15 to-mauve/15 border border-white/[0.06] flex items-center justify-center backdrop-blur-sm shadow-lg">
-          <span className="text-2xl">⚡</span>
-        </div>
-      </div>
-      
-      {/* Title */}
-      <h1 className="text-2xl font-semibold text-text mb-3 tracking-tight">
-        Welcome to OxideTerm
-      </h1>
-      <p className="text-sm text-overlay-1 mb-8 max-w-xs leading-relaxed">
-        A high-performance SSH terminal built with Rust.
-        <br />
-        Zero-latency • GPU-accelerated • Secure by design.
-      </p>
-      
-      {/* CTA Button */}
-      <button
-        onClick={onNewConnection}
-        className="btn-primary px-6 py-2.5 rounded-xl text-sm font-medium"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-        </svg>
-        New Connection
-      </button>
-      
-      {/* Feature Pills - Demoted visual weight */}
-      <div className="mt-10 flex flex-wrap justify-center gap-2">
+    <div className="flex flex-col items-center justify-center h-full bg-base">
+      <EmptyState
+        variant="no-sessions"
+        title="Welcome to OxideTerm"
+        description="A high-performance SSH terminal built with Rust. Zero-latency • GPU-accelerated • Secure by design."
+        icon={
+          <div className="relative">
+            {/* Outer glow */}
+            <div className="absolute -inset-8 bg-gradient-to-r from-blue/15 via-mauve/10 to-blue/15 rounded-full blur-3xl opacity-70" />
+            {/* Icon */}
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-blue/15 to-mauve/15 border border-white/[0.06] flex items-center justify-center backdrop-blur-sm shadow-lg">
+              <span className="text-3xl">⚡</span>
+            </div>
+          </div>
+        }
+        action={{
+          label: 'New Connection',
+          onClick: onNewConnection,
+        }}
+      />
+
+      {/* Feature Pills */}
+      <div className="mt-8 flex flex-wrap justify-center gap-2">
         <FeaturePill icon="🚀" label="Zero Latency" />
         <FeaturePill icon="🎨" label="GPU Accelerated" />
         <FeaturePill icon="🔒" label="Keychain" />
         <FeaturePill icon="📁" label="SFTP" />
       </div>
-      
-      {/* Keyboard Shortcuts Hint - Refined kbd style */}
+
+      {/* Keyboard Shortcuts Hint */}
       <div className="mt-8 flex items-center justify-center gap-8 text-[11px] text-overlay-0/70">
-        <div className="flex items-center gap-2">
-          <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">⌘T</kbd>
-          <span>New Connection</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">⌘B</kbd>
-          <span>Toggle Sidebar</span>
-        </div>
+        <KeyHint shortcut="⌘N" label="New Connection" />
+        <KeyHint shortcut="⌘B" label="Toggle Sidebar" />
+        <KeyHint shortcut="⌘K" label="Command Palette" />
       </div>
     </div>
   );
@@ -228,6 +249,17 @@ function FeaturePill({ icon, label }: { icon: string; label: string }) {
   return (
     <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.02] rounded-full text-xs text-overlay-0/70">
       <span className="opacity-70">{icon}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function KeyHint({ shortcut, label }: { shortcut: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">
+        {shortcut}
+      </kbd>
       <span>{label}</span>
     </div>
   );

@@ -1,0 +1,236 @@
+/**
+ * OxideTerm Design System - CSS Variables
+ * 
+ * Based on Catppuccin Mocha with refinements for terminal UI
+ * All design tokens should be defined here for consistency
+ */
+
+:root {
+  /* ============================================
+     Color Palette - Catppuccin Mocha
+     ============================================ */
+  
+  /* Base layers (darkest to lightest) */
+  --crust:    #11111b;
+  --mantle:   #181825;
+  --base:     #1e1e2e;
+  --surface0: #313244;
+  --surface1: #45475a;
+  --surface2: #585b70;
+  
+  /* Text hierarchy */
+  --text:     #cdd6f4;
+  --subtext1: #bac2de;
+  --subtext0: #a6adc8;
+  --overlay2: #9399b2;
+  --overlay1: #7f849c;
+  --overlay0: #6c7086;
+  
+  /* Accent colors */
+  --mauve:     #cba6f7;
+  --blue:      #89b4fa;
+  --sapphire:  #74c7ec;
+  --sky:       #89dceb;
+  --teal:      #94e2d5;
+  --green:     #a6e3a1;
+  --yellow:    #f9e2af;
+  --peach:     #fab387;
+  --maroon:    #eba0ac;
+  --red:       #f38ba8;
+  --pink:      #f5c2e7;
+  --flamingo:  #f2cdcd;
+  --rosewater: #f5e0dc;
+  --lavender:  #b4befe;
+  
+  /* ============================================
+     Semantic Colors
+     ============================================ */
+  
+  /* Primary action color */
+  --color-primary:       var(--mauve);
+  --color-primary-hover: #d4b8f9;
+  --color-primary-muted: rgba(203, 166, 247, 0.15);
+  
+  /* Status colors */
+  --color-success:      var(--green);
+  --color-success-muted: rgba(166, 227, 161, 0.15);
+  --color-warning:      var(--yellow);
+  --color-warning-muted: rgba(249, 226, 175, 0.15);
+  --color-error:        var(--red);
+  --color-error-muted:  rgba(243, 139, 168, 0.15);
+  --color-info:         var(--blue);
+  --color-info-muted:   rgba(137, 180, 250, 0.15);
+  
+  /* ============================================
+     Component-specific tokens
+     ============================================ */
+  
+  /* Sidebar */
+  --sidebar-width:           220px;
+  --sidebar-width-collapsed: 48px;
+  --sidebar-bg:              rgba(24, 24, 37, 0.85);
+  --sidebar-bg-solid:        var(--mantle);
+  --sidebar-border:          rgba(255, 255, 255, 0.04);
+  
+  /* Tab bar */
+  --tabbar-height:     36px;
+  --tab-bg:            var(--mantle);
+  --tab-bg-active:     var(--base);
+  --tab-bg-hover:      var(--surface0);
+  --tab-border:        var(--surface0);
+  
+  /* Bottom panel */
+  --panel-min-height:     0px;
+  --panel-default-height: 200px;
+  --panel-max-height:     50vh;
+  --panel-bg:             var(--mantle);
+  --panel-border:         var(--surface0);
+  
+  /* Terminal */
+  --terminal-bg: var(--base);
+  --terminal-fg: var(--text);
+  
+  /* ============================================
+     Spacing System (8px grid)
+     ============================================ */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-8:  48px;
+  --space-10: 64px;
+  
+  /* ============================================
+     Typography
+     ============================================ */
+  
+  /* Font families */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  
+  /* Font sizes */
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   18px;
+  --text-2xl:  20px;
+  --text-3xl:  24px;
+  
+  /* Font weights */
+  --font-normal:   400;
+  --font-medium:   500;
+  --font-semibold: 600;
+  --font-bold:     700;
+  
+  /* Line heights */
+  --leading-none:    1;
+  --leading-tight:   1.25;
+  --leading-snug:    1.375;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose:   2;
+  
+  /* ============================================
+     Border Radius
+     ============================================ */
+  --radius-none: 0;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-full: 9999px;
+  
+  /* ============================================
+     Shadows
+     ============================================ */
+  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.35);
+  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.45), 0 10px 10px -5px rgba(0, 0, 0, 0.35);
+  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  
+  /* Glow effects */
+  --shadow-glow-sm:    0 0 10px rgba(203, 166, 247, 0.1);
+  --shadow-glow:       0 0 20px rgba(203, 166, 247, 0.15);
+  --shadow-glow-lg:    0 0 30px rgba(203, 166, 247, 0.2);
+  --shadow-glow-blue:  0 0 20px rgba(137, 180, 250, 0.15);
+  --shadow-glow-green: 0 0 20px rgba(166, 227, 161, 0.15);
+  --shadow-glow-red:   0 0 20px rgba(243, 139, 168, 0.15);
+  
+  /* Inner shadows */
+  --shadow-inner:      inset 0 2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  
+  /* ============================================
+     Animation & Transitions
+     ============================================ */
+  
+  /* Durations */
+  --duration-fast:    100ms;
+  --duration-normal:  200ms;
+  --duration-slow:    300ms;
+  --duration-slower:  400ms;
+  
+  /* Easing curves */
+  --ease-linear:  linear;
+  --ease-in:      cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:     cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce:  cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-elastic: cubic-bezier(0.68, -0.6, 0.32, 1.6);
+  --ease-expo-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-quart-out: cubic-bezier(0.25, 1, 0.5, 1);
+  
+  /* Common transitions */
+  --transition-colors: color, background-color, border-color, text-decoration-color, fill, stroke;
+  --transition-opacity: opacity;
+  --transition-shadow: box-shadow;
+  --transition-transform: transform;
+  --transition-all: all;
+  
+  /* ============================================
+     Z-Index Scale
+     ============================================ */
+  --z-dropdown:   50;
+  --z-sticky:     100;
+  --z-fixed:      200;
+  --z-modal-backdrop: 400;
+  --z-modal:      500;
+  --z-popover:    600;
+  --z-tooltip:    700;
+  --z-toast:      800;
+  --z-max:        9999;
+  
+  /* ============================================
+     Overlay & Glass effects
+     ============================================ */
+  --overlay-hover:  rgba(255, 255, 255, 0.03);
+  --overlay-active: rgba(255, 255, 255, 0.06);
+  --overlay-focus:  rgba(203, 166, 247, 0.1);
+  
+  --glass-bg:     rgba(30, 30, 46, 0.75);
+  --glass-bg-light: rgba(49, 50, 68, 0.5);
+  --glass-blur:   20px;
+  --glass-border: rgba(255, 255, 255, 0.05);
+  
+  /* ============================================
+     Focus ring
+     ============================================ */
+  --ring-width:  2px;
+  --ring-offset: 2px;
+  --ring-color:  var(--mauve);
+}
+
+/* ============================================
+   Dark mode variations (for future light theme)
+   ============================================ */
+[data-theme="light"] {
+  /* Override variables for light mode if needed */
+}

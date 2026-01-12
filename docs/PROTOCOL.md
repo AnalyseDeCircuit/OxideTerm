@@ -6,8 +6,14 @@
 
 1. [Wire Protocol (WebSocket)](#wire-protocol-websocket)
 2. [Tauri Commands](#tauri-commands)
-3. [数据类型映射](#数据类型映射)
-4. [版本迁移计划](#版本迁移计划)
+   - [Session Commands](#session-commands-v2)
+   - [Config Commands](#config-commands-连接管理)
+   - [SFTP Commands](#sftp-commands)
+   - [Port Forwarding Commands](#port-forwarding-commands)
+   - [Health Commands](#health-commands)
+3. [Events](#events-事件)
+4. [数据类型映射](#数据类型映射)
+5. [版本迁移计划](#版本迁移计划)
 
 ---
 
@@ -41,7 +47,7 @@
 
 ## Tauri Commands
 
-### v2 API (当前版本)
+### Session Commands (v2)
 
 #### `connect_v2`
 
@@ -158,11 +164,650 @@ void
 (无参数)
 
 // 响应
-interface SshKeyInfo {
-  path: string;
-  exists: boolean;
-  key_type?: string;  // "rsa", "ed25519", "ecdsa"
+string[]  // 可用 SSH 密钥路径列表，如 ["~/.ssh/id_rsa", "~/.ssh/id_ed25519"]
+```
+
+#### `get_session_stats`
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+interface SessionStats {
+  total: number;
+  connected: number;
+  connecting: number;
+  disconnected: number;
+  error: number;
+}
+```
+
+#### `get_session`
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+SessionInfo  // 单个会话信息，未找到时抛出错误
+```
+
+---
+
+### Config Commands (连接管理)
+
+#### `get_connections`
+
+获取所有保存的连接。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_recent_connections`
+
+获取最近使用的连接。
+
+```typescript
+// 请求
+{ limit?: number }  // 默认 5
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_connections_by_group`
+
+按分组获取连接。
+
+```typescript
+// 请求
+{ group?: string }  // null 表示未分组
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `search_connections`
+
+搜索连接（匹配名称、主机、用户名）。
+
+```typescript
+// 请求
+{ query: string }
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_groups`
+
+获取所有分组名称。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+string[]
+```
+
+#### `save_connection`
+
+创建或更新连接。
+
+```typescript
+// 请求
+interface SaveConnectionRequest {
+  id?: string;           // 有值 = 更新，无值 = 创建
+  name: string;
+  group?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'agent';
+  password?: string;     // auth_type='password' 时必填
+  key_path?: string;     // auth_type='key' 时必填
+  color?: string;
+  tags: string[];
+}
+
+// 响应
+ConnectionInfo
+```
+
+#### `delete_connection`
+
+删除连接（同时删除 keychain 中的密码）。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+void
+```
+
+#### `mark_connection_used`
+
+标记连接为已使用（更新 `last_used_at`）。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+void
+```
+
+#### `get_connection_password`
+
+从 keychain 获取连接密码。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+string  // 明文密码
+```
+
+#### `list_ssh_config_hosts`
+
+列出 `~/.ssh/config` 中的主机配置。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+interface SshHostInfo {
+  alias: string;
+  hostname: string;
+  user?: string;
+  port: number;
+  identity_file?: string;
 }[]
+```
+
+#### `import_ssh_host`
+
+导入 SSH config 主机为保存的连接。
+
+```typescript
+// 请求
+{ alias: string }  // SSH config 中的 Host 别名
+
+// 响应
+ConnectionInfo
+```
+
+#### `get_ssh_config_path`
+
+获取 SSH config 文件路径。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+string  // 如 "/Users/xxx/.ssh/config"
+```
+
+#### `create_group`
+
+创建连接分组。
+
+```typescript
+// 请求
+{ name: string }
+
+// 响应
+void
+```
+
+#### `delete_group`
+
+删除分组（连接移至未分组）。
+
+```typescript
+// 请求
+{ name: string }
+
+// 响应
+void
+```
+
+#### 共享类型定义
+
+```typescript
+interface ConnectionInfo {
+  id: string;
+  name: string;
+  group?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'agent';
+  key_path?: string;       // 仅 key auth
+  created_at: string;      // ISO 8601
+  last_used_at?: string;   // ISO 8601
+  color?: string;          // hex 颜色
+  tags: string[];
+}
+```
+
+---
+
+### SFTP Commands
+
+所有 SFTP 命令需要先调用 `sftp_init` 初始化会话。
+
+#### `sftp_init`
+
+初始化 SFTP 子系统（复用已连接的 SSH 会话）。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+string  // 当前工作目录路径
+```
+
+#### `sftp_list_dir`
+
+列出目录内容。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  path: string;
+  filter?: ListFilter;
+}
+
+interface ListFilter {
+  show_hidden?: boolean;
+  file_types?: FileType[];
+  name_pattern?: string;
+}
+
+// 响应
+FileInfo[]
+```
+
+#### `sftp_stat`
+
+获取文件/目录信息。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+FileInfo
+```
+
+#### `sftp_preview`
+
+预览文件内容（仅限文本/图片等可预览类型）。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+interface PreviewContent {
+  content_type: 'text' | 'image' | 'binary' | 'unsupported';
+  text?: string;         // 文本内容
+  base64?: string;       // Base64 编码的二进制
+  mime_type?: string;
+  truncated?: boolean;   // 是否被截断
+}
+```
+
+#### `sftp_download`
+
+下载文件（支持进度事件）。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  remotePath: string;
+  localPath: string;
+}
+
+// 响应
+void  // 通过 sftp:progress:{sessionId} 事件推送进度
+```
+
+#### `sftp_upload`
+
+上传文件（支持进度事件）。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  localPath: string;
+  remotePath: string;
+}
+
+// 响应
+void  // 通过 sftp:progress:{sessionId} 事件推送进度
+```
+
+#### `sftp_delete`
+
+删除文件或目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+void
+```
+
+#### `sftp_mkdir`
+
+创建目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+void
+```
+
+#### `sftp_rename`
+
+重命名/移动文件或目录。
+
+```typescript
+// 请求
+{ sessionId: string; oldPath: string; newPath: string }
+
+// 响应
+void
+```
+
+#### `sftp_pwd`
+
+获取当前工作目录。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+string
+```
+
+#### `sftp_cd`
+
+切换工作目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+string  // 新的工作目录绝对路径
+```
+
+#### `sftp_close`
+
+关闭 SFTP 会话。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+void
+```
+
+#### `sftp_is_initialized`
+
+检查 SFTP 是否已初始化。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+boolean
+```
+
+#### SFTP 共享类型
+
+```typescript
+interface FileInfo {
+  name: string;
+  path: string;
+  file_type: FileType;
+  size: number;
+  modified: string;      // ISO 8601
+  permissions: string;   // 如 "rwxr-xr-x"
+  owner?: string;
+  group?: string;
+}
+
+type FileType = 'file' | 'directory' | 'symlink' | 'unknown';
+```
+
+---
+
+### Port Forwarding Commands
+
+#### `create_port_forward`
+
+创建端口转发。
+
+```typescript
+// 请求
+interface CreateForwardRequest {
+  session_id: string;
+  forward_type: 'local' | 'remote';
+  bind_address: string;   // 本地转发: 本地地址; 远程转发: 远程绑定地址
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  description?: string;
+}
+
+// 响应
+interface ForwardResponse {
+  success: boolean;
+  forward?: ForwardRuleDto;
+  error?: string;
+}
+```
+
+#### `stop_port_forward`
+
+停止端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; forwardId: string }
+
+// 响应
+ForwardResponse
+```
+
+#### `list_port_forwards`
+
+列出会话的所有端口转发。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+ForwardRuleDto[]
+```
+
+#### `stop_all_forwards`
+
+停止会话的所有端口转发。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+void
+```
+
+#### `forward_jupyter`
+
+快捷创建 Jupyter 端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; localPort: number; remotePort: number }
+
+// 响应
+ForwardResponse
+```
+
+#### `forward_tensorboard`
+
+快捷创建 TensorBoard 端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; localPort: number; remotePort: number }
+
+// 响应
+ForwardResponse
+```
+
+#### Port Forwarding 共享类型
+
+```typescript
+interface ForwardRuleDto {
+  id: string;
+  forward_type: 'local' | 'remote' | 'dynamic';
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  status: 'starting' | 'active' | 'stopped' | 'error';
+  description?: string;
+}
+```
+
+---
+
+### Health Commands
+
+#### `get_connection_health`
+
+获取会话的详细健康指标。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+interface HealthMetrics {
+  session_id: string;
+  status: HealthStatus;
+  latency: LatencyStats;
+  packets: PacketStats;
+  last_activity: string;  // ISO 8601
+  uptime_secs: number;
+}
+
+interface LatencyStats {
+  current_ms?: number;
+  avg_ms: number;
+  min_ms?: number;
+  max_ms?: number;
+  jitter_ms: number;
+}
+
+interface PacketStats {
+  sent: number;
+  received: number;
+  lost: number;
+  loss_rate: number;  // 0.0 - 1.0
+}
+
+type HealthStatus = 'excellent' | 'good' | 'fair' | 'poor' | 'critical' | 'unknown';
+```
+
+#### `get_quick_health`
+
+获取会话的快速健康检查（适合状态指示器）。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+interface QuickHealthCheck {
+  session_id: string;
+  status: HealthStatus;
+  status_color: string;    // "green" | "yellow" | "orange" | "red" | "gray"
+  latency_ms?: number;
+  message: string;         // 如 "Excellent (12ms)"
+}
+```
+
+#### `get_all_health_status`
+
+获取所有活跃会话的健康状态。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+{ [sessionId: string]: QuickHealthCheck }
+```
+
+#### `simulate_health_response`
+
+模拟健康响应（测试用）。
+
+```typescript
+// 请求
+{ sessionId: string; latencyMs: number }
+
+// 响应
+void
+```
+
+---
+
+## Events (事件)
+
+### SFTP 传输进度
+
+**事件名:** `sftp:progress:{sessionId}`
+
+```typescript
+interface TransferProgress {
+  operation: 'download' | 'upload';
+  file_name: string;
+  bytes_transferred: number;
+  total_bytes: number;
+  percentage: number;       // 0-100
+  speed_bps: number;        // bytes per second
+  eta_secs?: number;        // 预计剩余秒数
+}
 ```
 
 ---
@@ -226,8 +871,17 @@ interface SshKeyInfo {
 - [ ] 移除 `src-tauri/src/commands/connect.rs` (v1 commands)
 - [ ] 移除 `src-tauri/src/commands/session.rs` (v1 session commands)
 - [ ] 统一 `USE_V2_UI` flag 为单一配置
-- [ ] 更新 `components/Sidebar.tsx` 移除 v1 兼容代码
+- [x] 更新 `components/Sidebar.tsx` 移除 v1 兼容代码 → 已替换为 `layout/Sidebar`
 - [ ] 更新 `components/ConnectModal.tsx` 移除 v1 兼容代码
+
+### UI 重构完成 (2026-01-12)
+
+- [x] Phase 0: 基础设施 (Radix UI, CVA, Framer Motion, CSS 变量)
+- [x] Phase 1: 18 个原子 UI 组件 (`src/components/ui/`)
+- [x] Phase 2: 5 个布局组件 (AppShell, Sidebar, TabBar, BottomPanel, CommandPalette)
+- [x] Phase 3: 7 个功能模块组件 (connections, terminal, settings, portforward)
+- [x] Phase 4: 动画系统 (PageTransition, Loading/Empty/Error states, MicroInteractions)
+- [x] App.tsx 集成新组件
 
 ---
 

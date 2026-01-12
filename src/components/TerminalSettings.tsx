@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { X, Settings, Palette, Terminal as TerminalIcon, Type, RotateCcw, Monitor, MousePointer } from 'lucide-react';
 import { useTerminalConfig, type TerminalConfig } from '../store/terminalConfigStore';
-import { themes, fontFamilies, fontSizes, scrollbackOptions } from '../lib/themes';
+import { themes, fontFamilies, scrollbackOptions } from '../lib/themes';
 
 interface TerminalSettingsProps {
   isOpen: boolean;
@@ -69,8 +69,9 @@ export function TerminalSettings({ isOpen, onClose }: TerminalSettingsProps) {
 
   if (!isOpen) return null;
 
-  // Get current theme for preview
-  const selectedTheme = themes.find(t => t.id === localConfig.themeId) ?? themes[0];
+  // Get current theme for preview (available for future use)
+  const _selectedTheme = themes.find(t => t.id === localConfig.themeId) ?? themes[0];
+  void _selectedTheme; // Suppress unused warning - will be used for live preview
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

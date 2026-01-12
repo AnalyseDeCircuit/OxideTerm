@@ -10,8 +10,11 @@ A modern, high-performance SSH terminal client built with Rust and Tauri.
 - **Zero Latency** - WebSocket bridging bypasses Tauri IPC for real-time terminal interaction
 - **GPU Accelerated** - WebGL rendering via xterm.js handles massive log outputs smoothly
 - **Secure** - Pure Rust SSH implementation with no C dependencies
-- **Modern UI** - React + Tailwind CSS for a beautiful, dark-mode interface
-- **Multi-Session** - Manage multiple SSH connections in tabs
+- **Modern UI** - Catppuccin Mocha theme with Radix UI primitives
+- **Multi-Session** - Drag-and-drop tab management with status indicators
+- **SFTP Support** - Integrated file browser in bottom panel
+- **Port Forwarding** - Easy local/remote port forwarding
+- **Command Palette** - Quick access to all features (⌘K)
 
 ## 🏗️ Architecture
 
@@ -39,10 +42,13 @@ OxideTerm uses a **dual-plane architecture** separating:
 | SSH Protocol | russh |
 | Async Runtime | Tokio |
 | WebSocket | tokio-tungstenite |
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS |
+| Frontend | React 19 + TypeScript |
+| Styling | Tailwind CSS 4 + CSS Variables |
+| UI Primitives | Radix UI + CVA |
+| Animation | Framer Motion |
 | Terminal | xterm.js + WebGL Addon |
 | State | Zustand |
+| Command Palette | cmdk |
 
 ## 🚀 Getting Started
 
@@ -74,16 +80,40 @@ npm run tauri build
 ```
 oxideterm/
 ├── src/                     # Frontend (React/TypeScript)
-│   ├── components/          # UI components
+│   ├── components/
+│   │   ├── ui/              # Atomic UI components (Button, Input, Dialog...)
+│   │   ├── layout/          # Layout components (AppShell, Sidebar, TabBar...)
+│   │   ├── connections/     # Connection management
+│   │   ├── terminal/        # Terminal view
+│   │   ├── settings/        # Settings panel
+│   │   └── portforward/     # Port forwarding
 │   ├── store/               # Zustand state management
+│   ├── lib/                 # Utilities (cn, animations)
+│   ├── styles/              # CSS variables & globals
 │   └── types/               # TypeScript types
 ├── src-tauri/               # Backend (Rust)
 │   └── src/
 │       ├── ssh/             # SSH client implementation
 │       ├── bridge/          # WebSocket bridge server
-│       └── commands/        # Tauri commands
+│       ├── session/         # Session management & health
+│       ├── forwarding/      # Port forwarding
+│       ├── sftp/            # SFTP implementation
+│       └── commands/        # Tauri commands (v2 API)
+├── docs/                    # Documentation
 └── package.json
 ```
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘K` | Open Command Palette |
+| `⌘B` | Toggle Sidebar |
+| `⌘J` | Toggle Bottom Panel |
+| `⌘N` / `⌘T` | New Connection |
+| `⌘W` | Close Tab |
+| `⌘,` | Open Settings |
+| `⌘1-9` | Switch to Tab N |
 
 ## 📝 License
 
