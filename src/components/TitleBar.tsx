@@ -71,33 +71,30 @@ export function TitleBar({
 
   return (
     <div 
-      className="h-[38px] flex items-center justify-between select-none shrink-0"
+      className="h-[32px] flex items-center justify-between select-none shrink-0"
       style={{ 
-        background: 'var(--titlebar-bg)',
-        borderBottom: '1px solid var(--color-surface-0)'
+        background: 'var(--mantle)',
+        borderBottom: '1px solid var(--surface1)'
       }}
       data-tauri-drag-region
     >
       {/* Left: Traffic Lights */}
-      <div className="flex items-center h-full">
-        {showTrafficLights && (
-          <TrafficLights
-            isFocused={isFocused}
-            onClose={handleClose}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
-          />
-        )}
+      <div className="flex items-center h-full px-4">
+         {/* Native-like overlay (handled by OS or custom if needed, here keeping structure) */}
+         <div className="w-14" />
       </div>
 
-      {/* Center: Title */}
+      {/* Center: Title - Monospace industrial */}
       <div 
-        className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center"
+        className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 font-mono"
         data-tauri-drag-region
       >
-        <span className="text-sm font-medium text-subtext-1">{title}</span>
+        <span className="text-xs font-bold text-subtext-0 tracking-widest uppercase opacity-80">{title}</span>
         {subtitle && (
-          <span className="text-xs text-overlay-0">{subtitle}</span>
+           <>
+            <span className="text-overlay-1">//</span>
+            <span className="text-[10px] text-overlay-1 uppercase">{subtitle}</span>
+           </>
         )}
       </div>
 

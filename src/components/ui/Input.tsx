@@ -16,10 +16,10 @@ import { cn } from '@/lib/cn';
 
 export const inputVariants = cva(
   [
-    'flex w-full rounded-md border bg-transparent',
+    'flex w-full rounded-none border bg-transparent', // Industrial: rounded-none
     'text-text placeholder:text-overlay-1',
     'transition-colors duration-fast',
-    'focus:outline-none focus:ring-2 focus:ring-mauve focus:ring-offset-1 focus:ring-offset-base',
+    'focus:outline-none focus:ring-1 focus:ring-mauve focus:border-mauve', // Simpler focus
     'disabled:cursor-not-allowed disabled:opacity-50',
     'file:border-0 file:bg-transparent file:text-sm file:font-medium',
   ],
@@ -27,8 +27,8 @@ export const inputVariants = cva(
     variants: {
       variant: {
         default: [
-          'border-surface-1 bg-mantle',
-          'hover:border-surface-2',
+          'border-overlay-1 bg-mantle', // Harder border (overlay-1 is usually more visible than surface-1)
+          'hover:border-text', // High contrast hover
           'focus:border-mauve',
         ],
         filled: [

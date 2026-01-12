@@ -154,7 +154,9 @@ export function AppShell({ children, className }: AppShellProps) {
   return (
     <div
       className={cn(
-        'flex h-screen w-screen overflow-hidden bg-base text-text',
+        'flex h-screen w-screen overflow-hidden bg-base text-text selection:bg-primary/20 selection:text-primary',
+        // Add subtle grid background to the whole app shell, masked by content usually
+        'bg-grid-pattern',
         className
       )}
     >
@@ -175,9 +177,11 @@ export function AppShellSidebar({ children, className }: AppShellSidebarProps) {
   return (
     <aside
       className={cn(
-        'flex flex-col h-full shrink-0 overflow-hidden',
-        'bg-sidebar-bg-solid border-r border-sidebar-border',
-        'transition-[width] duration-slow ease-expo-out',
+        'flex flex-col h-full shrink-0 overflow-hidden z-20', // Increased Z-index to sit above grid
+        'bg-sidebar-bg-solid border-r border-sidebar-border', // Solid BG mandatory now
+        // Removed transition for "Snappy" feel - instant width change could be jarring, 
+        // keeping fast transition but removing "ease-expo-out" for simpler one
+        'transition-[width] duration-fast ease-out',
         sidebarCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar',
         className
       )}

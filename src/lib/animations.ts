@@ -15,40 +15,37 @@ export const transitions = {
   /** Fast, snappy interactions (buttons, toggles) */
   fast: {
     duration: 0.1,
-    ease: [0.4, 0, 0.2, 1],
+    ease: "easeOut", // Snappy
   } satisfies Transition,
   
   /** Default transition for most animations */
   normal: {
-    duration: 0.2,
-    ease: [0.4, 0, 0.2, 1],
+    duration: 0.15, // Faster
+    ease: "easeOut",
   } satisfies Transition,
   
   /** Slower, more deliberate animations (panels, modals) */
   slow: {
-    duration: 0.3,
-    ease: [0.4, 0, 0.2, 1],
+    duration: 0.2, // Faster
+    ease: "easeOut",
   } satisfies Transition,
   
-  /** Smooth exponential ease out */
+  /** Smooth exponential ease out - slightly faster now */
   smooth: {
-    duration: 0.4,
+    duration: 0.25,
     ease: [0.16, 1, 0.3, 1],
   } satisfies Transition,
   
-  /** Spring animation for playful interactions */
+  /** Spring animation disabled - using fast linear/ease-out */
   spring: {
-    type: 'spring',
-    stiffness: 400,
-    damping: 30,
+    duration: 0.15,
+    ease: "easeOut",
   } satisfies Transition,
   
-  /** Bouncy spring for emphatic feedback */
+  /** Bouncy spring disabled - using fast linear/ease-out */
   bounce: {
-    type: 'spring',
-    stiffness: 500,
-    damping: 25,
-    mass: 0.5,
+    duration: 0.15,
+    ease: "easeOut",
   } satisfies Transition,
 };
 

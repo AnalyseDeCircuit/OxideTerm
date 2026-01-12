@@ -25,6 +25,8 @@ export const buttonVariants = cva(
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mauve focus-visible:ring-offset-2 focus-visible:ring-offset-base',
     'disabled:pointer-events-none disabled:opacity-50',
     'select-none',
+    'shadow-none', // Industrial: no shadows
+    'rounded-none', // Industrial: no rounding
   ],
   {
     variants: {
@@ -32,38 +34,38 @@ export const buttonVariants = cva(
         /** Primary action - most prominent */
         primary: [
           'bg-mauve text-crust',
-          'hover:bg-[#d4b8f9]',
+          'hover:bg-[#d4b8f9] hover:ring-1 hover:ring-text', // High contrast hover
           'active:bg-[#c299f5]',
         ],
         /** Secondary action - less prominent */
         secondary: [
           'bg-surface-0 text-text',
-          'hover:bg-surface-1',
+          'hover:bg-surface-1 hover:border-text', // Harder border on hover
           'active:bg-surface-2',
           'border border-surface-1',
         ],
         /** Ghost - minimal styling, for toolbars */
         ghost: [
           'text-subtext-1',
-          'hover:bg-surface-0 hover:text-text',
+          'hover:bg-surface-0 hover:text-text hover:border hover:border-surface-2', // Add box logic on hover
           'active:bg-surface-1',
         ],
         /** Outline - bordered variant */
         outline: [
           'border border-surface-1 text-text bg-transparent',
-          'hover:bg-surface-0 hover:border-surface-2',
+          'hover:bg-surface-0 hover:border-text', // High contrast border hover
           'active:bg-surface-1',
         ],
         /** Danger - destructive actions */
         danger: [
           'bg-error-muted text-red',
-          'hover:bg-[rgba(243,139,168,0.25)]',
+          'hover:bg-[rgba(243,139,168,0.25)] hover:ring-1 hover:ring-red',
           'active:bg-[rgba(243,139,168,0.35)]',
         ],
         /** Success - positive actions */
         success: [
           'bg-success-muted text-green',
-          'hover:bg-[rgba(166,227,161,0.25)]',
+          'hover:bg-[rgba(166,227,161,0.25)] hover:ring-1 hover:ring-green',
           'active:bg-[rgba(166,227,161,0.35)]',
         ],
         /** Link - text-only, underlined on hover */
@@ -75,21 +77,21 @@ export const buttonVariants = cva(
       },
       size: {
         /** Extra small - badges, compact toolbars */
-        xs: 'h-6 px-2 text-xs rounded-sm',
+        xs: 'h-6 px-2 text-xs',
         /** Small - secondary actions */
-        sm: 'h-7 px-2.5 text-xs rounded-sm',
+        sm: 'h-7 px-2.5 text-xs',
         /** Medium - default, primary actions */
-        md: 'h-8 px-3 text-sm rounded-md',
+        md: 'h-8 px-3 text-sm',
         /** Large - prominent CTAs */
-        lg: 'h-10 px-4 text-base rounded-md',
+        lg: 'h-10 px-4 text-base',
         /** Extra large - hero sections */
-        xl: 'h-12 px-6 text-lg rounded-lg',
+        xl: 'h-12 px-6 text-lg',
         /** Icon only - square button */
-        icon: 'h-8 w-8 rounded-md',
+        icon: 'h-8 w-8',
         /** Small icon - compact icon button */
-        'icon-sm': 'h-7 w-7 rounded-sm',
+        'icon-sm': 'h-7 w-7',
         /** Large icon - prominent icon button */
-        'icon-lg': 'h-10 w-10 rounded-lg',
+        'icon-lg': 'h-10 w-10',
       },
     },
     defaultVariants: {

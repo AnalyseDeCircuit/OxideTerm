@@ -21,12 +21,12 @@ import { Sidebar } from './components/layout/Sidebar';
 import { TabBar, type TabItem } from './components/layout/TabBar';
 import { BottomPanel } from './components/layout/BottomPanel';
 import { CommandPalette } from './components/layout/CommandPalette';
+import { CommandCenter } from './components/layout/CommandCenter';
 
 // New UI Components (Phase 1 & 4)
 import {
   TooltipProvider,
   Toaster,
-  EmptyState,
   PageTransition,
 } from './components/ui';
 
@@ -162,12 +162,12 @@ function AppContent() {
         <AppShellContent>
           <AnimatePresence mode="wait">
             {!hasSessions ? (
-              <PageTransition key="welcome" pageKey="welcome">
-                <WelcomeScreen onNewConnection={openNewConnection} />
+              <PageTransition key="command-center" pageKey="command-center">
+                <CommandCenter onNewConnection={openNewConnection} />
               </PageTransition>
             ) : (
               <PageTransition key="terminal" pageKey="terminal">
-                <TerminalContainer className="h-full" />
+                <TerminalContainer className="h-full" /> 
               </PageTransition>
             )}
           </AnimatePresence>
@@ -197,71 +197,6 @@ function AppContent() {
         onClose={() => setIsSettingsOpen(false)}
       />
     </AppShell>
-  );
-}
-
-// ============================================
-// Welcome Screen Component (Redesigned)
-// ============================================
-
-function WelcomeScreen({ onNewConnection }: { onNewConnection: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full bg-base">
-      <EmptyState
-        variant="no-sessions"
-        title="Welcome to OxideTerm"
-        description="A high-performance SSH terminal built with Rust. Zero-latency • GPU-accelerated • Secure by design."
-        icon={
-          <div className="relative">
-            {/* Outer glow */}
-            <div className="absolute -inset-8 bg-gradient-to-r from-blue/15 via-mauve/10 to-blue/15 rounded-full blur-3xl opacity-70" />
-            {/* Icon */}
-            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-blue/15 to-mauve/15 border border-white/[0.06] flex items-center justify-center backdrop-blur-sm shadow-lg">
-              <span className="text-3xl">⚡</span>
-            </div>
-          </div>
-        }
-        action={{
-          label: 'New Connection',
-          onClick: onNewConnection,
-        }}
-      />
-
-      {/* Feature Pills */}
-      <div className="mt-8 flex flex-wrap justify-center gap-2">
-        <FeaturePill icon="🚀" label="Zero Latency" />
-        <FeaturePill icon="🎨" label="GPU Accelerated" />
-        <FeaturePill icon="🔒" label="Keychain" />
-        <FeaturePill icon="📁" label="SFTP" />
-      </div>
-
-      {/* Keyboard Shortcuts Hint */}
-      <div className="mt-8 flex items-center justify-center gap-8 text-[11px] text-overlay-0/70">
-        <KeyHint shortcut="⌘N" label="New Connection" />
-        <KeyHint shortcut="⌘B" label="Toggle Sidebar" />
-        <KeyHint shortcut="⌘K" label="Command Palette" />
-      </div>
-    </div>
-  );
-}
-
-function FeaturePill({ icon, label }: { icon: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/[0.02] rounded-full text-xs text-overlay-0/70">
-      <span className="opacity-70">{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function KeyHint({ shortcut, label }: { shortcut: string; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <kbd className="px-2 py-1 bg-black/25 border border-white/[0.04] rounded-lg text-overlay-1/80 font-mono">
-        {shortcut}
-      </kbd>
-      <span>{label}</span>
-    </div>
   );
 }
 

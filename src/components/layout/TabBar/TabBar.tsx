@@ -70,19 +70,19 @@ export function TabBar({
     <TooltipProvider delayDuration={300}>
       <div
         className={cn(
-          'flex items-center h-9 px-2 gap-1',
-          'bg-tab-bg border-b border-tab-border',
+          'flex items-center h-8 px-0 gap-0',
+          'bg-mantle border-b border-surface1',
           'shrink-0',
           className
         )}
       >
-        {/* Tabs */}
-        <div className="flex-1 flex items-center gap-0.5 min-w-0 overflow-x-auto scrollbar-none">
+        {/* Tabs - now tightly packed */}
+        <div className="flex-1 flex items-center gap-[1px] min-w-0 overflow-x-auto scrollbar-none pl-[1px]">
           <Reorder.Group
             axis="x"
             values={tabs}
             onReorder={onTabsReorder || (() => {})}
-            className="flex items-center gap-0.5"
+            className="flex items-center gap-[1px]"
           >
             <AnimatePresence initial={false}>
               {tabs.map((tab) => (
@@ -186,40 +186,42 @@ function Tab({ tab, isActive, onSelect, onClose }: TabProps) {
       initial={{ opacity: 0, width: 0 }}
       animate={{ opacity: 1, width: 'auto' }}
       exit={{ opacity: 0, width: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.1 }}
     >
       <div
         onClick={onSelect}
         onMouseDown={handleMouseDown}
         className={cn(
-          'group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer',
-          'transition-colors duration-fast',
-          'max-w-[180px] min-w-[100px]',
+          'group flex items-center gap-2 px-3 py-1.5 cursor-pointer relative',
+          'transition-colors duration-fast border-r border-surface1',
+          'max-w-[200px] min-w-[120px]',
           isActive
-            ? 'bg-tab-active text-text'
-            : 'text-subtext-1 hover:bg-tab-hover hover:text-text'
+            ? 'bg-surface0 text-text font-semibold'
+            : 'bg-mantle text-subtext-0 hover:bg-surface0/50 hover:text-text'
         )}
       >
-        {/* Status indicator */}
+        {/* Active Top Line Indicator */}
+        {isActive && (
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary" />
+        )}
+
+        {/* Status indicator - Square now */}
         <TabStatusDot status={tab.status} sftpActive={tab.sftpActive} />
 
-        {/* Tab icon */}
-        <Terminal size={12} className="shrink-0 text-overlay-1" />
-
         {/* Title */}
-        <span className="flex-1 truncate text-xs font-medium">{tab.title}</span>
+        <span className="flex-1 truncate text-[11px] font-mono tracking-wide">{tab.title}</span>
 
-        {/* Close button */}
+        {/* Close button - Only visible on hover or active */}
         <button
           onClick={handleClose}
           className={cn(
-            'shrink-0 p-0.5 rounded-sm',
+            'shrink-0 p-0.5',
             'opacity-0 group-hover:opacity-100',
-            'hover:bg-surface-1 transition-opacity',
-            isActive && 'opacity-60'
+            'hover:text-red transition-opacity',
+            isActive && 'opacity-100' // Always show close on active
           )}
         >
-          <X size={12} />
+          <X size={10} strokeWidth={3} />
         </button>
       </div>
     </Reorder.Item>
@@ -237,18 +239,18 @@ interface TabStatusDotProps {
 
 function TabStatusDot({ status, sftpActive }: TabStatusDotProps) {
   const colors = {
-    connected: 'bg-green',
+    connected: 'bg-primary',
     connecting: 'bg-yellow animate-pulse',
     disconnected: 'bg-overlay-0',
     error: 'bg-red',
   };
 
   return (
-    <div className="relative shrink-0">
-      <span className={cn('block w-1.5 h-1.5 rounded-full', colors[status])} />
-      {/* SFTP indicator (second dot) */}
+    <div className="flex gap-0.5">
+      <span className={cn('block w-1.5 h-1.5 rounded-[1px]', colors[status])} />
+       {/* SFTP indicator */}
       {sftpActive && status === 'connected' && (
-        <span className="absolute -right-1 -top-0.5 w-1 h-1 rounded-full bg-green" />
+        <span className="block w-1.5 h-1.5 rounded-[1px] bg-blue" />
       )}
     </div>
   );
