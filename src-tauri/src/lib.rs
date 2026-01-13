@@ -106,6 +106,7 @@ pub fn run() {
             commands::list_port_forwards,
             commands::forward_jupyter,
             commands::forward_tensorboard,
+            commands::forward_vscode,
             commands::stop_all_forwards,
             commands::delete_port_forward,
             commands::restart_port_forward,

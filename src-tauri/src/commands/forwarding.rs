@@ -66,6 +66,13 @@ pub struct CreateForwardRequest {
     pub target_port: u16,
     /// Optional description
     pub description: Option<String>,
+    /// Check port availability before creating forward (default: true)
+    #[serde(default = "default_check_health")]
+    pub check_health: bool,
+}
+
+fn default_check_health() -> bool {
+    true
 }
 
 /// Response for forward operations
@@ -132,8 +139,45 @@ pub async fn create_port_forward(
     let forward_type = match request.forward_type.as_str() {
         "local" => ForwardType::Local,
         "remote" => ForwardType::Remote,
+        "dynamic" => ForwardType::Dynamic,
         _ => return Err(format!("Invalid forward type: {}", request.forward_type)),
     };
+
+    // Perform health check if enabled (skip for dynamic forwards)
+    if request.check_health && forward_type != ForwardType::Dynamic {
+        info!("Checking port availability: {}:{}", request.target_host, request.target_port);
+        
+        match manager.check_port_available(&request.target_host, request.target_port, 3000).await {
+            Ok(true) => {
+                info!("Port {}:{} is available", request.target_host, request.target_port);
+            }
+            Ok(false) => {
+                let error_msg = format!(
+                    "Target port {}:{} is not reachable. Please ensure the service is running on the remote server.\n\nTroubleshooting:\n• Check if service is running: ss -tlnp | grep {}\n• Verify the port number is correct\n• Try connecting manually: nc -zv {} {}",
+                    request.target_host, request.target_port, request.target_port, request.target_host, request.target_port
+                );
+                error!("Port health check failed: {}", error_msg);
+                return Ok(ForwardResponse {
+                    success: false,
+                    forward: None,
+                    error: Some(error_msg),
+                });
+            }
+            Err(e) => {
+                // Timeout or other network error
+                let error_msg = format!(
+                    "Failed to check port availability: {}\n\nThis might indicate:\n• Network connectivity issues\n• SSH connection problems\n• Port may be unreachable\n\nYou can skip this check with the 'Skip port availability check' option.",
+                    e
+                );
+                error!("Health check error: {}", error_msg);
+                return Ok(ForwardResponse {
+                    success: false,
+                    forward: None,
+                    error: Some(error_msg),
+                });
+            }
+        }
+    }
 
     let rule = ForwardRule {
         id: uuid::Uuid::new_v4().to_string(),
@@ -266,6 +310,38 @@ pub async fn forward_tensorboard(
         .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
     match manager.forward_tensorboard(local_port, remote_port).await {
+        Ok(rule) => Ok(ForwardResponse {
+            success: true,
+            forward: Some(rule.into()),
+            error: None,
+        }),
+        Err(e) => Ok(ForwardResponse {
+            success: false,
+            forward: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
+/// Quick forward for VS Code (convenience command)
+#[tauri::command]
+pub async fn forward_vscode(
+    registry: State<'_, ForwardingRegistry>,
+    session_id: String,
+    local_port: u16,
+    remote_port: u16,
+) -> Result<ForwardResponse, String> {
+    info!(
+        "Creating VS Code forward for session {}: {} -> {}",
+        session_id, local_port, remote_port
+    );
+
+    let manager = registry
+        .get(&session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    match manager.forward_vscode(local_port, remote_port).await {
         Ok(rule) => Ok(ForwardResponse {
             success: true,
             forward: Some(rule.into()),

@@ -409,7 +409,7 @@ export const SettingsModal = () => {
                                     <div key={host.alias} className="flex items-center justify-between p-2 hover:bg-zinc-800 rounded-sm">
                                         <div className="flex flex-col">
                                             <span className="text-sm font-medium">{host.alias}</span>
-                                            <span className="text-xs text-zinc-500">{host.user}@{host.host}:{host.port}</span>
+                                            <span className="text-xs text-zinc-500">{host.user}@{host.hostname}:{host.port}</span>
                                         </div>
                                         <Button size="sm" variant="secondary" className="h-7" onClick={() => handleImportHost(host.alias)}>
                                             <FolderInput className="h-3 w-3 mr-1" /> Import

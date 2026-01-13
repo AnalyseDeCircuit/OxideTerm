@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, ArrowLeft, Pencil, Activity, X } from 'lucide-react';
+import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, Pencil, Activity, X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { Checkbox } from '../ui/checkbox';
 import { api } from '../../lib/api';
 import { ForwardRule, ForwardType } from '../../types';
 
@@ -37,6 +38,8 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   const [targetHost, setTargetHost] = useState('localhost');
   const [targetPort, setTargetPort] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [skipHealthCheck, setSkipHealthCheck] = useState(false);
 
   const fetchForwards = async () => {
     try {
@@ -69,12 +72,14 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
     return () => clearInterval(interval);
   }, [sessionId]);
 
-  const handleCreateQuick = async (type: 'jupyter' | 'tensorboard') => {
+  const handleCreateQuick = async (type: 'jupyter' | 'tensorboard' | 'vscode') => {
       try {
           if (type === 'jupyter') {
             await api.forwardJupyter(sessionId, 8888, 8888);
           } else if (type === 'tensorboard') {
             await api.forwardTensorboard(sessionId, 6006, 6006);
+          } else if (type === 'vscode') {
+            await api.forwardVscode(sessionId, 8080, 8080);
           }
           fetchForwards();
       } catch (e) {
@@ -89,21 +94,34 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
           return;
       }
 
+      setIsCreating(true);
       try {
-          await api.createPortForward({
+          const response = await api.createPortForward({
               session_id: sessionId,
               forward_type: forwardType,
               bind_address: bindAddress,
               bind_port: parseInt(bindPort),
               target_host: forwardType === 'dynamic' ? '0.0.0.0' : targetHost,
-              target_port: forwardType === 'dynamic' ? 0 : parseInt(targetPort)
+              target_port: forwardType === 'dynamic' ? 0 : parseInt(targetPort),
+              check_health: !skipHealthCheck
           });
+          
+          // Check response for errors
+          if (response && !response.success && response.error) {
+              setCreateError(response.error);
+              setIsCreating(false);
+              return;
+          }
+          
           setShowNewForm(false);
           setBindPort('');
           setTargetPort('');
+          setSkipHealthCheck(false);
           fetchForwards();
       } catch (e: any) {
           setCreateError(e.toString());
+      } finally {
+          setIsCreating(false);
       }
   };
 
@@ -120,6 +138,9 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
              </Button>
              <Button variant="secondary" className="gap-2" onClick={() => handleCreateQuick('tensorboard')}>
                 <span className="w-2 h-2 rounded-full bg-blue-500" /> TensorBoard (6006)
+             </Button>
+             <Button variant="secondary" className="gap-2" onClick={() => handleCreateQuick('vscode')}>
+                <span className="w-2 h-2 rounded-full bg-cyan-500" /> VS Code (8080)
              </Button>
            </div>
         </div>
@@ -304,7 +325,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
 
                     {/* Arrow */}
                     <div className="pt-6 text-zinc-500">
-                        {forwardType === 'remote' ? <ArrowLeft className="h-5 w-5" /> : <ArrowRight className="h-5 w-5" />}
+                        <ArrowRight className="h-5 w-5" />
                     </div>
 
                     {/* Right Side (Target) */}
@@ -333,12 +354,44 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                     )}
                 </div>
                 
+                {/* Skip health check option */}
+                {forwardType !== 'dynamic' && (
+                    <div className="flex items-center space-x-2 px-2">
+                        <Checkbox 
+                            id="skip-health"
+                            checked={skipHealthCheck}
+                            onCheckedChange={(checked) => setSkipHealthCheck(checked as boolean)}
+                        />
+                        <Label 
+                            htmlFor="skip-health" 
+                            className="text-xs text-zinc-400 cursor-pointer"
+                        >
+                            Skip port availability check (advanced)
+                        </Label>
+                    </div>
+                )}
+                
                 {createError && (
-                    <div className="text-red-400 text-xs px-2">{createError}</div>
+                    <div className="border border-red-900/50 bg-red-950/30 rounded-sm p-3 space-y-2">
+                        <div className="flex items-start gap-2">
+                            <span className="text-red-400 text-xs font-medium">⚠ Error</span>
+                        </div>
+                        <div className="text-xs text-zinc-300 whitespace-pre-wrap font-mono">
+                            {createError}
+                        </div>
+                    </div>
                 )}
 
-                <div className="flex justify-end">
-                    <Button onClick={handleCreateForward}>Create Forward</Button>
+                <div className="flex justify-end gap-2">
+                    {isCreating && (
+                        <div className="flex items-center gap-2 text-xs text-zinc-400 mr-auto">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {skipHealthCheck ? 'Creating forward...' : 'Checking port availability...'}
+                        </div>
+                    )}
+                    <Button onClick={handleCreateForward} disabled={isCreating}>
+                        {isCreating ? 'Creating...' : 'Create Forward'}
+                    </Button>
                 </div>
             </div>
         )}

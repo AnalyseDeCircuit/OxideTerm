@@ -134,6 +134,7 @@ export interface ForwardRequest {
   target_host: string;
   target_port: number;
   description?: string;
+  check_health?: boolean; // Default: true - check port availability before creating forward
 }
 
 export interface ForwardRule {

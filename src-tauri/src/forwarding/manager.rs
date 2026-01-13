@@ -576,6 +576,66 @@ impl ForwardingManager {
             + self.dynamic_forwards.read().await.len()
     }
 
+    /// Check if a port is available on the remote host
+    /// 
+    /// This attempts to open a TCP connection to the target host:port
+    /// through SSH to verify the port is reachable before creating a forward.
+    /// 
+    /// Returns:
+    /// - `Ok(true)` if port is reachable
+    /// - `Ok(false)` if connection refused (port not listening)
+    /// - `Err` for other errors (network issues, SSH errors, etc.)
+    pub async fn check_port_available(
+        &self,
+        host: &str,
+        port: u16,
+        timeout_ms: u64,
+    ) -> Result<bool, SshError> {
+        use tokio::time::{timeout, Duration};
+        
+        let timeout_duration = Duration::from_millis(timeout_ms);
+        
+        // Attempt to open a direct-tcpip channel to the target
+        let result = timeout(
+            timeout_duration,
+            self.handle_controller.open_direct_tcpip(
+                host,
+                port as u32,
+                "127.0.0.1",
+                0,
+            ),
+        ).await;
+        
+        match result {
+            Ok(Ok(channel)) => {
+                // Connection successful - port is available
+                // Close the channel immediately
+                let _ = channel.close().await;
+                Ok(true)
+            }
+            Ok(Err(e)) => {
+                // Connection failed - check if it's a connection refused
+                let err_str = e.to_string().to_lowercase();
+                if err_str.contains("connection refused") 
+                    || err_str.contains("connect failed")
+                    || err_str.contains("connectfailed")
+                    || err_str.contains("refused")
+                    || err_str.contains("failed to open channel") {
+                    Ok(false)
+                } else {
+                    Err(e)
+                }
+            }
+            Err(_) => {
+                // Timeout
+                Err(SshError::ConnectionFailed(format!(
+                    "Timeout checking port {}:{} ({}ms)",
+                    host, port, timeout_ms
+                )))
+            }
+        }
+    }
+
     // === Quick shortcuts for common HPC use cases ===
 
     /// Create a Jupyter notebook forward (local 8888 -> remote 8888)

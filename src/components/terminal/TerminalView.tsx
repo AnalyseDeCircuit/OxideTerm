@@ -177,7 +177,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    term.writeln(`\x1b[32mInitialized OxideTerm v0.1\x1b[0m`);
+    term.writeln(`\x1b[38;2;234;88;12mInitialized OxideTerm\x1b[0m`);
     
     // Delay WebSocket connection to avoid React StrictMode double-mount issue
     let wsConnectTimeout: ReturnType<typeof setTimeout> | null = null;

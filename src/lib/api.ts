@@ -322,6 +322,11 @@ export const api = {
     return invoke('forward_tensorboard', { sessionId, localPort, remotePort });
   },
 
+  forwardVscode: async (sessionId: string, localPort: number, remotePort: number): Promise<any> => {
+    if (USE_MOCK) return { success: true, forward: { id: 'mock-vscode' } };
+    return invoke('forward_vscode', { sessionId, localPort, remotePort });
+  },
+
   // ============ Health Check ============
   getConnectionHealth: async (sessionId: string): Promise<HealthMetrics> => {
     if (USE_MOCK) return mockHealthMetrics;
