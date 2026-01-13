@@ -1,7 +1,7 @@
 //! Configuration Storage
 //!
 //! Handles reading/writing configuration files to disk.
-//! Config location: ~/.oxideterm/connections.json
+//! Config location: ~/.oxideterm on macOS/Linux, %APPDATA%\OxideTerm on Windows
 
 use std::path::PathBuf;
 use tokio::fs;
@@ -26,11 +26,31 @@ pub enum StorageError {
 }
 
 /// Get the OxideTerm configuration directory
-/// Returns ~/.oxideterm on macOS/Linux
+/// Returns %APPDATA%\OxideTerm on Windows, ~/.oxideterm on macOS/Linux
 pub fn config_dir() -> Result<PathBuf, StorageError> {
-    dirs::home_dir()
-        .map(|home| home.join(".oxideterm"))
-        .ok_or(StorageError::NoConfigDir)
+    #[cfg(windows)]
+    {
+        // On Windows, prefer APPDATA for better compatibility
+        if let Some(app_data) = dirs::config_dir() {
+            return Ok(app_data.join("OxideTerm"));
+        }
+        // Fallback to home directory
+        dirs::home_dir()
+            .map(|home| home.join(".oxideterm"))
+            .ok_or(StorageError::NoConfigDir)
+    }
+    
+    #[cfg(not(windows))]
+    {
+        dirs::home_dir()
+            .map(|home| home.join(".oxideterm"))
+            .ok_or(StorageError::NoConfigDir)
+    }
+}
+
+/// Get the log directory for storing application logs
+pub fn log_dir() -> Result<PathBuf, StorageError> {
+    Ok(config_dir()?.join("logs"))
 }
 
 /// Get the connections file path
