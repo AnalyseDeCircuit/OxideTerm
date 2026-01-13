@@ -32,8 +32,8 @@ impl Default for ReconnectConfig {
     fn default() -> Self {
         Self {
             max_attempts: 5,
-            initial_delay_ms: 1000,      // 1 second
-            max_delay_ms: 30000,         // 30 seconds
+            initial_delay_ms: 1000, // 1 second
+            max_delay_ms: 30000,    // 30 seconds
             backoff_multiplier: 1.5,
             enabled: true,
         }
@@ -63,15 +63,30 @@ pub enum ReconnectEvent {
     /// Starting reconnection process
     Starting { session_id: String },
     /// Waiting before next attempt
-    Waiting { session_id: String, delay_ms: u64, attempt: u32 },
+    Waiting {
+        session_id: String,
+        delay_ms: u64,
+        attempt: u32,
+    },
     /// Attempting to reconnect
-    Attempting { session_id: String, attempt: u32, max_attempts: u32 },
+    Attempting {
+        session_id: String,
+        attempt: u32,
+        max_attempts: u32,
+    },
     /// Reconnection successful
     Success { session_id: String, attempt: u32 },
     /// Reconnection attempt failed
-    AttemptFailed { session_id: String, attempt: u32, error: String },
+    AttemptFailed {
+        session_id: String,
+        attempt: u32,
+        error: String,
+    },
     /// All attempts exhausted
-    Failed { session_id: String, total_attempts: u32 },
+    Failed {
+        session_id: String,
+        total_attempts: u32,
+    },
     /// Reconnection cancelled
     Cancelled { session_id: String },
 }
@@ -162,7 +177,7 @@ impl SessionReconnector {
     }
 
     /// Attempt reconnection with exponential backoff
-    /// 
+    ///
     /// Returns Ok(()) if reconnection succeeds, Err if all attempts fail.
     /// The actual connection logic should be provided by the caller via the
     /// `connect_fn` closure.
@@ -185,7 +200,8 @@ impl SessionReconnector {
 
         self.emit_event(ReconnectEvent::Starting {
             session_id: self.session_id.clone(),
-        }).await;
+        })
+        .await;
 
         let max_attempts = self.reconnect_config.max_attempts;
 
@@ -195,7 +211,8 @@ impl SessionReconnector {
                 *self.state.write().await = ReconnectState::Cancelled;
                 self.emit_event(ReconnectEvent::Cancelled {
                     session_id: self.session_id.clone(),
-                }).await;
+                })
+                .await;
                 return Err(ReconnectError::Cancelled);
             }
 
@@ -203,12 +220,13 @@ impl SessionReconnector {
             if attempt > 1 {
                 let delay_ms = self.calculate_delay(attempt);
                 *self.state.write().await = ReconnectState::Waiting;
-                
+
                 self.emit_event(ReconnectEvent::Waiting {
                     session_id: self.session_id.clone(),
                     delay_ms,
                     attempt,
-                }).await;
+                })
+                .await;
 
                 info!(
                     "Session {}: waiting {}ms before reconnect attempt {}/{}",
@@ -238,7 +256,8 @@ impl SessionReconnector {
                 session_id: self.session_id.clone(),
                 attempt,
                 max_attempts,
-            }).await;
+            })
+            .await;
 
             info!(
                 "Session {}: reconnection attempt {}/{}",
@@ -248,17 +267,18 @@ impl SessionReconnector {
             match connect_fn(&self.config).await {
                 Ok(()) => {
                     *self.state.write().await = ReconnectState::Reconnected;
-                    
+
                     self.emit_event(ReconnectEvent::Success {
                         session_id: self.session_id.clone(),
                         attempt,
-                    }).await;
+                    })
+                    .await;
 
                     info!(
                         "Session {}: reconnection successful on attempt {}",
                         self.session_id, attempt
                     );
-                    
+
                     return Ok(());
                 }
                 Err(error) => {
@@ -266,7 +286,8 @@ impl SessionReconnector {
                         session_id: self.session_id.clone(),
                         attempt,
                         error: error.clone(),
-                    }).await;
+                    })
+                    .await;
 
                     warn!(
                         "Session {}: reconnection attempt {} failed: {}",
@@ -278,11 +299,12 @@ impl SessionReconnector {
 
         // All attempts exhausted
         *self.state.write().await = ReconnectState::Failed;
-        
+
         self.emit_event(ReconnectEvent::Failed {
             session_id: self.session_id.clone(),
             total_attempts: max_attempts,
-        }).await;
+        })
+        .await;
 
         error!(
             "Session {}: reconnection failed after {} attempts",
@@ -311,7 +333,9 @@ impl std::fmt::Display for ReconnectError {
         match self {
             Self::Disabled => write!(f, "Reconnection is disabled"),
             Self::Cancelled => write!(f, "Reconnection was cancelled"),
-            Self::MaxAttemptsReached(n) => write!(f, "Maximum reconnection attempts ({}) reached", n),
+            Self::MaxAttemptsReached(n) => {
+                write!(f, "Maximum reconnection attempts ({}) reached", n)
+            }
             Self::SessionNotFound(id) => write!(f, "Session {} not found", id),
         }
     }
@@ -343,7 +367,7 @@ mod tests {
             rows: 24,
             connection_id: None,
         };
-        
+
         let reconnector = SessionReconnector::new(
             "test-session".to_string(),
             config,
@@ -352,10 +376,10 @@ mod tests {
 
         // First attempt: 1000ms
         assert_eq!(reconnector.calculate_delay(1), 1000);
-        
+
         // Second attempt: 1500ms (1000 * 1.5)
         assert_eq!(reconnector.calculate_delay(2), 1500);
-        
+
         // Third attempt: 2250ms (1000 * 1.5^2)
         assert_eq!(reconnector.calculate_delay(3), 2250);
     }
@@ -372,7 +396,7 @@ mod tests {
             rows: 24,
             connection_id: None,
         };
-        
+
         let reconnector = SessionReconnector::new(
             "test-session".to_string(),
             config,

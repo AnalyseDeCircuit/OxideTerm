@@ -7,29 +7,29 @@ use serde::{Deserialize, Serialize};
 pub struct SshConfig {
     /// Remote host address
     pub host: String,
-    
+
     /// SSH port (default: 22)
     #[serde(default = "default_port")]
     pub port: u16,
-    
+
     /// Username for authentication
     pub username: String,
-    
+
     /// Authentication method
     pub auth: AuthMethod,
-    
+
     /// Connection timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
-    
+
     /// Terminal columns
     #[serde(default = "default_cols")]
     pub cols: u32,
-    
+
     /// Terminal rows
     #[serde(default = "default_rows")]
     pub rows: u32,
-    
+
     /// Optional proxy chain for jump hosts (ProxyJump)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_chain: Option<Vec<ProxyHopConfig>>,
@@ -40,14 +40,14 @@ pub struct SshConfig {
 pub struct ProxyHopConfig {
     /// Jump host address
     pub host: String,
-    
+
     /// Jump host port (default: 22)
     #[serde(default = "default_port")]
     pub port: u16,
-    
+
     /// Username for the jump host
     pub username: String,
-    
+
     /// Authentication method for the jump host
     pub auth: AuthMethod,
 }
@@ -58,7 +58,7 @@ pub struct ProxyHopConfig {
 pub enum AuthMethod {
     /// Password authentication
     Password(String),
-    
+
     /// SSH key authentication
     Key {
         /// Path to private key file
@@ -66,7 +66,7 @@ pub enum AuthMethod {
         /// Optional passphrase for encrypted keys
         passphrase: Option<String>,
     },
-    
+
     /// SSH agent authentication
     Agent,
 }

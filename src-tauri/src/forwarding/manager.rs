@@ -10,9 +10,16 @@ use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
 
-use super::local::{LocalForward, LocalForwardHandle, start_local_forward, ForwardStats as LocalForwardStats};
-use super::remote::{RemoteForward, RemoteForwardHandle, start_remote_forward, ForwardStats as RemoteForwardStats};
-use super::dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward, ForwardStats as DynamicForwardStats};
+use super::dynamic::{
+    start_dynamic_forward, DynamicForward, DynamicForwardHandle,
+    ForwardStats as DynamicForwardStats,
+};
+use super::local::{
+    start_local_forward, ForwardStats as LocalForwardStats, LocalForward, LocalForwardHandle,
+};
+use super::remote::{
+    start_remote_forward, ForwardStats as RemoteForwardStats, RemoteForward, RemoteForwardHandle,
+};
 use crate::ssh::{HandleController, SshError};
 
 /// Forward statistics (unified for all types)
@@ -110,7 +117,12 @@ pub struct ForwardRule {
 
 impl ForwardRule {
     /// Create a local forward rule
-    pub fn local(bind_addr: impl Into<String>, bind_port: u16, target_host: impl Into<String>, target_port: u16) -> Self {
+    pub fn local(
+        bind_addr: impl Into<String>,
+        bind_port: u16,
+        target_host: impl Into<String>,
+        target_port: u16,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             forward_type: ForwardType::Local,
@@ -124,7 +136,12 @@ impl ForwardRule {
     }
 
     /// Create a remote forward rule
-    pub fn remote(bind_addr: impl Into<String>, bind_port: u16, target_host: impl Into<String>, target_port: u16) -> Self {
+    pub fn remote(
+        bind_addr: impl Into<String>,
+        bind_port: u16,
+        target_host: impl Into<String>,
+        target_port: u16,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             forward_type: ForwardType::Remote,
@@ -198,10 +215,10 @@ struct DynamicForwardEntry {
 }
 
 /// Port forwarding manager
-/// 
+///
 /// Manages all port forwards for a session. Thread-safe and designed
 /// for concurrent access from multiple Tauri commands.
-/// 
+///
 /// Uses `HandleController` (message-passing) to communicate with the
 /// Handle Owner Task, avoiding direct Handle access and mutex locks.
 pub struct ForwardingManager {
@@ -243,7 +260,10 @@ impl ForwardingManager {
     }
 
     /// Create a local port forward
-    pub async fn create_local_forward(&self, mut rule: ForwardRule) -> Result<ForwardRule, SshError> {
+    pub async fn create_local_forward(
+        &self,
+        mut rule: ForwardRule,
+    ) -> Result<ForwardRule, SshError> {
         if rule.forward_type != ForwardType::Local {
             return Err(SshError::ConnectionFailed("Invalid forward type".into()));
         }
@@ -256,12 +276,12 @@ impl ForwardingManager {
         };
 
         info!(
-            "Creating local forward {} -> {}:{}", 
+            "Creating local forward {} -> {}:{}",
             config.local_addr, config.remote_host, config.remote_port
         );
 
         let handle = start_local_forward(self.handle_controller.clone(), config).await?;
-        
+
         // Update rule with actual bound address
         rule.bind_address = handle.bound_addr.ip().to_string();
         rule.bind_port = handle.bound_addr.port();
@@ -272,14 +292,20 @@ impl ForwardingManager {
             handle,
         };
 
-        self.local_forwards.write().await.insert(rule.id.clone(), entry);
+        self.local_forwards
+            .write()
+            .await
+            .insert(rule.id.clone(), entry);
 
         info!("Local forward created: {}", rule.id);
         Ok(rule)
     }
 
     /// Create a remote port forward
-    pub async fn create_remote_forward(&self, mut rule: ForwardRule) -> Result<ForwardRule, SshError> {
+    pub async fn create_remote_forward(
+        &self,
+        mut rule: ForwardRule,
+    ) -> Result<ForwardRule, SshError> {
         if rule.forward_type != ForwardType::Remote {
             return Err(SshError::ConnectionFailed("Invalid forward type".into()));
         }
@@ -305,14 +331,20 @@ impl ForwardingManager {
             handle,
         };
 
-        self.remote_forwards.write().await.insert(rule.id.clone(), entry);
+        self.remote_forwards
+            .write()
+            .await
+            .insert(rule.id.clone(), entry);
 
         info!("Remote forward created: {}", rule.id);
         Ok(rule)
     }
 
     /// Create a dynamic (SOCKS5) port forward
-    pub async fn create_dynamic_forward(&self, mut rule: ForwardRule) -> Result<ForwardRule, SshError> {
+    pub async fn create_dynamic_forward(
+        &self,
+        mut rule: ForwardRule,
+    ) -> Result<ForwardRule, SshError> {
         if rule.forward_type != ForwardType::Dynamic {
             return Err(SshError::ConnectionFailed("Invalid forward type".into()));
         }
@@ -322,13 +354,10 @@ impl ForwardingManager {
             description: rule.description.clone(),
         };
 
-        info!(
-            "Creating dynamic (SOCKS5) forward on {}",
-            config.local_addr
-        );
+        info!("Creating dynamic (SOCKS5) forward on {}", config.local_addr);
 
         let handle = start_dynamic_forward(self.handle_controller.clone(), config).await?;
-        
+
         // Update rule with actual bound address
         rule.bind_address = handle.bound_addr.ip().to_string();
         rule.bind_port = handle.bound_addr.port();
@@ -339,7 +368,10 @@ impl ForwardingManager {
             handle,
         };
 
-        self.dynamic_forwards.write().await.insert(rule.id.clone(), entry);
+        self.dynamic_forwards
+            .write()
+            .await
+            .insert(rule.id.clone(), entry);
 
         info!("Dynamic forward created: {}", rule.id);
         Ok(rule)
@@ -362,7 +394,10 @@ impl ForwardingManager {
             // Save the rule for potential restart
             let mut rule = entry.rule.clone();
             rule.status = ForwardStatus::Stopped;
-            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
+            self.stopped_forwards
+                .write()
+                .await
+                .insert(forward_id.to_string(), rule);
             info!("Stopped local forward: {}", forward_id);
             return Ok(());
         }
@@ -373,7 +408,10 @@ impl ForwardingManager {
             // Save the rule for potential restart
             let mut rule = entry.rule.clone();
             rule.status = ForwardStatus::Stopped;
-            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
+            self.stopped_forwards
+                .write()
+                .await
+                .insert(forward_id.to_string(), rule);
             info!("Stopped remote forward: {}", forward_id);
             return Ok(());
         }
@@ -384,7 +422,10 @@ impl ForwardingManager {
             // Save the rule for potential restart
             let mut rule = entry.rule.clone();
             rule.status = ForwardStatus::Stopped;
-            self.stopped_forwards.write().await.insert(forward_id.to_string(), rule);
+            self.stopped_forwards
+                .write()
+                .await
+                .insert(forward_id.to_string(), rule);
             info!("Stopped dynamic forward: {}", forward_id);
             return Ok(());
         }
@@ -399,9 +440,15 @@ impl ForwardingManager {
     pub async fn delete_forward(&self, forward_id: &str) -> Result<(), SshError> {
         // First try to stop if it's still active
         let _ = self.stop_forward(forward_id).await;
-        
+
         // Now remove from stopped_forwards
-        if self.stopped_forwards.write().await.remove(forward_id).is_some() {
+        if self
+            .stopped_forwards
+            .write()
+            .await
+            .remove(forward_id)
+            .is_some()
+        {
             info!("Deleted forward: {}", forward_id);
             return Ok(());
         }
@@ -415,25 +462,33 @@ impl ForwardingManager {
     /// Restart a stopped forward
     pub async fn restart_forward(&self, forward_id: &str) -> Result<ForwardRule, SshError> {
         // Get the rule from stopped_forwards
-        let rule = self.stopped_forwards.write().await.remove(forward_id)
-            .ok_or_else(|| SshError::ConnectionFailed(format!(
-                "Stopped forward not found: {}",
-                forward_id
-            )))?;
+        let rule = self
+            .stopped_forwards
+            .write()
+            .await
+            .remove(forward_id)
+            .ok_or_else(|| {
+                SshError::ConnectionFailed(format!("Stopped forward not found: {}", forward_id))
+            })?;
 
         // Create a new forward with the same rule (keep the same ID)
         self.create_forward(rule).await
     }
 
     /// Update a stopped forward's configuration
-    pub async fn update_forward(&self, forward_id: &str, updates: ForwardRuleUpdate) -> Result<ForwardRule, SshError> {
+    pub async fn update_forward(
+        &self,
+        forward_id: &str,
+        updates: ForwardRuleUpdate,
+    ) -> Result<ForwardRule, SshError> {
         let mut stopped = self.stopped_forwards.write().await;
-        
-        let rule = stopped.get_mut(forward_id)
-            .ok_or_else(|| SshError::ConnectionFailed(format!(
+
+        let rule = stopped.get_mut(forward_id).ok_or_else(|| {
+            SshError::ConnectionFailed(format!(
                 "Stopped forward not found: {}. Only stopped forwards can be edited.",
                 forward_id
-            )))?;
+            ))
+        })?;
 
         // Apply updates
         if let Some(bind_address) = updates.bind_address {
@@ -462,17 +517,17 @@ impl ForwardingManager {
         if let Some(entry) = self.local_forwards.read().await.get(forward_id) {
             return Some(entry.handle.stats().into());
         }
-        
+
         // Check remote forwards
         if let Some(entry) = self.remote_forwards.read().await.get(forward_id) {
             return Some(entry.handle.stats().into());
         }
-        
+
         // Check dynamic forwards
         if let Some(entry) = self.dynamic_forwards.read().await.get(forward_id) {
             return Some(entry.handle.stats().into());
         }
-        
+
         None
     }
 
@@ -571,16 +626,16 @@ impl ForwardingManager {
 
     /// Count active forwards
     pub async fn count(&self) -> usize {
-        self.local_forwards.read().await.len() 
+        self.local_forwards.read().await.len()
             + self.remote_forwards.read().await.len()
             + self.dynamic_forwards.read().await.len()
     }
 
     /// Check if a port is available on the remote host
-    /// 
+    ///
     /// This attempts to open a TCP connection to the target host:port
     /// through SSH to verify the port is reachable before creating a forward.
-    /// 
+    ///
     /// Returns:
     /// - `Ok(true)` if port is reachable
     /// - `Ok(false)` if connection refused (port not listening)
@@ -592,20 +647,17 @@ impl ForwardingManager {
         timeout_ms: u64,
     ) -> Result<bool, SshError> {
         use tokio::time::{timeout, Duration};
-        
+
         let timeout_duration = Duration::from_millis(timeout_ms);
-        
+
         // Attempt to open a direct-tcpip channel to the target
         let result = timeout(
             timeout_duration,
-            self.handle_controller.open_direct_tcpip(
-                host,
-                port as u32,
-                "127.0.0.1",
-                0,
-            ),
-        ).await;
-        
+            self.handle_controller
+                .open_direct_tcpip(host, port as u32, "127.0.0.1", 0),
+        )
+        .await;
+
         match result {
             Ok(Ok(channel)) => {
                 // Connection successful - port is available
@@ -616,11 +668,12 @@ impl ForwardingManager {
             Ok(Err(e)) => {
                 // Connection failed - check if it's a connection refused
                 let err_str = e.to_string().to_lowercase();
-                if err_str.contains("connection refused") 
+                if err_str.contains("connection refused")
                     || err_str.contains("connect failed")
                     || err_str.contains("connectfailed")
                     || err_str.contains("refused")
-                    || err_str.contains("failed to open channel") {
+                    || err_str.contains("failed to open channel")
+                {
                     Ok(false)
                 } else {
                     Err(e)
@@ -639,21 +692,33 @@ impl ForwardingManager {
     // === Quick shortcuts for common HPC use cases ===
 
     /// Create a Jupyter notebook forward (local 8888 -> remote 8888)
-    pub async fn forward_jupyter(&self, local_port: u16, remote_port: u16) -> Result<ForwardRule, SshError> {
+    pub async fn forward_jupyter(
+        &self,
+        local_port: u16,
+        remote_port: u16,
+    ) -> Result<ForwardRule, SshError> {
         let rule = ForwardRule::local("127.0.0.1", local_port, "localhost", remote_port)
             .with_description(format!("Jupyter Notebook ({})", remote_port));
         self.create_forward(rule).await
     }
 
     /// Create a TensorBoard forward (local 6006 -> remote 6006)
-    pub async fn forward_tensorboard(&self, local_port: u16, remote_port: u16) -> Result<ForwardRule, SshError> {
+    pub async fn forward_tensorboard(
+        &self,
+        local_port: u16,
+        remote_port: u16,
+    ) -> Result<ForwardRule, SshError> {
         let rule = ForwardRule::local("127.0.0.1", local_port, "localhost", remote_port)
             .with_description(format!("TensorBoard ({})", remote_port));
         self.create_forward(rule).await
     }
 
     /// Create a VS Code Remote forward (for code-server)
-    pub async fn forward_vscode(&self, local_port: u16, remote_port: u16) -> Result<ForwardRule, SshError> {
+    pub async fn forward_vscode(
+        &self,
+        local_port: u16,
+        remote_port: u16,
+    ) -> Result<ForwardRule, SshError> {
         let rule = ForwardRule::local("127.0.0.1", local_port, "localhost", remote_port)
             .with_description(format!("VS Code Server ({})", remote_port));
         self.create_forward(rule).await
@@ -675,16 +740,15 @@ mod tests {
 
     #[test]
     fn test_forward_rule_remote() {
-        let rule = ForwardRule::remote("0.0.0.0", 9000, "localhost", 3000)
-            .with_description("API Server");
+        let rule =
+            ForwardRule::remote("0.0.0.0", 9000, "localhost", 3000).with_description("API Server");
         assert_eq!(rule.forward_type, ForwardType::Remote);
         assert!(rule.description.unwrap().contains("API"));
     }
 
     #[test]
     fn test_forward_rule_custom_id() {
-        let rule = ForwardRule::local("127.0.0.1", 8888, "localhost", 8888)
-            .with_id("my-jupyter");
+        let rule = ForwardRule::local("127.0.0.1", 8888, "localhost", 8888).with_id("my-jupyter");
         assert_eq!(rule.id, "my-jupyter");
     }
 }

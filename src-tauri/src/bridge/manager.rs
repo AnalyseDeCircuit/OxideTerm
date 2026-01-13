@@ -110,9 +110,7 @@ impl BridgeManager {
     pub async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<(), String> {
         let cmd_tx = {
             let bridges = self.bridges.read();
-            bridges
-                .get(session_id)
-                .and_then(|h| h.cmd_tx.clone())
+            bridges.get(session_id).and_then(|h| h.cmd_tx.clone())
         };
 
         if let Some(tx) = cmd_tx {

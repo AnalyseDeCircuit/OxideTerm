@@ -1,15 +1,15 @@
 //! SSH Client implementation using russh
 
-use std::sync::Arc;
 use std::net::ToSocketAddrs;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use russh::*;
 use russh_keys::PublicKey;
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
 
-use super::config::{SshConfig, AuthMethod};
+use super::config::{AuthMethod, SshConfig};
 use super::error::SshError;
 use super::session::SshSession;
 
@@ -26,9 +26,9 @@ impl SshClient {
     /// Connect to the SSH server and return a session
     pub async fn connect(self) -> Result<SshSession, SshError> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        
+
         info!("Connecting to SSH server at {}", addr);
-        
+
         // Resolve address
         let socket_addr = addr
             .to_socket_addrs()
@@ -40,7 +40,7 @@ impl SshClient {
         let ssh_config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(300)), // 5 min inactivity timeout
             keepalive_interval: Some(Duration::from_secs(30)),  // Send keepalive every 30s
-            keepalive_max: 3,  // Disconnect after 3 missed keepalives (90s total)
+            keepalive_max: 3, // Disconnect after 3 missed keepalives (90s total)
             ..Default::default()
         };
 
@@ -60,13 +60,14 @@ impl SshClient {
 
         // Authenticate
         let authenticated = match &self.config.auth {
-            AuthMethod::Password(password) => {
-                handle
-                    .authenticate_password(&self.config.username, password)
-                    .await
-                    .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
-            }
-            AuthMethod::Key { key_path, passphrase } => {
+            AuthMethod::Password(password) => handle
+                .authenticate_password(&self.config.username, password)
+                .await
+                .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?,
+            AuthMethod::Key {
+                key_path,
+                passphrase,
+            } => {
                 let key = if let Some(pass) = passphrase {
                     russh_keys::load_secret_key(key_path, Some(pass))
                         .map_err(|e| SshError::KeyError(e.to_string()))?
@@ -74,7 +75,7 @@ impl SshClient {
                     russh_keys::load_secret_key(key_path, None)
                         .map_err(|e| SshError::KeyError(e.to_string()))?
                 };
-                
+
                 handle
                     .authenticate_publickey(&self.config.username, Arc::new(key))
                     .await
@@ -102,7 +103,7 @@ impl SshClient {
 }
 
 /// Client handler for russh callbacks
-/// 
+///
 /// This handler processes server-initiated events, including:
 /// - Host key verification
 /// - Remote port forwarding (forwarded-tcpip channels)
@@ -153,7 +154,9 @@ impl client::Handler for ClientHandler {
                 connected_port,
                 &originator_address,
                 originator_port,
-            ).await {
+            )
+            .await
+            {
                 warn!(
                     "Failed to handle forwarded connection {}:{}: {}",
                     connected_address, connected_port, e
@@ -164,4 +167,3 @@ impl client::Handler for ClientHandler {
         Ok(())
     }
 }
-

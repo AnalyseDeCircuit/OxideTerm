@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use base64::Engine;
 use parking_lot::RwLock;
-use russh_sftp::client::SftpSession as RusshSftpSession;
 use russh_sftp::client::error::Error as SftpErrorInner;
+use russh_sftp::client::SftpSession as RusshSftpSession;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
@@ -42,10 +42,9 @@ impl SftpSession {
             .map_err(|e| SftpError::ChannelError(e.to_string()))?;
 
         // Request SFTP subsystem on the channel
-        channel
-            .request_subsystem(true, "sftp")
-            .await
-            .map_err(|e| SftpError::SubsystemNotAvailable(format!("Failed to request SFTP subsystem: {}", e)))?;
+        channel.request_subsystem(true, "sftp").await.map_err(|e| {
+            SftpError::SubsystemNotAvailable(format!("Failed to request SFTP subsystem: {}", e))
+        })?;
 
         // Create SFTP session from the channel stream
         let sftp = RusshSftpSession::new(channel.into_stream())
@@ -87,7 +86,7 @@ impl SftpSession {
         debug!("Listing directory: {}", canonical_path);
 
         let mut entries = Vec::new();
-        
+
         // Use read_dir to get directory entries
         let read_dir = self
             .sftp
@@ -98,7 +97,7 @@ impl SftpSession {
         // Iterate through entries
         for entry in read_dir {
             let name = entry.file_name();
-            
+
             // Skip . and ..
             if name == "." || name == ".." {
                 continue;
@@ -119,7 +118,7 @@ impl SftpSession {
 
             // Get file metadata
             let metadata = entry.metadata();
-            
+
             // Determine file type
             let file_type = if metadata.is_dir() {
                 FileType::Directory
@@ -256,7 +255,11 @@ impl SftpSession {
     }
 
     /// Preview file content with offset (for incremental hex loading)
-    pub async fn preview_with_offset(&self, path: &str, offset: u64) -> Result<PreviewContent, SftpError> {
+    pub async fn preview_with_offset(
+        &self,
+        path: &str,
+        offset: u64,
+    ) -> Result<PreviewContent, SftpError> {
         let canonical_path = self.resolve_path(path).await?;
         debug!("Previewing file: {} (offset: {})", canonical_path, offset);
 
@@ -278,7 +281,9 @@ impl SftpSession {
 
         // Priority 1: Check by extension first (more reliable for scripts/configs)
         if is_text_extension(&extension) {
-            return self.preview_text(&canonical_path, &extension, &mime_type).await;
+            return self
+                .preview_text(&canonical_path, &extension, &mime_type)
+                .await;
         }
 
         // Priority 2: PDF files
@@ -293,17 +298,33 @@ impl SftpSession {
 
         // Priority 4: Images
         if mime_type.starts_with("image/") {
-            return self.preview_image(&canonical_path, file_size, &mime_type).await;
+            return self
+                .preview_image(&canonical_path, file_size, &mime_type)
+                .await;
         }
 
         // Priority 5: Video files
-        if is_video_mime(&mime_type) || matches!(extension.as_str(), "mp4" | "webm" | "ogg" | "mov" | "mkv" | "avi") {
-            return self.preview_video(&canonical_path, file_size, &mime_type).await;
+        if is_video_mime(&mime_type)
+            || matches!(
+                extension.as_str(),
+                "mp4" | "webm" | "ogg" | "mov" | "mkv" | "avi"
+            )
+        {
+            return self
+                .preview_video(&canonical_path, file_size, &mime_type)
+                .await;
         }
 
         // Priority 6: Audio files
-        if is_audio_mime(&mime_type) || matches!(extension.as_str(), "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a") {
-            return self.preview_audio(&canonical_path, file_size, &mime_type).await;
+        if is_audio_mime(&mime_type)
+            || matches!(
+                extension.as_str(),
+                "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a"
+            )
+        {
+            return self
+                .preview_audio(&canonical_path, file_size, &mime_type)
+                .await;
         }
 
         // Priority 7: Check MIME type for text
@@ -315,7 +336,9 @@ impl SftpSession {
             || mime_type == "application/yaml";
 
         if is_text_mime {
-            return self.preview_text(&canonical_path, &extension, &mime_type).await;
+            return self
+                .preview_text(&canonical_path, &extension, &mime_type)
+                .await;
         }
 
         // Fallback: Hex preview for unknown binary files
@@ -323,9 +346,14 @@ impl SftpSession {
     }
 
     /// Preview text/code files with syntax highlighting hint
-    async fn preview_text(&self, path: &str, extension: &str, mime_type: &str) -> Result<PreviewContent, SftpError> {
+    async fn preview_text(
+        &self,
+        path: &str,
+        extension: &str,
+        mime_type: &str,
+    ) -> Result<PreviewContent, SftpError> {
         let info = self.stat(path).await?;
-        
+
         // Check size limit for text
         if info.size > constants::MAX_TEXT_PREVIEW_SIZE {
             return Ok(PreviewContent::TooLarge {
@@ -335,7 +363,10 @@ impl SftpSession {
             });
         }
 
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         let text = String::from_utf8_lossy(&content).to_string();
@@ -349,7 +380,12 @@ impl SftpSession {
     }
 
     /// Preview image files
-    async fn preview_image(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+    async fn preview_image(
+        &self,
+        path: &str,
+        size: u64,
+        mime_type: &str,
+    ) -> Result<PreviewContent, SftpError> {
         if size > constants::MAX_PREVIEW_SIZE {
             return Ok(PreviewContent::TooLarge {
                 size,
@@ -358,15 +394,26 @@ impl SftpSession {
             });
         }
 
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         let data = base64::engine::general_purpose::STANDARD.encode(&content);
-        Ok(PreviewContent::Image { data, mime_type: mime_type.to_string() })
+        Ok(PreviewContent::Image {
+            data,
+            mime_type: mime_type.to_string(),
+        })
     }
 
     /// Preview video files
-    async fn preview_video(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+    async fn preview_video(
+        &self,
+        path: &str,
+        size: u64,
+        mime_type: &str,
+    ) -> Result<PreviewContent, SftpError> {
         if size > constants::MAX_MEDIA_PREVIEW_SIZE {
             return Ok(PreviewContent::TooLarge {
                 size,
@@ -375,7 +422,10 @@ impl SftpSession {
             });
         }
 
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         // Correct MIME type for common formats
@@ -390,11 +440,19 @@ impl SftpSession {
         };
 
         let data = base64::engine::general_purpose::STANDARD.encode(&content);
-        Ok(PreviewContent::Video { data, mime_type: actual_mime.to_string() })
+        Ok(PreviewContent::Video {
+            data,
+            mime_type: actual_mime.to_string(),
+        })
     }
 
     /// Preview audio files
-    async fn preview_audio(&self, path: &str, size: u64, mime_type: &str) -> Result<PreviewContent, SftpError> {
+    async fn preview_audio(
+        &self,
+        path: &str,
+        size: u64,
+        mime_type: &str,
+    ) -> Result<PreviewContent, SftpError> {
         if size > constants::MAX_MEDIA_PREVIEW_SIZE {
             return Ok(PreviewContent::TooLarge {
                 size,
@@ -403,7 +461,10 @@ impl SftpSession {
             });
         }
 
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         // Correct MIME type for common formats
@@ -418,7 +479,10 @@ impl SftpSession {
         };
 
         let data = base64::engine::general_purpose::STANDARD.encode(&content);
-        Ok(PreviewContent::Audio { data, mime_type: actual_mime.to_string() })
+        Ok(PreviewContent::Audio {
+            data,
+            mime_type: actual_mime.to_string(),
+        })
     }
 
     /// Preview PDF files
@@ -431,11 +495,17 @@ impl SftpSession {
             });
         }
 
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         let data = base64::engine::general_purpose::STANDARD.encode(&content);
-        Ok(PreviewContent::Pdf { data, original_mime: None })
+        Ok(PreviewContent::Pdf {
+            data,
+            original_mime: None,
+        })
     }
 
     /// Preview Office documents (convert to PDF via LibreOffice)
@@ -470,31 +540,40 @@ impl SftpSession {
 
         // Download to temp file
         let temp_dir = std::env::temp_dir().join("oxideterm_preview");
-        tokio::fs::create_dir_all(&temp_dir).await.map_err(SftpError::IoError)?;
+        tokio::fs::create_dir_all(&temp_dir)
+            .await
+            .map_err(SftpError::IoError)?;
 
         let filename = Path::new(path)
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("document");
         let temp_input = temp_dir.join(filename);
-        
+
         // Get original MIME type before conversion
         let original_mime = mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string();
 
         // Download the file
-        let content = self.sftp.read(path).await
+        let content = self
+            .sftp
+            .read(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
-        tokio::fs::write(&temp_input, &content).await.map_err(SftpError::IoError)?;
+        tokio::fs::write(&temp_input, &content)
+            .await
+            .map_err(SftpError::IoError)?;
 
         // Convert to PDF
         let soffice = soffice_path.unwrap();
         let output = tokio::process::Command::new(&soffice)
             .args([
                 "--headless",
-                "--convert-to", "pdf",
-                "--outdir", temp_dir.to_str().unwrap(),
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                temp_dir.to_str().unwrap(),
                 temp_input.to_str().unwrap(),
             ])
             .output()
@@ -515,25 +594,34 @@ impl SftpSession {
         }
 
         // Read the converted PDF
-        let pdf_name = Path::new(filename)
-            .with_extension("pdf");
+        let pdf_name = Path::new(filename).with_extension("pdf");
         let pdf_path = temp_dir.join(&pdf_name);
 
-        let pdf_content = tokio::fs::read(&pdf_path).await.map_err(SftpError::IoError)?;
-        
+        let pdf_content = tokio::fs::read(&pdf_path)
+            .await
+            .map_err(SftpError::IoError)?;
+
         // Clean up PDF file
         let _ = tokio::fs::remove_file(&pdf_path).await;
 
         let data = base64::engine::general_purpose::STANDARD.encode(&pdf_content);
-        Ok(PreviewContent::Pdf { data, original_mime: Some(original_mime) })
+        Ok(PreviewContent::Pdf {
+            data,
+            original_mime: Some(original_mime),
+        })
     }
 
     /// Preview binary files as hex dump (incremental)
-    async fn preview_hex(&self, path: &str, total_size: u64, offset: u64) -> Result<PreviewContent, SftpError> {
+    async fn preview_hex(
+        &self,
+        path: &str,
+        total_size: u64,
+        offset: u64,
+    ) -> Result<PreviewContent, SftpError> {
         use tokio::io::{AsyncReadExt, AsyncSeekExt};
-        
+
         let chunk_size = constants::HEX_CHUNK_SIZE;
-        
+
         // Don't read past end of file
         if offset >= total_size {
             return Ok(PreviewContent::Hex {
@@ -549,17 +637,23 @@ impl SftpSession {
         let bytes_to_read = std::cmp::min(chunk_size, total_size - offset) as usize;
 
         // Open file and seek to offset
-        let mut file = self.sftp.open(path).await
+        let mut file = self
+            .sftp
+            .open(path)
+            .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
-        
+
         if offset > 0 {
-            file.seek(std::io::SeekFrom::Start(offset)).await
+            file.seek(std::io::SeekFrom::Start(offset))
+                .await
                 .map_err(|e| SftpError::IoError(e))?;
         }
 
         // Read chunk
         let mut buffer = vec![0u8; bytes_to_read];
-        let bytes_read = file.read(&mut buffer).await
+        let bytes_read = file
+            .read(&mut buffer)
+            .await
             .map_err(|e| SftpError::IoError(e))?;
         buffer.truncate(bytes_read);
 
@@ -616,7 +710,7 @@ impl SftpSession {
         progress_tx: Option<mpsc::Sender<TransferProgress>>,
     ) -> Result<(), SftpError> {
         use tokio::io::AsyncReadExt;
-        
+
         let canonical_path = self.resolve_path(remote_path).await?;
         info!("Downloading {} to {}", canonical_path, local_path);
 
@@ -633,7 +727,7 @@ impl SftpSession {
         let total_bytes = info.size;
         let start_time = std::time::Instant::now();
         let mut transferred_bytes: u64 = 0;
-        
+
         // For instantaneous speed calculation
         let mut last_speed_time = std::time::Instant::now();
         let mut last_speed_bytes: u64 = 0;
@@ -675,9 +769,11 @@ impl SftpSession {
         let mut last_progress_time = std::time::Instant::now();
 
         loop {
-            let bytes_read = remote_file.read(&mut buffer).await
+            let bytes_read = remote_file
+                .read(&mut buffer)
+                .await
                 .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
-            
+
             if bytes_read == 0 {
                 break; // EOF
             }
@@ -690,10 +786,11 @@ impl SftpSession {
             transferred_bytes += bytes_read as u64;
 
             // Send progress update (throttled to every 100ms or 1% progress)
-            let should_send_progress = progress_tx.is_some() && (
-                last_progress_time.elapsed().as_millis() >= 100 ||
-                (total_bytes > 0 && (transferred_bytes * 100 / total_bytes) != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes))
-            );
+            let should_send_progress = progress_tx.is_some()
+                && (last_progress_time.elapsed().as_millis() >= 100
+                    || (total_bytes > 0
+                        && (transferred_bytes * 100 / total_bytes)
+                            != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes)));
 
             if should_send_progress {
                 if let Some(ref tx) = progress_tx {
@@ -711,7 +808,7 @@ impl SftpSession {
                         last_speed_time = std::time::Instant::now();
                         last_speed_bytes = transferred_bytes;
                     }
-                    
+
                     let eta_seconds = if current_speed > 0 && total_bytes > transferred_bytes {
                         Some((total_bytes - transferred_bytes) / current_speed)
                     } else {
@@ -782,7 +879,7 @@ impl SftpSession {
         progress_tx: Option<mpsc::Sender<TransferProgress>>,
     ) -> Result<(), SftpError> {
         use tokio::io::AsyncReadExt;
-        
+
         let canonical_path = self.resolve_path(remote_path).await.unwrap_or_else(|_| {
             // If path doesn't exist yet, construct it
             if remote_path.starts_with('/') {
@@ -803,7 +900,7 @@ impl SftpSession {
 
         let start_time = std::time::Instant::now();
         let mut transferred_bytes: u64 = 0;
-        
+
         // For instantaneous speed calculation
         let mut last_speed_time = std::time::Instant::now();
         let mut last_speed_bytes: u64 = 0;
@@ -845,9 +942,11 @@ impl SftpSession {
         let mut last_progress_time = std::time::Instant::now();
 
         loop {
-            let bytes_read = local_file.read(&mut buffer).await
+            let bytes_read = local_file
+                .read(&mut buffer)
+                .await
                 .map_err(SftpError::IoError)?;
-            
+
             if bytes_read == 0 {
                 break; // EOF
             }
@@ -860,10 +959,11 @@ impl SftpSession {
             transferred_bytes += bytes_read as u64;
 
             // Send progress update (throttled to every 100ms or 1% progress)
-            let should_send_progress = progress_tx.is_some() && (
-                last_progress_time.elapsed().as_millis() >= 100 ||
-                (total_bytes > 0 && (transferred_bytes * 100 / total_bytes) != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes))
-            );
+            let should_send_progress = progress_tx.is_some()
+                && (last_progress_time.elapsed().as_millis() >= 100
+                    || (total_bytes > 0
+                        && (transferred_bytes * 100 / total_bytes)
+                            != ((transferred_bytes - bytes_read as u64) * 100 / total_bytes)));
 
             if should_send_progress {
                 if let Some(ref tx) = progress_tx {
@@ -881,7 +981,7 @@ impl SftpSession {
                         last_speed_time = std::time::Instant::now();
                         last_speed_bytes = transferred_bytes;
                     }
-                    
+
                     let eta_seconds = if current_speed > 0 && total_bytes > transferred_bytes {
                         Some((total_bytes - transferred_bytes) / current_speed)
                     } else {
@@ -961,13 +1061,21 @@ impl SftpSession {
 
         let transfer_id = uuid::Uuid::new_v4().to_string();
         let start_time = std::time::Instant::now();
-        
+
         // Create local directory
         tokio::fs::create_dir_all(local_path)
             .await
             .map_err(SftpError::IoError)?;
 
-        let total_count = self.download_dir_inner(&canonical_path, local_path, &transfer_id, &progress_tx, &start_time).await?;
+        let total_count = self
+            .download_dir_inner(
+                &canonical_path,
+                local_path,
+                &transfer_id,
+                &progress_tx,
+                &start_time,
+            )
+            .await?;
 
         info!("Download directory complete: {} files", total_count);
         Ok(total_count)
@@ -982,11 +1090,16 @@ impl SftpSession {
         progress_tx: &Option<mpsc::Sender<TransferProgress>>,
         start_time: &std::time::Instant,
     ) -> Result<u64, SftpError> {
-        let entries = self.list_dir(remote_path, Some(ListFilter {
-            show_hidden: true,
-            pattern: None,
-            sort: SortOrder::Name,
-        })).await?;
+        let entries = self
+            .list_dir(
+                remote_path,
+                Some(ListFilter {
+                    show_hidden: true,
+                    pattern: None,
+                    sort: SortOrder::Name,
+                }),
+            )
+            .await?;
 
         let mut count = 0u64;
 
@@ -998,9 +1111,16 @@ impl SftpSession {
                 tokio::fs::create_dir_all(&local_entry_path)
                     .await
                     .map_err(SftpError::IoError)?;
-                
+
                 // Recurse into subdirectory (boxed to avoid infinite future size)
-                count += Box::pin(self.download_dir_inner(&entry.path, &local_entry_path, transfer_id, progress_tx, start_time)).await?;
+                count += Box::pin(self.download_dir_inner(
+                    &entry.path,
+                    &local_entry_path,
+                    transfer_id,
+                    progress_tx,
+                    start_time,
+                ))
+                .await?;
             } else {
                 // Download file
                 let content = self
@@ -1061,11 +1181,19 @@ impl SftpSession {
 
         let transfer_id = uuid::Uuid::new_v4().to_string();
         let start_time = std::time::Instant::now();
-        
+
         // Create remote directory
         let _ = self.mkdir(&canonical_path).await; // Ignore error if exists
 
-        let total_count = self.upload_dir_inner(local_path, &canonical_path, &transfer_id, &progress_tx, &start_time).await?;
+        let total_count = self
+            .upload_dir_inner(
+                local_path,
+                &canonical_path,
+                &transfer_id,
+                &progress_tx,
+                &start_time,
+            )
+            .await?;
 
         info!("Upload directory complete: {} files", total_count);
         Ok(total_count)
@@ -1096,7 +1224,7 @@ impl SftpSession {
             if metadata.is_dir() {
                 // Create remote directory
                 let _ = self.mkdir(&remote_entry_path).await;
-                
+
                 // Recurse into subdirectory (boxed to avoid infinite future size)
                 count += Box::pin(self.upload_dir_inner(
                     local_entry_path.to_string_lossy().as_ref(),
@@ -1104,7 +1232,8 @@ impl SftpSession {
                     transfer_id,
                     progress_tx,
                     start_time,
-                )).await?;
+                ))
+                .await?;
             } else {
                 // Upload file
                 let content = tokio::fs::read(&local_entry_path)
@@ -1174,7 +1303,7 @@ impl SftpSession {
     pub async fn delete_recursive(&self, path: &str) -> Result<u64, SftpError> {
         let canonical_path = self.resolve_path(path).await?;
         info!("Recursively deleting: {}", canonical_path);
-        
+
         self.delete_recursive_inner(&canonical_path).await
     }
 
@@ -1185,11 +1314,16 @@ impl SftpSession {
 
         if info.file_type == FileType::Directory {
             // List directory contents
-            let entries = self.list_dir(path, Some(ListFilter {
-                show_hidden: true,
-                pattern: None,
-                sort: SortOrder::Name,
-            })).await?;
+            let entries = self
+                .list_dir(
+                    path,
+                    Some(ListFilter {
+                        show_hidden: true,
+                        pattern: None,
+                        sort: SortOrder::Name,
+                    }),
+                )
+                .await?;
 
             // Recursively delete each entry (boxed to avoid infinite future size)
             for entry in entries {

@@ -3,7 +3,7 @@
 //! Monitors SSH connection health and provides metrics for UI display.
 //! Uses SSH keepalive responses to track connection quality.
 
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -86,11 +86,11 @@ pub struct HealthThresholds {
 impl Default for HealthThresholds {
     fn default() -> Self {
         Self {
-            degraded_latency_ms: 200,          // 200ms is noticeable
-            unresponsive_latency_ms: 2000,     // 2s is very slow
-            degraded_loss_percent: 5,           // 5% loss is noticeable
-            unresponsive_timeout_ms: 60000,     // 1 minute without response
-            latency_sample_count: 10,           // Average over 10 samples
+            degraded_latency_ms: 200,       // 200ms is noticeable
+            unresponsive_latency_ms: 2000,  // 2s is very slow
+            degraded_loss_percent: 5,       // 5% loss is noticeable
+            unresponsive_timeout_ms: 60000, // 1 minute without response
+            latency_sample_count: 10,       // Average over 10 samples
         }
     }
 }
@@ -147,8 +147,11 @@ impl HealthTracker {
     /// Record a keepalive packet sent
     pub fn record_sent(&self) {
         self.packets_sent.fetch_add(1, Ordering::SeqCst);
-        debug!("Health[{}]: keepalive sent (total: {})", 
-               self.session_id, self.packets_sent.load(Ordering::SeqCst));
+        debug!(
+            "Health[{}]: keepalive sent (total: {})",
+            self.session_id,
+            self.packets_sent.load(Ordering::SeqCst)
+        );
     }
 
     /// Record a keepalive response received with latency
@@ -163,8 +166,10 @@ impl HealthTracker {
         }
         samples.push(latency_ms);
 
-        debug!("Health[{}]: response received, latency={}ms", 
-               self.session_id, latency_ms);
+        debug!(
+            "Health[{}]: response received, latency={}ms",
+            self.session_id, latency_ms
+        );
     }
 
     /// Mark tracker as inactive (connection closed)
@@ -181,10 +186,10 @@ impl HealthTracker {
     pub async fn metrics(&self) -> HealthMetrics {
         let last_response = self.last_response.read().await;
         let samples = self.latency_samples.read().await;
-        
+
         let packets_sent = self.packets_sent.load(Ordering::SeqCst);
         let packets_received = self.packets_received.load(Ordering::SeqCst);
-        
+
         // Calculate packet loss
         let packet_loss_percent = if packets_sent > 0 {
             ((packets_sent - packets_received) * 100 / packets_sent) as u8
@@ -209,11 +214,7 @@ impl HealthTracker {
         let uptime_secs = self.connected_at.elapsed().as_secs();
 
         // Determine status
-        let status = self.evaluate_status(
-            latency_ms,
-            packet_loss_percent,
-            last_response_ago_ms,
-        );
+        let status = self.evaluate_status(latency_ms, packet_loss_percent, last_response_ago_ms);
 
         HealthMetrics {
             status,
@@ -324,15 +325,18 @@ mod tests {
     #[tokio::test]
     async fn test_health_tracker_basic() {
         let tracker = HealthTracker::new("test-session".to_string());
-        
+
         // Initial state
         let metrics = tracker.metrics().await;
-        assert!(matches!(metrics.status, HealthStatus::Unknown | HealthStatus::Healthy));
-        
+        assert!(matches!(
+            metrics.status,
+            HealthStatus::Unknown | HealthStatus::Healthy
+        ));
+
         // Record some data
         tracker.record_sent();
         tracker.record_response(50).await;
-        
+
         let metrics = tracker.metrics().await;
         assert_eq!(metrics.packets_sent, 1);
         assert_eq!(metrics.packets_received, 1);
@@ -343,11 +347,11 @@ mod tests {
     #[tokio::test]
     async fn test_health_degraded() {
         let tracker = HealthTracker::new("test-session".to_string());
-        
+
         // High latency
         tracker.record_sent();
-        tracker.record_response(500).await;  // Above degraded threshold
-        
+        tracker.record_response(500).await; // Above degraded threshold
+
         let metrics = tracker.metrics().await;
         assert_eq!(metrics.status, HealthStatus::Degraded);
     }
@@ -355,7 +359,7 @@ mod tests {
     #[tokio::test]
     async fn test_packet_loss() {
         let tracker = HealthTracker::new("test-session".to_string());
-        
+
         // Send 10, receive 8 = 20% loss
         for _ in 0..10 {
             tracker.record_sent();
@@ -363,7 +367,7 @@ mod tests {
         for _ in 0..8 {
             tracker.record_response(50).await;
         }
-        
+
         let metrics = tracker.metrics().await;
         assert_eq!(metrics.packet_loss_percent, 20);
         assert_eq!(metrics.status, HealthStatus::Degraded);

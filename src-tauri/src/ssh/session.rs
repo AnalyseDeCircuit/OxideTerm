@@ -3,11 +3,11 @@
 use russh::client::Handle;
 use russh::ChannelMsg;
 use tokio::sync::mpsc;
-use tracing::{info, debug, error};
+use tracing::{debug, error, info};
 
 use super::client::ClientHandler;
 use super::error::SshError;
-use super::handle_owner::{HandleController, spawn_handle_owner_task};
+use super::handle_owner::{spawn_handle_owner_task, HandleController};
 
 /// Commands that can be sent to the SSH session
 #[derive(Debug)]
@@ -75,7 +75,13 @@ impl SessionHandle {
 
 impl ExtendedSessionHandle {
     /// Consumes the handle and returns its parts
-    pub fn into_parts(self) -> (String, mpsc::Sender<SessionCommand>, mpsc::Receiver<Vec<u8>>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        String,
+        mpsc::Sender<SessionCommand>,
+        mpsc::Receiver<Vec<u8>>,
+    ) {
         // Use ManuallyDrop to prevent Drop from running
         let handle = std::mem::ManuallyDrop::new(self);
         // Safety: We're taking ownership and preventing double-drop via ManuallyDrop
@@ -89,7 +95,7 @@ impl ExtendedSessionHandle {
 }
 
 /// SSH Session with PTY
-/// 
+///
 /// This struct holds the Handle temporarily before spawning the Handle Owner Task.
 /// After calling `start()`, the Handle is moved into the owner task and a
 /// `HandleController` is returned for further operations.
@@ -105,7 +111,7 @@ impl SshSession {
     }
 
     /// Start the Handle Owner Task and return a controller
-    /// 
+    ///
     /// This consumes the Handle and spawns the owner task.
     /// The returned `HandleController` can be used to open channels, etc.
     pub fn start(self, session_id: String) -> HandleController {
@@ -118,43 +124,35 @@ impl SshSession {
     }
 
     /// Request a PTY and start an interactive shell session
-    /// 
+    ///
     /// This is a convenience method that:
     /// 1. Spawns the Handle Owner Task
     /// 2. Opens a session channel via the controller
     /// 3. Requests PTY and shell
     /// 4. Spawns a shell handler task
-    /// 
-    /// Returns both the `ExtendedSessionHandle` (for shell I/O) and 
+    ///
+    /// Returns both the `ExtendedSessionHandle` (for shell I/O) and
     /// the `HandleController` (for other operations like SFTP, forwarding)
-    pub async fn request_shell_extended(self) -> Result<(ExtendedSessionHandle, HandleController), SshError> {
+    pub async fn request_shell_extended(
+        self,
+    ) -> Result<(ExtendedSessionHandle, HandleController), SshError> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        
+
         info!("Starting Handle Owner Task for session {}", session_id);
-        
+
         // Spawn the Handle Owner Task - this takes ownership of the Handle
         let controller = spawn_handle_owner_task(self.handle, session_id.clone());
-        
+
         info!("Opening extended channel for session {}", session_id);
-        
+
         // Open a session channel via the controller
-        let mut channel = controller
-            .open_session_channel()
-            .await?;
+        let mut channel = controller.open_session_channel().await?;
 
         debug!("Channel opened, requesting PTY");
 
         // Request PTY
         channel
-            .request_pty(
-                false,
-                "xterm-256color",
-                self.cols,
-                self.rows,
-                0,
-                0,
-                &[],
-            )
+            .request_pty(false, "xterm-256color", self.cols, self.rows, 0, 0, &[])
             .await
             .map_err(|e| SshError::ChannelError(format!("PTY request failed: {}", e)))?;
 
@@ -166,7 +164,10 @@ impl SshSession {
             .await
             .map_err(|e| SshError::ChannelError(format!("Shell request failed: {}", e)))?;
 
-        info!("Interactive shell (extended) started for session {}", session_id);
+        info!(
+            "Interactive shell (extended) started for session {}",
+            session_id
+        );
 
         // Create channels for communication
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<SessionCommand>(1024);

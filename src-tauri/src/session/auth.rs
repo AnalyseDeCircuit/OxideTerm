@@ -46,7 +46,7 @@ impl KeyAuth {
     /// Create a new KeyAuth from a key path
     pub fn new(key_path: impl AsRef<Path>, passphrase: Option<&str>) -> Result<Self, KeyError> {
         let key_path = expand_tilde(key_path.as_ref());
-        
+
         if !key_path.exists() {
             return Err(KeyError::NotFound(key_path));
         }
@@ -60,14 +60,17 @@ impl KeyAuth {
     /// Try to load key from default locations
     pub fn from_default_locations(passphrase: Option<&str>) -> Result<Self, KeyError> {
         let default_keys = default_key_paths();
-        
+
         for path in default_keys {
             if path.exists() {
                 debug!("Trying default key: {:?}", path);
                 match load_private_key(&path, passphrase) {
                     Ok(key_pair) => {
                         info!("Loaded key from: {:?}", path);
-                        return Ok(Self { key_path: path, key_pair });
+                        return Ok(Self {
+                            key_path: path,
+                            key_pair,
+                        });
                     }
                     Err(KeyError::PassphraseRequired) => {
                         // Key exists but is encrypted, propagate error
@@ -88,10 +91,10 @@ impl KeyAuth {
 /// Load a private key from file
 pub fn load_private_key(path: &Path, passphrase: Option<&str>) -> Result<KeyPair, KeyError> {
     let key_data = std::fs::read_to_string(path)?;
-    
+
     // Check if key is encrypted
-    let is_encrypted = key_data.contains("ENCRYPTED") 
-        || key_data.contains("Proc-Type: 4,ENCRYPTED");
+    let is_encrypted =
+        key_data.contains("ENCRYPTED") || key_data.contains("Proc-Type: 4,ENCRYPTED");
 
     if is_encrypted && passphrase.is_none() {
         return Err(KeyError::PassphraseRequired);
@@ -99,20 +102,15 @@ pub fn load_private_key(path: &Path, passphrase: Option<&str>) -> Result<KeyPair
 
     // Try to decode the key
     match passphrase {
-        Some(pass) => {
-            russh_keys::decode_secret_key(&key_data, Some(pass))
-                .map_err(|e| {
-                    if e.to_string().contains("decrypt") || e.to_string().contains("password") {
-                        KeyError::InvalidPassphrase
-                    } else {
-                        KeyError::ParseError(e.to_string())
-                    }
-                })
-        }
-        None => {
-            russh_keys::decode_secret_key(&key_data, None)
-                .map_err(|e| KeyError::ParseError(e.to_string()))
-        }
+        Some(pass) => russh_keys::decode_secret_key(&key_data, Some(pass)).map_err(|e| {
+            if e.to_string().contains("decrypt") || e.to_string().contains("password") {
+                KeyError::InvalidPassphrase
+            } else {
+                KeyError::ParseError(e.to_string())
+            }
+        }),
+        None => russh_keys::decode_secret_key(&key_data, None)
+            .map_err(|e| KeyError::ParseError(e.to_string())),
     }
 }
 
@@ -122,16 +120,16 @@ pub fn default_key_paths() -> Vec<PathBuf> {
     let ssh_dir = home.join(".ssh");
 
     vec![
-        ssh_dir.join("id_ed25519"),    // Prefer Ed25519 (modern, fast)
-        ssh_dir.join("id_ecdsa"),       // Then ECDSA
-        ssh_dir.join("id_rsa"),         // Then RSA (legacy but common)
+        ssh_dir.join("id_ed25519"), // Prefer Ed25519 (modern, fast)
+        ssh_dir.join("id_ecdsa"),   // Then ECDSA
+        ssh_dir.join("id_rsa"),     // Then RSA (legacy but common)
     ]
 }
 
 /// Expand ~ to home directory
 fn expand_tilde(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
-    
+
     if path_str.starts_with("~/") {
         if let Some(home) = dirs::home_dir() {
             return home.join(&path_str[2..]);
@@ -141,7 +139,7 @@ fn expand_tilde(path: &Path) -> PathBuf {
             return home;
         }
     }
-    
+
     path.to_path_buf()
 }
 
@@ -177,7 +175,7 @@ mod tests {
     fn test_default_key_paths() {
         let paths = default_key_paths();
         assert!(paths.len() >= 3);
-        
+
         for path in &paths {
             let path_str = path.to_string_lossy();
             assert!(path_str.contains(".ssh"));

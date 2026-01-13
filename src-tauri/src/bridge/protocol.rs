@@ -74,7 +74,7 @@ impl Frame {
     /// Encode frame into bytes
     pub fn encode(&self) -> Bytes {
         let mut buf = BytesMut::new();
-        
+
         match self {
             Frame::Data(data) => {
                 buf.put_u8(MessageType::Data.as_byte());
@@ -99,7 +99,7 @@ impl Frame {
                 buf.extend_from_slice(msg_bytes);
             }
         }
-        
+
         buf.freeze()
     }
 
@@ -133,7 +133,10 @@ impl Frame {
 
         // Parse payload based on type
         let msg_type = MessageType::from_byte(msg_type).ok_or_else(|| {
-            io::Error::new(ErrorKind::InvalidData, format!("Unknown message type: {}", msg_type))
+            io::Error::new(
+                ErrorKind::InvalidData,
+                format!("Unknown message type: {}", msg_type),
+            )
         })?;
 
         let frame = match msg_type {
@@ -245,10 +248,10 @@ mod tests {
     fn test_data_frame_roundtrip() {
         let original = data_frame(Bytes::from_static(b"hello world"));
         let encoded = original.encode();
-        
+
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = Frame::decode(&mut buf).unwrap().unwrap();
-        
+
         match decoded {
             Frame::Data(data) => assert_eq!(data, &b"hello world"[..]),
             _ => panic!("Expected Data frame"),
@@ -259,10 +262,10 @@ mod tests {
     fn test_resize_frame_roundtrip() {
         let original = resize_frame(120, 40);
         let encoded = original.encode();
-        
+
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = Frame::decode(&mut buf).unwrap().unwrap();
-        
+
         match decoded {
             Frame::Resize { cols, rows } => {
                 assert_eq!(cols, 120);
@@ -276,10 +279,10 @@ mod tests {
     fn test_heartbeat_frame_roundtrip() {
         let original = heartbeat_frame(42);
         let encoded = original.encode();
-        
+
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = Frame::decode(&mut buf).unwrap().unwrap();
-        
+
         match decoded {
             Frame::Heartbeat(seq) => assert_eq!(seq, 42),
             _ => panic!("Expected Heartbeat frame"),
@@ -290,10 +293,10 @@ mod tests {
     fn test_error_frame_roundtrip() {
         let original = error_frame("Something went wrong");
         let encoded = original.encode();
-        
+
         let mut buf = BytesMut::from(&encoded[..]);
         let decoded = Frame::decode(&mut buf).unwrap().unwrap();
-        
+
         match decoded {
             Frame::Error(msg) => assert_eq!(msg, "Something went wrong"),
             _ => panic!("Expected Error frame"),
@@ -304,7 +307,7 @@ mod tests {
     fn test_partial_frame() {
         let frame = data_frame(Bytes::from_static(b"hello"));
         let encoded = frame.encode();
-        
+
         // Only provide partial data
         let mut buf = BytesMut::from(&encoded[..3]);
         assert!(Frame::decode(&mut buf).unwrap().is_none());
@@ -313,16 +316,16 @@ mod tests {
     #[test]
     fn test_codec_multiple_frames() {
         let mut codec = FrameCodec::new();
-        
+
         let f1 = data_frame(Bytes::from_static(b"first"));
         let f2 = resize_frame(80, 24);
         let f3 = heartbeat_frame(1);
-        
+
         // Feed all frames at once
         codec.feed(&f1.encode());
         codec.feed(&f2.encode());
         codec.feed(&f3.encode());
-        
+
         // Decode them one by one
         match codec.decode_next().unwrap().unwrap() {
             Frame::Data(d) => assert_eq!(d, &b"first"[..]),
@@ -339,7 +342,7 @@ mod tests {
             Frame::Heartbeat(seq) => assert_eq!(seq, 1),
             _ => panic!(),
         }
-        
+
         // No more frames
         assert!(codec.decode_next().unwrap().is_none());
     }

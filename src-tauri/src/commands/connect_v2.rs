@@ -6,19 +6,21 @@
 //! - Timeout handling
 //! - Key authentication
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::time::timeout;
 use tracing::info;
 
-use crate::session::{SessionRegistry, SessionConfig, AuthMethod, SessionInfo, SessionStats, KeyAuth};
-use crate::ssh::{SshClient, SshConfig, AuthMethod as SshAuthMethod};
-use crate::bridge::{WsBridge, BridgeManager};
-use crate::sftp::session::SftpRegistry;
-use crate::forwarding::ForwardingManager;
 use super::ForwardingRegistry;
+use crate::bridge::{BridgeManager, WsBridge};
+use crate::forwarding::ForwardingManager;
+use crate::session::{
+    AuthMethod, KeyAuth, SessionConfig, SessionInfo, SessionRegistry, SessionStats,
+};
+use crate::sftp::session::SftpRegistry;
+use crate::ssh::{AuthMethod as SshAuthMethod, SshClient, SshConfig};
 
 /// Connection timeout settings
 const HANDSHAKE_TIMEOUT_SECS: u64 = 30;
@@ -52,18 +54,39 @@ pub struct ConnectRequest {
     #[serde(default = "default_rows")]
     pub rows: u32,
     pub name: Option<String>,
+    pub proxy_chain: Option<Vec<ProxyChainRequest>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "auth_type", rename_all = "snake_case")]
 pub enum AuthRequest {
-    Password { password: String },
-    Key { key_path: String, passphrase: Option<String> },
-    DefaultKey { passphrase: Option<String> },
+    Password {
+        password: String,
+    },
+    Key {
+        key_path: String,
+        passphrase: Option<String>,
+    },
+    DefaultKey {
+        passphrase: Option<String>,
+    },
+    Agent,
 }
 
-fn default_cols() -> u32 { 80 }
-fn default_rows() -> u32 { 24 }
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProxyChainRequest {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth: AuthRequest,
+}
+
+fn default_cols() -> u32 {
+    80
+}
+fn default_rows() -> u32 {
+    24
+}
 
 /// Connect to SSH server (v2 with registry)
 #[tauri::command]
@@ -72,145 +95,318 @@ pub async fn connect_v2(
     registry: State<'_, Arc<SessionRegistry>>,
     forwarding_registry: State<'_, ForwardingRegistry>,
 ) -> Result<ConnectResponseV2, String> {
-    info!("Connect request: {}@{}:{}", request.username, request.host, request.port);
+    info!(
+        "Connect request: {}@{}:{}",
+        request.username, request.host, request.port
+    );
 
-    // Convert auth request to session config
-    let auth = match request.auth {
-        AuthRequest::Password { password } => AuthMethod::Password { password },
-        AuthRequest::Key { key_path, passphrase } => AuthMethod::Key { key_path, passphrase },
-        AuthRequest::DefaultKey { passphrase } => {
-            // Find default key
-            let key_auth = KeyAuth::from_default_locations(passphrase.as_deref())
-                .map_err(|e| format!("No SSH key found: {}", e))?;
-            AuthMethod::Key { 
-                key_path: key_auth.key_path.to_string_lossy().to_string(),
+    // === Branch: Proxy chain or direct connection ===
+    let (session_id, ws_port, ws_token) = if let Some(proxy_chain_req) = request.proxy_chain {
+        // === Multi-hop proxy connection ===
+        info!("Using proxy chain with {} hops", proxy_chain_req.len());
+
+        // Convert target auth
+        let target_auth = match request.auth {
+            AuthRequest::Password { password } => crate::ssh::AuthMethod::Password(password),
+            AuthRequest::Key {
+                key_path,
                 passphrase,
+            } => crate::ssh::AuthMethod::Key {
+                key_path,
+                passphrase,
+            },
+            AuthRequest::DefaultKey { passphrase } => {
+                let key_auth = KeyAuth::from_default_locations(passphrase.as_deref())
+                    .map_err(|e| format!("No SSH key found for target: {}", e))?;
+                crate::ssh::AuthMethod::Key {
+                    key_path: key_auth.key_path.to_string_lossy().to_string(),
+                    passphrase,
+                }
             }
+            AuthRequest::Agent => {
+                return Err("SSH Agent not yet supported".to_string());
+            }
+        };
+
+        // Convert proxy requests to ProxyHop
+        let mut chain = crate::ssh::ProxyChain::new();
+        for hop_req in &proxy_chain_req {
+            let hop_auth = match &hop_req.auth {
+                AuthRequest::Password { password } => {
+                    crate::ssh::AuthMethod::Password(password.clone())
+                }
+                AuthRequest::Key {
+                    key_path,
+                    passphrase,
+                } => crate::ssh::AuthMethod::Key {
+                    key_path: key_path.clone(),
+                    passphrase: passphrase.clone(),
+                },
+                AuthRequest::DefaultKey { passphrase } => {
+                    let key_auth = KeyAuth::from_default_locations(passphrase.as_deref())
+                        .map_err(|e| format!("No SSH key found for proxy hop: {}", e))?;
+                    crate::ssh::AuthMethod::Key {
+                        key_path: key_auth.key_path.to_string_lossy().to_string(),
+                        passphrase: passphrase.clone(),
+                    }
+                }
+                AuthRequest::Agent => {
+                    return Err("SSH Agent not yet supported".to_string());
+                }
+            };
+
+            chain = chain.add_hop(crate::ssh::ProxyHop {
+                host: hop_req.host.clone(),
+                port: hop_req.port,
+                username: hop_req.username.clone(),
+                auth: hop_auth,
+            });
         }
-    };
 
-    let config = SessionConfig {
-        host: request.host,
-        port: request.port,
-        username: request.username,
-        auth,
-        name: request.name,
-        color: None,
-        cols: request.cols,
-        rows: request.rows,
-    };
-
-    // Create session in registry (checks connection limit)
-    let session_id = registry.create_session(config.clone())
-        .map_err(|e| format!("Failed to create session: {}", e))?;
-
-    // Start connecting
-    if let Err(e) = registry.start_connecting(&session_id) {
-        registry.remove(&session_id);
-        return Err(format!("Failed to start connection: {}", e));
-    }
-
-    // Attempt connection with timeout
-    let result = connect_with_timeout(
-        &session_id,
-        &config,
-        registry.inner().clone(),
-        forwarding_registry.inner(),
-    ).await;
-
-    match result {
-        Ok(response) => Ok(response),
-        Err(e) => {
-            // Mark as failed in registry
-            let _ = registry.connect_failed(&session_id, e.clone());
-            Err(e)
-        }
-    }
-}
-
-/// Internal connection with timeout handling
-async fn connect_with_timeout(
-    session_id: &str,
-    config: &SessionConfig,
-    registry: Arc<SessionRegistry>,
-    forwarding_registry: &ForwardingRegistry,
-) -> Result<ConnectResponseV2, String> {
-    // Build SSH config
-    let ssh_auth = match &config.auth {
-        AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
-        AuthMethod::Key { key_path, passphrase } => SshAuthMethod::Key {
-            key_path: key_path.clone(),
-            passphrase: passphrase.clone(),
-        },
-        AuthMethod::Agent => {
-            return Err("SSH Agent not yet supported".to_string());
-        }
-    };
-
-    let ssh_config = SshConfig {
-        host: config.host.clone(),
-        port: config.port,
-        username: config.username.clone(),
-        auth: ssh_auth,
-        timeout_secs: HANDSHAKE_TIMEOUT_SECS,
-        cols: config.cols,
-        rows: config.rows,
-        proxy_chain: None, // TODO: Support proxy chain from connection config
-    };
-
-    // Connect with handshake timeout
-    let client = SshClient::new(ssh_config);
-    let connect_future = client.connect();
-    
-    let session = timeout(
-        Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
-        connect_future
-    )
-    .await
-    .map_err(|_| format!("Connection timeout after {}s", HANDSHAKE_TIMEOUT_SECS))?
-    .map_err(|e| format!("Connection failed: {}", e))?;
-
-    // Request shell with auth timeout
-    // This will spawn the Handle Owner Task and return both the shell handle and controller
-    let shell_future = session.request_shell_extended();
-    
-    let (session_handle, handle_controller) = timeout(
-        Duration::from_secs(AUTH_TIMEOUT_SECS),
-        shell_future
-    )
-    .await
-    .map_err(|_| format!("Authentication timeout after {}s", AUTH_TIMEOUT_SECS))?
-    .map_err(|e| format!("Shell request failed: {}", e))?;
-
-    // Get command sender for resize support
-    let cmd_tx = session_handle.cmd_tx.clone();
-
-    // Start WebSocket bridge
-    let (_, ws_port, ws_token) = WsBridge::start_extended(session_handle)
+        // Establish multi-hop SSH connection
+        let proxy_conn = crate::ssh::connect_via_proxy(
+            &chain,
+            &request.host,
+            request.port,
+            &request.username,
+            &target_auth,
+            HANDSHAKE_TIMEOUT_SECS,
+        )
         .await
-        .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
+        .map_err(|e| format!("Proxy connection failed: {}", e))?;
 
-    // Clone the handle controller for the forwarding manager
-    let forwarding_controller = handle_controller.clone();
+        info!(
+            "Multi-hop connection established: {} proxy handles",
+            proxy_conn.jump_handles.len()
+        );
 
-    // Update registry with success
-    registry.connect_success(session_id, ws_port, cmd_tx, handle_controller)
-        .map_err(|e| format!("Failed to update session state: {}", e))?;
+        // Create session config for target
+        let config = SessionConfig {
+            host: request.host.clone(),
+            port: request.port,
+            username: request.username.clone(),
+            auth: match target_auth {
+                crate::ssh::AuthMethod::Password(p) => AuthMethod::Password { password: p },
+                crate::ssh::AuthMethod::Key {
+                    key_path,
+                    passphrase,
+                } => AuthMethod::Key {
+                    key_path,
+                    passphrase,
+                },
+                crate::ssh::AuthMethod::Agent => AuthMethod::Agent,
+            },
+            name: request.name.clone(),
+            color: None,
+            cols: request.cols,
+            rows: request.rows,
+        };
 
-    // Register ForwardingManager for port forwarding support
-    let forwarding_manager = ForwardingManager::new(forwarding_controller, session_id.to_string());
-    forwarding_registry.register(session_id.to_string(), forwarding_manager).await;
-    info!("ForwardingManager registered for session {}", session_id);
+        // Create session in registry (checks connection limit)
+        let sid = registry
+            .create_session(config)
+            .map_err(|e| format!("Failed to create session: {}", e))?;
 
-    // Token is sent as first message after connection, not in URL
+        // Start connecting
+        if let Err(e) = registry.start_connecting(&sid) {
+            registry.remove(&sid);
+            return Err(format!("Failed to start connection: {}", e));
+        }
+
+        // Extract target handle for shell request
+        // The jump handles are stored in ProxyConnection and will be dropped when appropriate
+        let target_handle = proxy_conn.into_target_handle();
+        info!("Multi-hop proxy connection ready for session: {}", sid);
+
+        // The target_handle is a complete SSH session (handshake + auth done)
+        // We can directly use it to request shell
+        let session = crate::ssh::SshSession::new(target_handle, request.cols, request.rows);
+
+        // Request shell with auth timeout
+        let shell_future = session.request_shell_extended();
+
+        let (session_handle, handle_controller) =
+            timeout(Duration::from_secs(AUTH_TIMEOUT_SECS), shell_future)
+                .await
+                .map_err(|_| format!("Authentication timeout after {}s", AUTH_TIMEOUT_SECS))?
+                .map_err(|e| format!("Shell request failed: {}", e))?;
+
+        info!("Multi-hop proxy handles stored for session: {}", sid);
+
+        // Get command sender for resize support
+        let cmd_tx = session_handle.cmd_tx.clone();
+
+        // Start WebSocket bridge
+        let (_, port, token) = WsBridge::start_extended(session_handle)
+            .await
+            .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
+
+        // Clone the handle controller for the forwarding manager
+        let forwarding_controller = handle_controller.clone();
+
+        // Update registry with success
+        registry
+            .connect_success(&sid, port, cmd_tx, handle_controller)
+            .map_err(|e| format!("Failed to update session state: {}", e))?;
+
+        // Register ForwardingManager for port forwarding support
+        let forwarding_manager = ForwardingManager::new(forwarding_controller, sid.to_string());
+        forwarding_registry
+            .register(sid.to_string(), forwarding_manager)
+            .await;
+        info!("ForwardingManager registered for session {}", sid);
+
+        info!("Connection established: session={}, ws_port={}", sid, port);
+
+        (sid, port, token)
+    } else {
+        // === Direct connection (existing behavior) ===
+        // Convert auth request to session config
+        let auth = match request.auth {
+            AuthRequest::Password { password } => AuthMethod::Password { password },
+            AuthRequest::Key {
+                key_path,
+                passphrase,
+            } => AuthMethod::Key {
+                key_path,
+                passphrase,
+            },
+            AuthRequest::DefaultKey { passphrase } => {
+                // Find default key
+                let key_auth = KeyAuth::from_default_locations(passphrase.as_deref())
+                    .map_err(|e| format!("No SSH key found: {}", e))?;
+                AuthMethod::Key {
+                    key_path: key_auth.key_path.to_string_lossy().to_string(),
+                    passphrase,
+                }
+            }
+            AuthRequest::Agent => {
+                return Err("SSH Agent not yet supported".to_string());
+            }
+        };
+
+        let config = SessionConfig {
+            host: request.host.clone(),
+            port: request.port,
+            username: request.username.clone(),
+            auth: auth.clone(),
+            name: request.name.clone(),
+            color: None,
+            cols: request.cols,
+            rows: request.rows,
+        };
+
+        // Create session in registry (checks connection limit)
+        let sid = registry
+            .create_session(config.clone())
+            .map_err(|e| format!("Failed to create session: {}", e))?;
+
+        // Start connecting
+        if let Err(e) = registry.start_connecting(&sid) {
+            registry.remove(&sid);
+            return Err(format!("Failed to start connection: {}", e));
+        }
+
+        // Build SSH config
+        let ssh_auth = match &auth {
+            AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
+            AuthMethod::Key {
+                key_path,
+                passphrase,
+            } => SshAuthMethod::Key {
+                key_path: key_path.clone(),
+                passphrase: passphrase.clone(),
+            },
+            AuthMethod::Agent => {
+                registry.remove(&sid);
+                return Err("SSH Agent not yet supported".to_string());
+            }
+        };
+
+        let ssh_config = SshConfig {
+            host: config.host.clone(),
+            port: config.port,
+            username: config.username.clone(),
+            auth: ssh_auth,
+            timeout_secs: HANDSHAKE_TIMEOUT_SECS,
+            cols: config.cols,
+            rows: config.rows,
+            proxy_chain: None,
+        };
+
+        // Connect with handshake timeout
+        let client = SshClient::new(ssh_config);
+        let connect_future = client.connect();
+
+        let session = timeout(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS), connect_future)
+            .await
+            .map_err(|_| {
+                registry.remove(&sid);
+                format!("Connection timeout after {}s", HANDSHAKE_TIMEOUT_SECS)
+            })?
+            .map_err(|e| {
+                registry.remove(&sid);
+                format!("Connection failed: {}", e)
+            })?;
+
+        // Request shell with auth timeout
+        // This will spawn the Handle Owner Task and return both the shell handle and controller
+        let shell_future = session.request_shell_extended();
+
+        let (session_handle, handle_controller) =
+            timeout(Duration::from_secs(AUTH_TIMEOUT_SECS), shell_future)
+                .await
+                .map_err(|_| {
+                    registry.remove(&sid);
+                    format!("Authentication timeout after {}s", AUTH_TIMEOUT_SECS)
+                })?
+                .map_err(|e| {
+                    registry.remove(&sid);
+                    format!("Shell request failed: {}", e)
+                })?;
+
+        // Get command sender for resize support
+        let cmd_tx = session_handle.cmd_tx.clone();
+
+        // Start WebSocket bridge
+        let (_, port, token) = WsBridge::start_extended(session_handle)
+            .await
+            .map_err(|e| {
+                registry.remove(&sid);
+                format!("Failed to start WebSocket bridge: {}", e)
+            })?;
+
+        // Clone the handle controller for the forwarding manager
+        let forwarding_controller = handle_controller.clone();
+
+        // Update registry with success
+        registry
+            .connect_success(&sid, port, cmd_tx, handle_controller)
+            .map_err(|e| {
+                registry.remove(&sid);
+                format!("Failed to update session state: {}", e)
+            })?;
+
+        // Register ForwardingManager for port forwarding support
+        let forwarding_manager = ForwardingManager::new(forwarding_controller, sid.to_string());
+        forwarding_registry
+            .register(sid.to_string(), forwarding_manager)
+            .await;
+        info!("ForwardingManager registered for session {}", sid);
+
+        info!("Connection established: session={}, ws_port={}", sid, port);
+
+        (sid, port, token)
+    };
+
+    // Build response for both paths
     let ws_url = format!("ws://localhost:{}", ws_port);
-    let session_info = registry.get(session_id)
+    let session_info = registry
+        .get(&session_id)
         .ok_or_else(|| "Session disappeared from registry".to_string())?;
 
-    info!("Connection established: session={}, ws_url={}", session_id, ws_url);
-
     Ok(ConnectResponseV2 {
-        session_id: session_id.to_string(),
+        session_id,
         ws_url,
         port: ws_port,
         session: session_info,
@@ -269,7 +465,8 @@ pub async fn get_session(
     session_id: String,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<SessionInfo, String> {
-    registry.get(&session_id)
+    registry
+        .get(&session_id)
         .ok_or_else(|| format!("Session not found: {}", session_id))
 }
 
@@ -290,7 +487,8 @@ pub async fn reorder_sessions(
     ordered_ids: Vec<String>,
     registry: State<'_, Arc<SessionRegistry>>,
 ) -> Result<(), String> {
-    registry.reorder(&ordered_ids)
+    registry
+        .reorder(&ordered_ids)
         .map_err(|e| format!("Failed to reorder: {}", e))
 }
 
@@ -298,7 +496,10 @@ pub async fn reorder_sessions(
 #[tauri::command]
 pub async fn check_ssh_keys() -> Result<Vec<String>, String> {
     let keys = crate::session::auth::list_available_keys();
-    Ok(keys.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
+    Ok(keys
+        .into_iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
 }
 
 /// Restore persisted sessions (returns session metadata for selective restoration)
@@ -309,7 +510,7 @@ pub async fn restore_sessions(
     let sessions = registry
         .restore_sessions()
         .map_err(|e| format!("Failed to restore sessions: {:?}", e))?;
-    
+
     Ok(sessions
         .into_iter()
         .map(|s| PersistedSessionDto {

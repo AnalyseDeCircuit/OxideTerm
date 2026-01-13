@@ -6,14 +6,11 @@
 //! - Binary file format with unencrypted metadata
 //! - Git-friendly and offline-decryptable
 
+pub mod crypto;
 pub mod error;
 pub mod format;
-pub mod crypto;
 
 // Re-export main types
+pub use crypto::{compute_checksum, decrypt_oxide_file, encrypt_oxide_file};
 pub use error::OxideFileError;
-pub use format::{
-    OxideFile, OxideMetadata, EncryptedPayload, 
-    EncryptedConnection, EncryptedAuth
-};
-pub use crypto::{encrypt_oxide_file, decrypt_oxide_file, compute_checksum};
+pub use format::{EncryptedAuth, EncryptedConnection, EncryptedPayload, OxideFile, OxideMetadata};

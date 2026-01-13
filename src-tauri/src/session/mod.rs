@@ -7,16 +7,18 @@
 //! - Silent reconnection with exponential backoff
 //! - Connection health monitoring
 
+pub mod auth;
+mod health;
+mod reconnect;
 mod registry;
 mod state;
 pub mod types;
-mod reconnect;
-mod health;
-pub mod auth;
 
-pub use registry::{SessionRegistry, RegistryError};
+pub use auth::{load_private_key, KeyAuth};
+pub use health::{HealthMetrics, HealthStatus, HealthThresholds, HealthTracker, QuickHealthCheck};
+pub use reconnect::{
+    ReconnectConfig, ReconnectError, ReconnectEvent, ReconnectState, SessionReconnector,
+};
+pub use registry::{RegistryError, SessionRegistry};
 pub use state::{SessionState, SessionStateMachine};
-pub use types::{SessionConfig, SessionEntry, SessionStats, SessionInfo, AuthMethod};
-pub use auth::{KeyAuth, load_private_key};
-pub use reconnect::{SessionReconnector, ReconnectConfig, ReconnectState, ReconnectEvent, ReconnectError};
-pub use health::{HealthTracker, HealthStatus, HealthMetrics, HealthThresholds, QuickHealthCheck};
+pub use types::{AuthMethod, SessionConfig, SessionEntry, SessionInfo, SessionStats};

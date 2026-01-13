@@ -104,7 +104,7 @@ impl DynamicForwardHandle {
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
-    
+
     /// Get current stats
     pub fn stats(&self) -> ForwardStats {
         self.stats.read().clone()
@@ -130,9 +130,9 @@ pub async fn start_dynamic_forward(
         ))
     })?;
 
-    let bound_addr = listener.local_addr().map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to get bound address: {}", e))
-    })?;
+    let bound_addr = listener
+        .local_addr()
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to get bound address: {}", e)))?;
 
     info!("Started SOCKS5 proxy on {}", bound_addr);
 
@@ -175,13 +175,13 @@ pub async fn start_dynamic_forward(
                             // Spawn a task to handle this SOCKS5 connection
                             tokio::spawn(async move {
                                 let result = handle_socks5_connection(controller, stream, stats_for_conn.clone()).await;
-                                
+
                                 // Decrement active connections when done
                                 {
                                     let mut s = stats_for_conn.write();
                                     s.active_connections = s.active_connections.saturating_sub(1);
                                 }
-                                
+
                                 if let Err(e) = result {
                                     warn!("SOCKS5 connection error from {}: {}", peer_addr, e);
                                 }
@@ -217,27 +217,28 @@ async fn handle_socks5_connection(
 ) -> Result<(), SshError> {
     // Phase 1: Authentication negotiation
     let mut buf = [0u8; 258];
-    
+
     // Read version and auth method count
     stream.read_exact(&mut buf[..2]).await.map_err(|e| {
         SshError::ConnectionFailed(format!("Failed to read SOCKS5 greeting: {}", e))
     })?;
-    
+
     let version = buf[0];
     let nmethods = buf[1] as usize;
-    
+
     if version != socks5::VERSION {
         return Err(SshError::ConnectionFailed(format!(
             "Unsupported SOCKS version: {}",
             version
         )));
     }
-    
+
     // Read auth methods
-    stream.read_exact(&mut buf[..nmethods]).await.map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to read auth methods: {}", e))
-    })?;
-    
+    stream
+        .read_exact(&mut buf[..nmethods])
+        .await
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to read auth methods: {}", e)))?;
+
     // Check if NO AUTH is supported
     let no_auth_supported = buf[..nmethods].contains(&socks5::AUTH_NONE);
     if !no_auth_supported {
@@ -247,26 +248,30 @@ async fn handle_socks5_connection(
             "Client doesn't support NO AUTH method".into(),
         ));
     }
-    
+
     // Send auth success (no auth required)
-    stream.write_all(&[socks5::VERSION, socks5::AUTH_NONE]).await.map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to send auth response: {}", e))
-    })?;
-    
+    stream
+        .write_all(&[socks5::VERSION, socks5::AUTH_NONE])
+        .await
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to send auth response: {}", e)))?;
+
     // Phase 2: Connection request
-    stream.read_exact(&mut buf[..4]).await.map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to read SOCKS5 request: {}", e))
-    })?;
-    
+    stream
+        .read_exact(&mut buf[..4])
+        .await
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to read SOCKS5 request: {}", e)))?;
+
     let version = buf[0];
     let cmd = buf[1];
     // buf[2] is reserved
     let atyp = buf[3];
-    
+
     if version != socks5::VERSION {
-        return Err(SshError::ConnectionFailed("Invalid SOCKS5 version in request".into()));
+        return Err(SshError::ConnectionFailed(
+            "Invalid SOCKS5 version in request".into(),
+        ));
     }
-    
+
     if cmd != socks5::CMD_CONNECT {
         // Only CONNECT is supported
         send_socks5_reply(&mut stream, socks5::REP_CMD_NOT_SUPPORTED).await?;
@@ -275,7 +280,7 @@ async fn handle_socks5_connection(
             cmd
         )));
     }
-    
+
     // Parse destination address
     let (dest_host, dest_port) = match atyp {
         socks5::ATYP_IPV4 => {
@@ -291,9 +296,10 @@ async fn handle_socks5_connection(
                 SshError::ConnectionFailed(format!("Failed to read domain length: {}", e))
             })?;
             let domain_len = buf[0] as usize;
-            stream.read_exact(&mut buf[..domain_len + 2]).await.map_err(|e| {
-                SshError::ConnectionFailed(format!("Failed to read domain: {}", e))
-            })?;
+            stream
+                .read_exact(&mut buf[..domain_len + 2])
+                .await
+                .map_err(|e| SshError::ConnectionFailed(format!("Failed to read domain: {}", e)))?;
             let domain = String::from_utf8_lossy(&buf[..domain_len]).to_string();
             let port = u16::from_be_bytes([buf[domain_len], buf[domain_len + 1]]);
             (domain, port)
@@ -323,30 +329,35 @@ async fn handle_socks5_connection(
             )));
         }
     };
-    
+
     debug!("SOCKS5: Connecting to {}:{}", dest_host, dest_port);
-    
+
     // Open SSH direct-tcpip channel to destination via Handle Owner Task
-    let peer_addr = stream.peer_addr().map_or("127.0.0.1".to_string(), |a| a.ip().to_string());
+    let peer_addr = stream
+        .peer_addr()
+        .map_or("127.0.0.1".to_string(), |a| a.ip().to_string());
     let peer_port = stream.peer_addr().map_or(0, |a| a.port() as u32);
-    
+
     let channel = match handle_controller
         .open_direct_tcpip(&dest_host, dest_port as u32, &peer_addr, peer_port)
         .await
     {
         Ok(ch) => ch,
         Err(e) => {
-            warn!("Failed to open SSH channel to {}:{}: {:?}", dest_host, dest_port, e);
+            warn!(
+                "Failed to open SSH channel to {}:{}: {:?}",
+                dest_host, dest_port, e
+            );
             send_socks5_reply(&mut stream, socks5::REP_HOST_UNREACHABLE).await?;
             return Err(e);
         }
     };
-    
+
     // Send success reply
     send_socks5_reply(&mut stream, socks5::REP_SUCCESS).await?;
-    
+
     debug!("SOCKS5: Tunnel established to {}:{}", dest_host, dest_port);
-    
+
     // Bridge the connection
     bridge_socks5_connection(stream, channel, stats).await
 }
@@ -360,13 +371,18 @@ async fn send_socks5_reply(stream: &mut TcpStream, status: u8) -> Result<(), Ssh
         status,
         0x00, // Reserved
         socks5::ATYP_IPV4,
-        0, 0, 0, 0, // 0.0.0.0
-        0, 0,       // Port 0
+        0,
+        0,
+        0,
+        0, // 0.0.0.0
+        0,
+        0, // Port 0
     ];
-    
-    stream.write_all(&reply).await.map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to send SOCKS5 reply: {}", e))
-    })
+
+    stream
+        .write_all(&reply)
+        .await
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to send SOCKS5 reply: {}", e)))
 }
 
 /// Bridge data between SOCKS5 client and SSH channel
@@ -379,7 +395,7 @@ async fn bridge_socks5_connection(
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
-    
+
     let stats_for_send = stats.clone();
     let stats_for_recv = stats.clone();
 
@@ -477,8 +493,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_forward_with_description() {
-        let forward = DynamicForward::new("127.0.0.1:9050")
-            .with_description("Tor-like proxy");
+        let forward = DynamicForward::new("127.0.0.1:9050").with_description("Tor-like proxy");
         assert!(forward.description.unwrap().contains("Tor"));
     }
 }

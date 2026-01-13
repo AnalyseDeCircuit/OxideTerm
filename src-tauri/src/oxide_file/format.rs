@@ -1,10 +1,10 @@
 //! .oxide file format specification and binary serialization
 
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use std::io::{Cursor, Read};
 use super::error::OxideFileError;
 use crate::config::types::ConnectionOptions;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::io::{Cursor, Read};
 
 /// Magic number identifying .oxide files
 pub const MAGIC: &[u8; 5] = b"OXIDE";
@@ -37,7 +37,7 @@ impl FileHeader {
             encrypted_data_length,
         }
     }
-    
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(20);
         bytes.extend_from_slice(&self.magic);
@@ -47,28 +47,30 @@ impl FileHeader {
         bytes.extend_from_slice(&self.encrypted_data_length.to_le_bytes());
         bytes
     }
-    
+
     pub fn from_bytes(data: &[u8]) -> Result<Self, OxideFileError> {
         if data.len() < 20 {
-            return Err(OxideFileError::InvalidFormat("Header too short".to_string()));
+            return Err(OxideFileError::InvalidFormat(
+                "Header too short".to_string(),
+            ));
         }
-        
+
         let mut magic = [0u8; 5];
         magic.copy_from_slice(&data[0..5]);
-        
+
         if &magic != MAGIC {
             return Err(OxideFileError::InvalidMagic);
         }
-        
+
         let version = u32::from_le_bytes(data[5..9].try_into().unwrap());
         if version != VERSION {
             return Err(OxideFileError::UnsupportedVersion(version));
         }
-        
+
         let flags = u32::from_le_bytes(data[9..13].try_into().unwrap());
         let metadata_length = u32::from_le_bytes(data[13..17].try_into().unwrap());
         let encrypted_data_length = u32::from_le_bytes(data[17..21].try_into().unwrap());
-        
+
         Ok(Self {
             magic,
             version,
@@ -115,12 +117,12 @@ pub struct EncryptedConnection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EncryptedAuth {
-    Password { 
-        password: String 
+    Password {
+        password: String,
     },
-    Key { 
-        key_path: String, 
-        passphrase: Option<String> 
+    Key {
+        key_path: String,
+        passphrase: Option<String>,
     },
     Agent,
 }
@@ -142,63 +144,70 @@ impl OxideFile {
         let metadata_json = serde_json::to_vec(&self.metadata)?;
         let metadata_len = metadata_json.len() as u32;
         let encrypted_len = self.encrypted_data.len() as u32;
-        
+
         // Build header
         let header = FileHeader::new(metadata_len, encrypted_len);
         let header_bytes = header.to_bytes();
-        
+
         // Combine all parts
-        let total_len = 20 + SALT_LEN + NONCE_LEN + metadata_json.len() + self.encrypted_data.len() + TAG_LEN;
+        let total_len =
+            20 + SALT_LEN + NONCE_LEN + metadata_json.len() + self.encrypted_data.len() + TAG_LEN;
         let mut bytes = Vec::with_capacity(total_len);
-        
+
         bytes.extend_from_slice(&header_bytes);
         bytes.extend_from_slice(&self.salt);
         bytes.extend_from_slice(&self.nonce);
         bytes.extend_from_slice(&metadata_json);
         bytes.extend_from_slice(&self.encrypted_data);
         bytes.extend_from_slice(&self.tag);
-        
+
         Ok(bytes)
     }
-    
+
     /// Parse the file from bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self, OxideFileError> {
         let mut cursor = Cursor::new(data);
-        
+
         // Read header (20 bytes)
         let mut header_bytes = [0u8; 20];
-        cursor.read_exact(&mut header_bytes)
+        cursor
+            .read_exact(&mut header_bytes)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read header".to_string()))?;
-        
+
         let header = FileHeader::from_bytes(&header_bytes)?;
-        
+
         // Read salt (32 bytes)
         let mut salt = [0u8; SALT_LEN];
-        cursor.read_exact(&mut salt)
+        cursor
+            .read_exact(&mut salt)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read salt".to_string()))?;
-        
+
         // Read nonce (12 bytes)
         let mut nonce = [0u8; NONCE_LEN];
-        cursor.read_exact(&mut nonce)
+        cursor
+            .read_exact(&mut nonce)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read nonce".to_string()))?;
-        
+
         // Read metadata (JSON)
         let mut metadata_bytes = vec![0u8; header.metadata_length as usize];
-        cursor.read_exact(&mut metadata_bytes)
+        cursor
+            .read_exact(&mut metadata_bytes)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read metadata".to_string()))?;
-        
+
         let metadata: OxideMetadata = serde_json::from_slice(&metadata_bytes)?;
-        
+
         // Read encrypted data
         let mut encrypted_data = vec![0u8; header.encrypted_data_length as usize];
-        cursor.read_exact(&mut encrypted_data)
-            .map_err(|_| OxideFileError::InvalidFormat("Failed to read encrypted data".to_string()))?;
-        
+        cursor.read_exact(&mut encrypted_data).map_err(|_| {
+            OxideFileError::InvalidFormat("Failed to read encrypted data".to_string())
+        })?;
+
         // Read authentication tag (16 bytes)
         let mut tag = [0u8; TAG_LEN];
-        cursor.read_exact(&mut tag)
+        cursor
+            .read_exact(&mut tag)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read tag".to_string()))?;
-        
+
         Ok(Self {
             metadata,
             salt,
@@ -212,24 +221,24 @@ impl OxideFile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_header_roundtrip() {
         let header = FileHeader::new(1234, 5678);
         let bytes = header.to_bytes();
         let parsed = FileHeader::from_bytes(&bytes).unwrap();
-        
+
         assert_eq!(parsed.magic, *MAGIC);
         assert_eq!(parsed.version, VERSION);
         assert_eq!(parsed.metadata_length, 1234);
         assert_eq!(parsed.encrypted_data_length, 5678);
     }
-    
+
     #[test]
     fn test_invalid_magic() {
         let mut bytes = vec![0u8; 20];
         bytes[0..5].copy_from_slice(b"WRONG");
-        
+
         let result = FileHeader::from_bytes(&bytes);
         assert!(matches!(result, Err(OxideFileError::InvalidMagic)));
     }

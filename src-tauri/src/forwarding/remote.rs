@@ -4,7 +4,7 @@
 //! Example: Remote server:9000 -> local:3000 (expose local service to remote)
 //!
 //! ## Architecture
-//! 
+//!
 //! Remote forwarding requires coordination between:
 //! 1. The SSH client (sends `tcpip-forward` request via HandleController)
 //! 2. The SSH server (listens on remote port)
@@ -110,7 +110,7 @@ impl RemoteForwardStatsAtomic {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn to_stats(&self) -> ForwardStats {
         ForwardStats {
             connection_count: self.connection_count.load(Ordering::Relaxed),
@@ -122,7 +122,7 @@ impl RemoteForwardStatsAtomic {
 }
 
 /// Global registry for remote forward configurations
-/// 
+///
 /// This registry maps (remote_address, remote_port) -> local target.
 /// It's used by the ClientHandler to look up where to connect when
 /// a forwarded-tcpip channel is opened by the server.
@@ -140,12 +140,25 @@ impl RemoteForwardRegistry {
     }
 
     /// Register a remote forward
-    pub async fn register(&self, remote_addr: String, remote_port: u16, local_host: String, local_port: u16) -> Arc<RemoteForwardStatsAtomic> {
+    pub async fn register(
+        &self,
+        remote_addr: String,
+        remote_port: u16,
+        local_host: String,
+        local_port: u16,
+    ) -> Arc<RemoteForwardStatsAtomic> {
         let key = (remote_addr.clone(), remote_port);
         let stats = Arc::new(RemoteForwardStatsAtomic::new());
-        let target = RemoteForwardTarget { local_host, local_port, stats: stats.clone() };
+        let target = RemoteForwardTarget {
+            local_host,
+            local_port,
+            stats: stats.clone(),
+        };
         self.forwards.write().await.insert(key, target);
-        debug!("Registered remote forward: {}:{} -> target", remote_addr, remote_port);
+        debug!(
+            "Registered remote forward: {}:{} -> target",
+            remote_addr, remote_port
+        );
         stats
     }
 
@@ -153,7 +166,10 @@ impl RemoteForwardRegistry {
     pub async fn unregister(&self, remote_addr: &str, remote_port: u16) {
         let key = (remote_addr.to_string(), remote_port);
         self.forwards.write().await.remove(&key);
-        debug!("Unregistered remote forward: {}:{}", remote_addr, remote_port);
+        debug!(
+            "Unregistered remote forward: {}:{}",
+            remote_addr, remote_port
+        );
     }
 
     /// Look up a remote forward target
@@ -177,7 +193,8 @@ impl Default for RemoteForwardRegistry {
 }
 
 /// Global instance of the remote forward registry
-pub static REMOTE_FORWARD_REGISTRY: Lazy<RemoteForwardRegistry> = Lazy::new(RemoteForwardRegistry::new);
+pub static REMOTE_FORWARD_REGISTRY: Lazy<RemoteForwardRegistry> =
+    Lazy::new(RemoteForwardRegistry::new);
 
 /// Handle to a running remote port forward
 pub struct RemoteForwardHandle {
@@ -203,20 +220,21 @@ impl RemoteForwardHandle {
             self.config.remote_addr, self.bound_port
         );
         self.running.store(false, Ordering::SeqCst);
-        
+
         // Cancel the forward on the server via Handle Owner Task
-        if let Err(e) = self.handle_controller
+        if let Err(e) = self
+            .handle_controller
             .cancel_tcpip_forward(&self.config.remote_addr, self.bound_port as u32)
             .await
         {
             warn!("Failed to cancel remote forward: {:?}", e);
         }
-        
+
         // Unregister from the global registry
         REMOTE_FORWARD_REGISTRY
             .unregister(&self.config.remote_addr, self.bound_port)
             .await;
-        
+
         let _ = self.stop_tx.send(()).await;
     }
 
@@ -224,7 +242,7 @@ impl RemoteForwardHandle {
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
-    
+
     /// Get current stats
     pub fn stats(&self) -> ForwardStats {
         self.stats.to_stats()
@@ -257,8 +275,7 @@ pub async fn start_remote_forward(
 
     info!(
         "Remote forward established: {}:{} (requested {}) -> {}:{}",
-        config.remote_addr, actual_port, config.remote_port,
-        config.local_host, config.local_port
+        config.remote_addr, actual_port, config.remote_port, config.local_host, config.local_port
     );
 
     // Register in the global registry so ClientHandler can find the target
@@ -306,7 +323,7 @@ pub async fn start_remote_forward(
 }
 
 /// Handle a forwarded connection from the remote server.
-/// 
+///
 /// This is called by the ClientHandler when the server opens a forwarded-tcpip channel.
 /// It looks up the target in the global registry and bridges the connection.
 pub async fn handle_forwarded_connection(
@@ -333,8 +350,14 @@ pub async fn handle_forwarded_connection(
         })?;
 
     // Update connection stats
-    target.stats.connection_count.fetch_add(1, Ordering::Relaxed);
-    target.stats.active_connections.fetch_add(1, Ordering::Relaxed);
+    target
+        .stats
+        .connection_count
+        .fetch_add(1, Ordering::Relaxed);
+    target
+        .stats
+        .active_connections
+        .fetch_add(1, Ordering::Relaxed);
     let stats = target.stats.clone();
 
     // Connect to local service
@@ -352,10 +375,10 @@ pub async fn handle_forwarded_connection(
 
     // Bridge the connection
     let result = bridge_forwarded_connection(local_stream, channel, stats.clone()).await;
-    
+
     // Decrement active connections when done
     stats.active_connections.fetch_sub(1, Ordering::Relaxed);
-    
+
     result
 }
 
@@ -369,7 +392,7 @@ async fn bridge_forwarded_connection(
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
-    
+
     let stats_for_send = stats.clone();
     let stats_for_recv = stats.clone();
 
@@ -386,7 +409,9 @@ async fn bridge_forwarded_connection(
                         break;
                     }
                     // Update bytes received
-                    stats_for_recv.bytes_received.fetch_add(data_len as u64, Ordering::Relaxed);
+                    stats_for_recv
+                        .bytes_received
+                        .fetch_add(data_len as u64, Ordering::Relaxed);
                 }
                 Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) | None => {
                     break;
@@ -409,7 +434,9 @@ async fn bridge_forwarded_connection(
                         break;
                     }
                     // Update bytes sent
-                    stats_for_send.bytes_sent.fetch_add(n as u64, Ordering::Relaxed);
+                    stats_for_send
+                        .bytes_sent
+                        .fetch_add(n as u64, Ordering::Relaxed);
                 }
                 Err(e) => {
                     debug!("Local read error: {}", e);
@@ -456,17 +483,19 @@ mod tests {
     #[tokio::test]
     async fn test_registry() {
         let registry = RemoteForwardRegistry::new();
-        
+
         // Register
-        registry.register("0.0.0.0".to_string(), 9000, "localhost".to_string(), 3000).await;
-        
+        registry
+            .register("0.0.0.0".to_string(), 9000, "localhost".to_string(), 3000)
+            .await;
+
         // Lookup
         let target = registry.lookup("0.0.0.0", 9000).await;
         assert!(target.is_some());
         let target = target.unwrap();
         assert_eq!(target.local_host, "localhost");
         assert_eq!(target.local_port, 3000);
-        
+
         // Unregister
         registry.unregister("0.0.0.0", 9000).await;
         assert!(registry.lookup("0.0.0.0", 9000).await.is_none());

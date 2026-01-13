@@ -1,7 +1,7 @@
 //! SFTP Tauri commands
 //!
 //! Exposes SFTP functionality to the frontend.
-//! 
+//!
 //! Note: SFTP opens its own SSH channel on the already-connected session handle.
 
 use std::sync::Arc;
@@ -313,7 +313,7 @@ pub async fn sftp_cd(
         .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
 
     let mut sftp = sftp.lock().await;
-    
+
     // Validate path exists and is a directory
     let info = sftp.stat(&path).await?;
     if info.file_type != FileType::Directory {
@@ -378,5 +378,8 @@ pub async fn sftp_resume_transfer(
 pub async fn sftp_transfer_stats(
     transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
 ) -> Result<(usize, usize), SftpError> {
-    Ok((transfer_manager.active_count(), transfer_manager.max_concurrent()))
+    Ok((
+        transfer_manager.active_count(),
+        transfer_manager.max_concurrent(),
+    ))
 }

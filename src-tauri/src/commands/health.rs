@@ -8,7 +8,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use tauri::State;
 
-use crate::session::{HealthTracker, HealthMetrics, HealthStatus, QuickHealthCheck};
+use crate::session::{HealthMetrics, HealthStatus, HealthTracker, QuickHealthCheck};
 
 /// Registry for health trackers
 pub struct HealthRegistry {
@@ -134,11 +134,11 @@ pub struct HealthStatusResponse {
 impl HealthStatusResponse {
     pub fn from_check(check: QuickHealthCheck, uptime_secs: u64) -> Self {
         let (status, status_color) = match check.status {
-            HealthStatus::Healthy => ("healthy", "#22c55e"),      // green-500
-            HealthStatus::Degraded => ("degraded", "#f59e0b"),    // amber-500
+            HealthStatus::Healthy => ("healthy", "#22c55e"), // green-500
+            HealthStatus::Degraded => ("degraded", "#f59e0b"), // amber-500
             HealthStatus::Unresponsive => ("unresponsive", "#ef4444"), // red-500
             HealthStatus::Disconnected => ("disconnected", "#6b7280"), // gray-500
-            HealthStatus::Unknown => ("unknown", "#9ca3af"),      // gray-400
+            HealthStatus::Unknown => ("unknown", "#9ca3af"), // gray-400
         };
 
         let uptime_formatted = format_uptime(uptime_secs);
@@ -185,7 +185,7 @@ pub async fn get_health_for_display(
 
     let metrics = tracker.metrics().await;
     let check = QuickHealthCheck::from_metrics(session_id, &metrics);
-    
+
     Ok(HealthStatusResponse::from_check(check, metrics.uptime_secs))
 }
 

@@ -5,16 +5,14 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 
 use super::state::{SessionState, SessionStateMachine};
-use crate::ssh::{SessionCommand, HandleController};
+use crate::ssh::{HandleController, SessionCommand};
 
 /// Authentication method for SSH connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthMethod {
     /// Password authentication
-    Password {
-        password: String,
-    },
+    Password { password: String },
     /// Public key authentication
     Key {
         /// Path to private key file (e.g., ~/.ssh/id_rsa)
@@ -125,9 +123,10 @@ impl SessionConfig {
     pub fn auto_color(&self) -> String {
         self.color.clone().unwrap_or_else(|| {
             // Simple hash-based color generation
-            let hash = self.host.bytes().fold(0u32, |acc, b| {
-                acc.wrapping_mul(31).wrapping_add(b as u32)
-            });
+            let hash = self
+                .host
+                .bytes()
+                .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
             let hue = hash % 360;
             // HSL to hex (simplified, fixed saturation and lightness)
             hsl_to_hex(hue as f32, 0.7, 0.5)
@@ -303,10 +302,10 @@ mod tests {
     fn test_auto_color() {
         let config1 = SessionConfig::with_password("server1.com", 22, "user", "pass");
         let config2 = SessionConfig::with_password("server2.com", 22, "user", "pass");
-        
+
         // Different hosts should produce different colors
         assert_ne!(config1.auto_color(), config2.auto_color());
-        
+
         // Same host should produce same color
         let config3 = SessionConfig::with_password("server1.com", 22, "other", "pass");
         assert_eq!(config1.auto_color(), config3.auto_color());

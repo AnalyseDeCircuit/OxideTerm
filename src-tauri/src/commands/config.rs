@@ -3,13 +3,13 @@
 //! Tauri commands for managing saved connections and SSH config import.
 
 use crate::config::{
-    ConfigFile, ConfigStorage, Keychain, SavedAuth, SavedConnection, SshConfigHost,
-    parse_ssh_config, default_ssh_config_path,
+    default_ssh_config_path, parse_ssh_config, ConfigFile, ConfigStorage, Keychain, SavedAuth,
+    SavedConnection, SshConfigHost,
 };
-use serde::{Deserialize, Serialize};
-use tauri::State;
-use std::sync::Arc;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::State;
 
 /// Shared config state
 pub struct ConfigState {
@@ -23,45 +23,45 @@ impl ConfigState {
     pub async fn new() -> Result<Self, String> {
         let storage = ConfigStorage::new().map_err(|e| e.to_string())?;
         let config = storage.load().await.map_err(|e| e.to_string())?;
-        
+
         Ok(Self {
             storage,
             config: RwLock::new(config),
             keychain: Keychain::new(),
         })
     }
-    
+
     /// Save config to disk
     async fn save(&self) -> Result<(), String> {
         let config = self.config.read().clone();
         self.storage.save(&config).await.map_err(|e| e.to_string())
     }
-    
+
     /// Public API: Get a snapshot of the config
     pub fn get_config_snapshot(&self) -> ConfigFile {
         self.config.read().clone()
     }
-    
+
     /// Public API: Update config with a closure
-    pub fn update_config<F>(&self, f: F) -> Result<(), String> 
+    pub fn update_config<F>(&self, f: F) -> Result<(), String>
     where
-        F: FnOnce(&mut ConfigFile)
+        F: FnOnce(&mut ConfigFile),
     {
         let mut config = self.config.write();
         f(&mut config);
         Ok(())
     }
-    
+
     /// Public API: Get value from keychain
     pub fn get_keychain_value(&self, key: &str) -> Result<String, String> {
         self.keychain.get(key).map_err(|e| e.to_string())
     }
-    
+
     /// Public API: Store value in keychain
     pub fn set_keychain_value(&self, key: &str, value: &str) -> Result<(), String> {
         self.keychain.store(key, value).map_err(|e| e.to_string())
     }
-    
+
     /// Public API: Save config to disk
     pub async fn save_config(&self) -> Result<(), String> {
         self.save().await
@@ -92,7 +92,7 @@ impl From<&SavedConnection> for ConnectionInfo {
             SavedAuth::Key { key_path, .. } => ("key".to_string(), Some(key_path.clone())),
             SavedAuth::Agent => ("agent".to_string(), None),
         };
-        
+
         Self {
             id: conn.id.clone(),
             name: conn.name.clone(),
@@ -119,7 +119,7 @@ pub struct SaveConnectionRequest {
     pub host: String,
     pub port: u16,
     pub username: String,
-    pub auth_type: String, // "password", "key", "agent"
+    pub auth_type: String,        // "password", "key", "agent"
     pub password: Option<String>, // Only for password auth
     pub key_path: Option<String>, // Only for key auth
     pub color: Option<String>,
@@ -158,7 +158,11 @@ pub async fn get_connections(
     state: State<'_, Arc<ConfigState>>,
 ) -> Result<Vec<ConnectionInfo>, String> {
     let config = state.config.read();
-    Ok(config.connections.iter().map(ConnectionInfo::from).collect())
+    Ok(config
+        .connections
+        .iter()
+        .map(ConnectionInfo::from)
+        .collect())
 }
 
 /// Get recent connections
@@ -169,7 +173,11 @@ pub async fn get_recent_connections(
 ) -> Result<Vec<ConnectionInfo>, String> {
     let config = state.config.read();
     let limit = limit.unwrap_or(5);
-    Ok(config.get_recent(limit).into_iter().map(ConnectionInfo::from).collect())
+    Ok(config
+        .get_recent(limit)
+        .into_iter()
+        .map(ConnectionInfo::from)
+        .collect())
 }
 
 /// Get connections by group
@@ -193,14 +201,16 @@ pub async fn search_connections(
     query: String,
 ) -> Result<Vec<ConnectionInfo>, String> {
     let config = state.config.read();
-    Ok(config.search(&query).into_iter().map(ConnectionInfo::from).collect())
+    Ok(config
+        .search(&query)
+        .into_iter()
+        .map(ConnectionInfo::from)
+        .collect())
 }
 
 /// Get all groups
 #[tauri::command]
-pub async fn get_groups(
-    state: State<'_, Arc<ConfigState>>,
-) -> Result<Vec<String>, String> {
+pub async fn get_groups(state: State<'_, Arc<ConfigState>>) -> Result<Vec<String>, String> {
     let config = state.config.read();
     Ok(config.groups.clone())
 }
@@ -214,8 +224,13 @@ pub async fn save_connection(
     // Handle auth
     let auth = match request.auth_type.as_str() {
         "password" => {
-            let password = request.password.ok_or("Password required for password auth")?;
-            let keychain_id = state.keychain.store_new(&password).map_err(|e| e.to_string())?;
+            let password = request
+                .password
+                .ok_or("Password required for password auth")?;
+            let keychain_id = state
+                .keychain
+                .store_new(&password)
+                .map_err(|e| e.to_string())?;
             SavedAuth::Password { keychain_id }
         }
         "key" => {
@@ -229,21 +244,24 @@ pub async fn save_connection(
         "agent" => SavedAuth::Agent,
         _ => return Err(format!("Unknown auth type: {}", request.auth_type)),
     };
-    
+
     let connection = {
         let mut config = state.config.write();
-        
+
         let connection = if let Some(id) = request.id {
             // Update existing
-            let conn = config.get_connection_mut(&id).ok_or("Connection not found")?;
-            
+            let conn = config
+                .get_connection_mut(&id)
+                .ok_or("Connection not found")?;
+
             // If auth changed and was password, delete old keychain entry
             if let SavedAuth::Password { keychain_id } = &conn.auth {
-                if !matches!(&auth, SavedAuth::Password { keychain_id: new_id } if new_id == keychain_id) {
+                if !matches!(&auth, SavedAuth::Password { keychain_id: new_id } if new_id == keychain_id)
+                {
                     let _ = state.keychain.delete(keychain_id);
                 }
             }
-            
+
             conn.name = request.name;
             conn.group = request.group;
             conn.host = request.host;
@@ -252,29 +270,25 @@ pub async fn save_connection(
             conn.auth = auth;
             conn.color = request.color;
             conn.tags = request.tags;
-            
+
             conn.clone()
         } else {
             // Create new
             let mut conn = match &auth {
-                SavedAuth::Password { keychain_id } => {
-                    SavedConnection::new_password(
-                        request.name,
-                        request.host,
-                        request.port,
-                        request.username,
-                        keychain_id.clone(),
-                    )
-                }
-                SavedAuth::Key { key_path, .. } => {
-                    SavedConnection::new_key(
-                        request.name,
-                        request.host,
-                        request.port,
-                        request.username,
-                        key_path.clone(),
-                    )
-                }
+                SavedAuth::Password { keychain_id } => SavedConnection::new_password(
+                    request.name,
+                    request.host,
+                    request.port,
+                    request.username,
+                    keychain_id.clone(),
+                ),
+                SavedAuth::Key { key_path, .. } => SavedConnection::new_key(
+                    request.name,
+                    request.host,
+                    request.port,
+                    request.username,
+                    key_path.clone(),
+                ),
                 SavedAuth::Agent => {
                     let mut c = SavedConnection::new_key(
                         request.name,
@@ -287,27 +301,27 @@ pub async fn save_connection(
                     c
                 }
             };
-            
+
             conn.group = request.group;
             conn.color = request.color;
             conn.tags = request.tags;
-            
+
             config.add_connection(conn.clone());
             conn
         };
-        
+
         // Add group if new
         if let Some(ref group) = connection.group {
             if !config.groups.contains(group) {
                 config.groups.push(group.clone());
             }
         }
-        
+
         connection
     }; // config lock dropped here
-    
+
     state.save().await?;
-    
+
     Ok(ConnectionInfo::from(&connection))
 }
 
@@ -319,19 +333,21 @@ pub async fn delete_connection(
 ) -> Result<(), String> {
     {
         let mut config = state.config.write();
-        
+
         // Delete keychain entry if password auth
         if let Some(conn) = config.get_connection(&id) {
             if let SavedAuth::Password { keychain_id } = &conn.auth {
                 let _ = state.keychain.delete(keychain_id);
             }
         }
-        
-        config.remove_connection(&id).ok_or("Connection not found")?;
+
+        config
+            .remove_connection(&id)
+            .ok_or("Connection not found")?;
     } // config lock dropped here
-    
+
     state.save().await?;
-    
+
     Ok(())
 }
 
@@ -357,7 +373,7 @@ pub async fn get_connection_password(
 ) -> Result<String, String> {
     let config = state.config.read();
     let conn = config.get_connection(&id).ok_or("Connection not found")?;
-    
+
     match &conn.auth {
         SavedAuth::Password { keychain_id } => {
             state.keychain.get(keychain_id).map_err(|e| e.to_string())
@@ -381,9 +397,11 @@ pub async fn import_ssh_host(
 ) -> Result<ConnectionInfo, String> {
     // Parse SSH config
     let hosts = parse_ssh_config(None).await.map_err(|e| e.to_string())?;
-    let host = hosts.iter().find(|h| h.alias == alias)
+    let host = hosts
+        .iter()
+        .find(|h| h.alias == alias)
         .ok_or_else(|| format!("Host '{}' not found in SSH config", alias))?;
-    
+
     // Create connection
     let auth = if let Some(ref key_path) = host.identity_file {
         SavedAuth::Key {
@@ -394,9 +412,9 @@ pub async fn import_ssh_host(
     } else {
         SavedAuth::Agent
     };
-    
+
     let username = host.user.clone().unwrap_or_else(|| whoami::username());
-    
+
     let conn = SavedConnection {
         id: uuid::Uuid::new_v4().to_string(),
         version: crate::config::CONFIG_VERSION,
@@ -412,18 +430,18 @@ pub async fn import_ssh_host(
         color: None,
         tags: vec!["ssh-config".to_string()],
     };
-    
+
     {
         let mut config = state.config.write();
         config.add_connection(conn.clone());
-        
+
         if !config.groups.contains(&"Imported".to_string()) {
             config.groups.push("Imported".to_string());
         }
     } // config lock dropped here
-    
+
     state.save().await?;
-    
+
     Ok(ConnectionInfo::from(&conn))
 }
 
@@ -437,10 +455,7 @@ pub async fn get_ssh_config_path() -> Result<String, String> {
 
 /// Create groups
 #[tauri::command]
-pub async fn create_group(
-    state: State<'_, Arc<ConfigState>>,
-    name: String,
-) -> Result<(), String> {
+pub async fn create_group(state: State<'_, Arc<ConfigState>>, name: String) -> Result<(), String> {
     {
         let mut config = state.config.write();
         if !config.groups.contains(&name) {
@@ -453,14 +468,11 @@ pub async fn create_group(
 
 /// Delete a group (moves connections to ungrouped)
 #[tauri::command]
-pub async fn delete_group(
-    state: State<'_, Arc<ConfigState>>,
-    name: String,
-) -> Result<(), String> {
+pub async fn delete_group(state: State<'_, Arc<ConfigState>>, name: String) -> Result<(), String> {
     {
         let mut config = state.config.write();
         config.groups.retain(|g| g != &name);
-        
+
         // Move connections to ungrouped
         for conn in &mut config.connections {
             if conn.group.as_ref() == Some(&name) {

@@ -78,7 +78,9 @@ impl TransferManager {
     /// Register a new transfer and get its control handle
     pub fn register(&self, transfer_id: &str) -> Arc<TransferControl> {
         let control = Arc::new(TransferControl::new());
-        self.controls.write().insert(transfer_id.to_string(), control.clone());
+        self.controls
+            .write()
+            .insert(transfer_id.to_string(), control.clone());
         info!("Registered transfer: {}", transfer_id);
         control
     }
@@ -96,10 +98,17 @@ impl TransferManager {
 
     /// Acquire a permit for concurrent transfer (blocks if at limit)
     pub async fn acquire_permit(&self) -> tokio::sync::OwnedSemaphorePermit {
-        let permit = self.semaphore.clone().acquire_owned().await
+        let permit = self
+            .semaphore
+            .clone()
+            .acquire_owned()
+            .await
             .expect("Semaphore closed unexpectedly");
         *self.active_count.write() += 1;
-        debug!("Acquired transfer permit, active count: {}", *self.active_count.read());
+        debug!(
+            "Acquired transfer permit, active count: {}",
+            *self.active_count.read()
+        );
         permit
     }
 
@@ -143,8 +152,11 @@ impl TransferManager {
     pub fn resume(&self, transfer_id: &str) -> bool {
         // Simplified: resume not supported in v0.1.0
         // User must re-initiate the transfer
-        warn!("Resume not supported - transfer was cancelled: {}", transfer_id);
-            false
+        warn!(
+            "Resume not supported - transfer was cancelled: {}",
+            transfer_id
+        );
+        false
     }
 
     /// Cancel all active transfers
@@ -173,7 +185,9 @@ impl Default for TransferManager {
 }
 
 /// Check loop helper for pause/cancel during transfer
-pub async fn check_transfer_control(control: &TransferControl) -> Result<(), super::error::SftpError> {
+pub async fn check_transfer_control(
+    control: &TransferControl,
+) -> Result<(), super::error::SftpError> {
     // Simplified: only check cancellation (pause = cancel in v0.1.0)
     if control.is_cancelled() {
         return Err(super::error::SftpError::TransferCancelled);

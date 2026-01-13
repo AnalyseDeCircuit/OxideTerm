@@ -4,15 +4,15 @@
 //! Includes connection limiting and lifecycle management.
 
 use dashmap::DashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 use super::state::SessionState;
 use super::types::{SessionConfig, SessionEntry, SessionInfo, SessionStats};
-use crate::ssh::{SessionCommand, HandleController};
-use crate::state::{StateStore, PersistedSession, session::SessionPersistence};
+use crate::ssh::{HandleController, SessionCommand};
+use crate::state::{session::SessionPersistence, PersistedSession, StateStore};
 
 /// Default maximum concurrent sessions
 const DEFAULT_MAX_SESSIONS: usize = 20;
@@ -46,7 +46,7 @@ impl SessionRegistry {
             persistence: Some(persistence),
         }
     }
-    
+
     /// Create a new session registry without persistence (for testing)
     pub fn new_without_persistence() -> Self {
         Self {
@@ -83,9 +83,12 @@ impl SessionRegistry {
         // Check connection limit
         let active_count = self.active_count();
         let max = self.max_sessions();
-        
+
         if active_count >= max {
-            return Err(RegistryError::ConnectionLimitReached { current: active_count, max });
+            return Err(RegistryError::ConnectionLimitReached {
+                current: active_count,
+                max,
+            });
         }
 
         // Generate session ID
@@ -105,11 +108,14 @@ impl SessionRegistry {
 
     /// Start connecting a session
     pub fn start_connecting(&self, session_id: &str) -> Result<(), RegistryError> {
-        let mut entry = self.sessions
+        let mut entry = self
+            .sessions
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
-        entry.state_machine.start_connecting()
+        entry
+            .state_machine
+            .start_connecting()
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
         debug!("Session {} state -> Connecting", session_id);
@@ -124,11 +130,14 @@ impl SessionRegistry {
         cmd_tx: mpsc::Sender<SessionCommand>,
         handle_controller: HandleController,
     ) -> Result<(), RegistryError> {
-        let mut entry = self.sessions
+        let mut entry = self
+            .sessions
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
-        entry.state_machine.connect_success()
+        entry
+            .state_machine
+            .connect_success()
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
         entry.ws_port = Some(ws_port);
@@ -141,11 +150,14 @@ impl SessionRegistry {
 
     /// Mark session as failed
     pub fn connect_failed(&self, session_id: &str, error: String) -> Result<(), RegistryError> {
-        let mut entry = self.sessions
+        let mut entry = self
+            .sessions
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
-        entry.state_machine.connect_failed(error.clone())
+        entry
+            .state_machine
+            .connect_failed(error.clone())
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
         warn!("Session {} connection failed: {}", session_id, error);
@@ -154,11 +166,14 @@ impl SessionRegistry {
 
     /// Start disconnecting a session
     pub fn start_disconnecting(&self, session_id: &str) -> Result<(), RegistryError> {
-        let mut entry = self.sessions
+        let mut entry = self
+            .sessions
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
-        entry.state_machine.start_disconnecting()
+        entry
+            .state_machine
+            .start_disconnecting()
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
         debug!("Session {} state -> Disconnecting", session_id);
@@ -173,11 +188,14 @@ impl SessionRegistry {
                 info!("Session {} disconnected and removed", session_id);
             }
         } else {
-            let mut entry = self.sessions
+            let mut entry = self
+                .sessions
                 .get_mut(session_id)
                 .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
-            entry.state_machine.disconnect_complete()
+            entry
+                .state_machine
+                .disconnect_complete()
                 .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
             entry.ws_port = None;
             entry.cmd_tx = None;
@@ -205,17 +223,23 @@ impl SessionRegistry {
 
     /// Get session info by ID
     pub fn get(&self, session_id: &str) -> Option<SessionInfo> {
-        self.sessions.get(session_id).map(|entry| SessionInfo::from(entry.value()))
+        self.sessions
+            .get(session_id)
+            .map(|entry| SessionInfo::from(entry.value()))
     }
 
     /// Get session config by ID (for reconnection)
     pub fn get_config(&self, session_id: &str) -> Option<SessionConfig> {
-        self.sessions.get(session_id).map(|entry| entry.config.clone())
+        self.sessions
+            .get(session_id)
+            .map(|entry| entry.config.clone())
     }
 
     /// Get command sender for a session
     pub fn get_cmd_tx(&self, session_id: &str) -> Option<mpsc::Sender<SessionCommand>> {
-        self.sessions.get(session_id).and_then(|entry| entry.cmd_tx.clone())
+        self.sessions
+            .get(session_id)
+            .and_then(|entry| entry.cmd_tx.clone())
     }
 
     /// Get HandleController for a session (used to open additional channels)
@@ -228,11 +252,12 @@ impl SessionRegistry {
 
     /// List all sessions
     pub fn list(&self) -> Vec<SessionInfo> {
-        let mut sessions: Vec<_> = self.sessions
+        let mut sessions: Vec<_> = self
+            .sessions
             .iter()
             .map(|entry| SessionInfo::from(entry.value()))
             .collect();
-        
+
         // Sort by order (tab order)
         sessions.sort_by_key(|s| s.order);
         sessions
@@ -286,7 +311,8 @@ impl SessionRegistry {
 
     /// Resize a session's PTY
     pub async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<(), String> {
-        let entry = self.sessions
+        let entry = self
+            .sessions
             .get(session_id)
             .ok_or_else(|| format!("Session {} not found", session_id))?;
 
@@ -307,7 +333,8 @@ impl SessionRegistry {
 
     /// Update tab order for a session
     pub fn update_order(&self, session_id: &str, new_order: usize) -> Result<(), RegistryError> {
-        let mut entry = self.sessions
+        let mut entry = self
+            .sessions
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
@@ -325,10 +352,11 @@ impl SessionRegistry {
 
     /// Clean up disconnected/error sessions older than threshold
     pub fn cleanup_stale(&self, max_age_secs: u64) {
-        let stale_ids: Vec<String> = self.sessions
+        let stale_ids: Vec<String> = self
+            .sessions
             .iter()
             .filter(|entry| {
-                entry.state_machine.is_terminal() 
+                entry.state_machine.is_terminal()
                     && entry.state_machine.time_in_state().as_secs() > max_age_secs
             })
             .map(|entry| entry.id.clone())
@@ -338,52 +366,58 @@ impl SessionRegistry {
             self.remove(&id);
         }
     }
-    
+
     /// Persist a session's metadata
     pub fn persist_session(&self, session_id: &str) -> Result<(), RegistryError> {
         if let Some(persistence) = &self.persistence {
-            let entry = self.sessions
+            let entry = self
+                .sessions
                 .get(session_id)
                 .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
-            
-            let persisted = PersistedSession::new(
-                entry.id.clone(),
-                entry.config.clone(),
-                entry.order,
-            );
-            
-            persistence.save(&persisted)
+
+            let persisted =
+                PersistedSession::new(entry.id.clone(), entry.config.clone(), entry.order);
+
+            persistence
+                .save(&persisted)
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
-            
+
             debug!("Persisted session metadata: {}", session_id);
         }
         Ok(())
     }
-    
+
     /// Delete persisted session metadata (synchronous)
     pub fn delete_persisted_session(&self, session_id: &str) -> Result<(), RegistryError> {
         if let Some(persistence) = &self.persistence {
-            persistence.delete(session_id)
+            persistence
+                .delete(session_id)
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
             debug!("Deleted persisted session: {}", session_id);
         }
         Ok(())
     }
-    
+
     /// Delete persisted session metadata (async, non-blocking)
-    pub async fn delete_persisted_session_async(&self, session_id: String) -> Result<(), RegistryError> {
+    pub async fn delete_persisted_session_async(
+        &self,
+        session_id: String,
+    ) -> Result<(), RegistryError> {
         if let Some(persistence) = &self.persistence {
-            persistence.delete_async(session_id).await
+            persistence
+                .delete_async(session_id)
+                .await
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
             debug!("Deleted persisted session");
         }
         Ok(())
     }
-    
+
     /// Restore sessions from persistence (returns session IDs for frontend to restore) - synchronous
     pub fn restore_sessions(&self) -> Result<Vec<PersistedSession>, RegistryError> {
         if let Some(persistence) = &self.persistence {
-            let sessions = persistence.load_all()
+            let sessions = persistence
+                .load_all()
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
             info!("Restored {} persisted sessions", sessions.len());
             Ok(sessions)
@@ -391,11 +425,13 @@ impl SessionRegistry {
             Ok(Vec::new())
         }
     }
-    
+
     /// Restore sessions from persistence (async, non-blocking)
     pub async fn restore_sessions_async(&self) -> Result<Vec<PersistedSession>, RegistryError> {
         if let Some(persistence) = &self.persistence {
-            let sessions = persistence.load_all_async().await
+            let sessions = persistence
+                .load_all_async()
+                .await
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
             info!("Restored {} persisted sessions", sessions.len());
             Ok(sessions)
@@ -403,11 +439,12 @@ impl SessionRegistry {
             Ok(Vec::new())
         }
     }
-    
+
     /// List persisted session IDs
     pub fn list_persisted_sessions(&self) -> Result<Vec<String>, RegistryError> {
         if let Some(persistence) = &self.persistence {
-            persistence.list_ids()
+            persistence
+                .list_ids()
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))
         } else {
             Ok(Vec::new())
@@ -426,7 +463,7 @@ pub enum RegistryError {
 
     #[error("State transition error: {0}")]
     StateTransition(String),
-    
+
     #[error("Persistence error: {0}")]
     PersistenceError(String),
 }
@@ -444,7 +481,7 @@ mod tests {
     fn test_create_session() {
         let registry = SessionRegistry::new();
         let config = SessionConfig::with_password("example.com", 22, "user", "pass");
-        
+
         let id = registry.create_session(config).unwrap();
         assert!(!id.is_empty());
         assert_eq!(registry.count(), 1);
@@ -453,33 +490,36 @@ mod tests {
     #[test]
     fn test_connection_limit() {
         let registry = SessionRegistry::with_max_sessions(2);
-        
+
         let config1 = SessionConfig::with_password("server1.com", 22, "user", "pass");
         let config2 = SessionConfig::with_password("server2.com", 22, "user", "pass");
         let config3 = SessionConfig::with_password("server3.com", 22, "user", "pass");
-        
+
         let id1 = registry.create_session(config1).unwrap();
         registry.start_connecting(&id1).unwrap();
-        
+
         let id2 = registry.create_session(config2).unwrap();
         registry.start_connecting(&id2).unwrap();
-        
+
         // Third should fail
         let result = registry.create_session(config3);
-        assert!(matches!(result, Err(RegistryError::ConnectionLimitReached { .. })));
+        assert!(matches!(
+            result,
+            Err(RegistryError::ConnectionLimitReached { .. })
+        ));
     }
 
     #[test]
     fn test_state_transitions() {
         let registry = SessionRegistry::new();
         let config = SessionConfig::with_password("example.com", 22, "user", "pass");
-        
+
         let id = registry.create_session(config).unwrap();
-        
+
         // Initial state should be Disconnected
         let info = registry.get(&id).unwrap();
         assert_eq!(info.state, SessionState::Disconnected);
-        
+
         // Transition to Connecting
         registry.start_connecting(&id).unwrap();
         let info = registry.get(&id).unwrap();

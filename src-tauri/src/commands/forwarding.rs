@@ -8,10 +8,12 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
-use crate::forwarding::{ForwardingManager, ForwardRule, ForwardRuleUpdate, ForwardStatus, ForwardType, ForwardStats};
-use crate::state::{StateStore, PersistedForward, forwarding::ForwardPersistence};
+use crate::forwarding::{
+    ForwardRule, ForwardRuleUpdate, ForwardStats, ForwardStatus, ForwardType, ForwardingManager,
+};
+use crate::state::{forwarding::ForwardPersistence, PersistedForward, StateStore};
 
 /// Global registry of forwarding managers (one per session)
 pub struct ForwardingRegistry {
@@ -27,7 +29,7 @@ impl ForwardingRegistry {
             persistence: None,
         }
     }
-    
+
     /// Create a new forwarding registry with state persistence
     pub fn new_with_state(state_store: Arc<StateStore>) -> Self {
         Self {
@@ -38,7 +40,10 @@ impl ForwardingRegistry {
 
     /// Register a forwarding manager for a session
     pub async fn register(&self, session_id: String, manager: ForwardingManager) {
-        self.managers.write().await.insert(session_id, Arc::new(manager));
+        self.managers
+            .write()
+            .await
+            .insert(session_id, Arc::new(manager));
     }
 
     /// Get a forwarding manager by session ID
@@ -51,42 +56,54 @@ impl ForwardingRegistry {
         if let Some(manager) = self.managers.write().await.remove(session_id) {
             manager.stop_all().await;
         }
-        
+
         // Delete persisted forwards for this session
         if let Some(persistence) = &self.persistence {
             if let Err(e) = persistence.delete_by_session(session_id) {
-                error!("Failed to delete persisted forwards for session {}: {:?}", session_id, e);
+                error!(
+                    "Failed to delete persisted forwards for session {}: {:?}",
+                    session_id, e
+                );
             }
         }
     }
-    
+
     /// Persist a forward rule
     pub async fn persist_forward(&self, forward: PersistedForward) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {
-            persistence.save_async(forward).await
+            persistence
+                .save_async(forward)
+                .await
                 .map_err(|e| format!("Failed to persist forward: {:?}", e))?;
             info!("Persisted forward rule");
         }
         Ok(())
     }
-    
+
     /// Delete a persisted forward
     pub async fn delete_persisted_forward(&self, forward_id: String) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {
-            persistence.delete_async(forward_id).await
+            persistence
+                .delete_async(forward_id)
+                .await
                 .map_err(|e| format!("Failed to delete persisted forward: {:?}", e))?;
             info!("Deleted persisted forward");
         }
         Ok(())
     }
-    
+
     /// Load persisted forwards for a session (uses async internally where possible)
-    pub async fn load_persisted_forwards(&self, session_id: &str) -> Result<Vec<PersistedForward>, String> {
+    pub async fn load_persisted_forwards(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<PersistedForward>, String> {
         if let Some(persistence) = &self.persistence {
             // Use async load_all and filter (more efficient than loading all synchronously)
-            let all_forwards = persistence.load_all_async().await
+            let all_forwards = persistence
+                .load_all_async()
+                .await
                 .map_err(|e| format!("Failed to load persisted forwards: {:?}", e))?;
-            
+
             Ok(all_forwards
                 .into_iter()
                 .filter(|f| f.session_id == session_id)
@@ -95,13 +112,21 @@ impl ForwardingRegistry {
             Ok(Vec::new())
         }
     }
-    
+
     /// Update auto-start flag for a forward
-    pub async fn update_auto_start(&self, forward_id: &str, auto_start: bool) -> Result<(), String> {
+    pub async fn update_auto_start(
+        &self,
+        forward_id: &str,
+        auto_start: bool,
+    ) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {
-            persistence.update_auto_start(forward_id, auto_start)
+            persistence
+                .update_auto_start(forward_id, auto_start)
                 .map_err(|e| format!("Failed to update auto_start: {:?}", e))?;
-            info!("Updated auto_start for forward {}: {}", forward_id, auto_start);
+            info!(
+                "Updated auto_start for forward {}: {}",
+                forward_id, auto_start
+            );
         }
         Ok(())
     }
@@ -193,7 +218,10 @@ pub async fn create_port_forward(
     registry: State<'_, ForwardingRegistry>,
     request: CreateForwardRequest,
 ) -> Result<ForwardResponse, String> {
-    info!("Creating port forward for session {}: {:?}", request.session_id, request);
+    info!(
+        "Creating port forward for session {}: {:?}",
+        request.session_id, request
+    );
 
     let manager = registry
         .get(&request.session_id)
@@ -209,11 +237,20 @@ pub async fn create_port_forward(
 
     // Perform health check if enabled (skip for dynamic forwards)
     if request.check_health && forward_type != ForwardType::Dynamic {
-        info!("Checking port availability: {}:{}", request.target_host, request.target_port);
-        
-        match manager.check_port_available(&request.target_host, request.target_port, 3000).await {
+        info!(
+            "Checking port availability: {}:{}",
+            request.target_host, request.target_port
+        );
+
+        match manager
+            .check_port_available(&request.target_host, request.target_port, 3000)
+            .await
+        {
             Ok(true) => {
-                info!("Port {}:{} is available", request.target_host, request.target_port);
+                info!(
+                    "Port {}:{} is available",
+                    request.target_host, request.target_port
+                );
             }
             Ok(false) => {
                 let error_msg = format!(
@@ -281,7 +318,10 @@ pub async fn stop_port_forward(
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
-    info!("Stopping port forward {} for session {}", forward_id, session_id);
+    info!(
+        "Stopping port forward {} for session {}",
+        forward_id, session_id
+    );
 
     let manager = registry
         .get(&session_id)
@@ -480,7 +520,10 @@ pub async fn delete_port_forward(
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
-    info!("Deleting port forward {} for session {}", forward_id, session_id);
+    info!(
+        "Deleting port forward {} for session {}",
+        forward_id, session_id
+    );
 
     let manager = registry
         .get(&session_id)
@@ -514,7 +557,10 @@ pub async fn restart_port_forward(
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
-    info!("Restarting port forward {} for session {}", forward_id, session_id);
+    info!(
+        "Restarting port forward {} for session {}",
+        forward_id, session_id
+    );
 
     let manager = registry
         .get(&session_id)
@@ -547,7 +593,10 @@ pub async fn update_port_forward(
     registry: State<'_, ForwardingRegistry>,
     request: UpdateForwardRequest,
 ) -> Result<ForwardResponse, String> {
-    info!("Updating port forward {} for session {}", request.forward_id, request.session_id);
+    info!(
+        "Updating port forward {} for session {}",
+        request.forward_id, request.session_id
+    );
 
     let manager = registry
         .get(&request.session_id)
@@ -594,7 +643,10 @@ pub async fn get_port_forward_stats(
         .await
         .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-    Ok(manager.get_forward_stats(&forward_id).await.map(|s| s.into()))
+    Ok(manager
+        .get_forward_stats(&forward_id)
+        .await
+        .map(|s| s.into()))
 }
 
 /// List saved forwards for a session
@@ -604,9 +656,9 @@ pub async fn list_saved_forwards(
     session_id: String,
 ) -> Result<Vec<PersistedForwardDto>, String> {
     info!("Listing saved forwards for session {}", session_id);
-    
+
     let forwards = registry.load_persisted_forwards(&session_id).await?;
-    
+
     Ok(forwards
         .into_iter()
         .map(|f| PersistedForwardDto {
@@ -630,7 +682,10 @@ pub async fn set_forward_auto_start(
     forward_id: String,
     auto_start: bool,
 ) -> Result<(), String> {
-    info!("Setting auto_start={} for forward {}", auto_start, forward_id);
+    info!(
+        "Setting auto_start={} for forward {}",
+        auto_start, forward_id
+    );
     registry.update_auto_start(&forward_id, auto_start).await
 }
 

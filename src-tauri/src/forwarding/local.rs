@@ -29,7 +29,11 @@ pub struct LocalForward {
 
 impl LocalForward {
     /// Create a new local port forward
-    pub fn new(local_addr: impl Into<String>, remote_host: impl Into<String>, remote_port: u16) -> Self {
+    pub fn new(
+        local_addr: impl Into<String>,
+        remote_host: impl Into<String>,
+        remote_port: u16,
+    ) -> Self {
         Self {
             local_addr: local_addr.into(),
             remote_host: remote_host.into(),
@@ -112,12 +116,12 @@ impl LocalForwardHandle {
 }
 
 /// Start local port forwarding
-/// 
+///
 /// This function spawns a background task that:
 /// 1. Listens on the local address
 /// 2. For each incoming connection, opens a direct-tcpip channel through SSH
 /// 3. Bridges data between the local socket and the SSH channel
-/// 
+///
 /// Uses HandleController to communicate with Handle Owner Task for opening channels.
 pub async fn start_local_forward(
     handle_controller: HandleController,
@@ -125,15 +129,12 @@ pub async fn start_local_forward(
 ) -> Result<LocalForwardHandle, SshError> {
     // Bind to local address
     let listener = TcpListener::bind(&config.local_addr).await.map_err(|e| {
-        SshError::ConnectionFailed(format!(
-            "Failed to bind to {}: {}",
-            config.local_addr, e
-        ))
+        SshError::ConnectionFailed(format!("Failed to bind to {}: {}", config.local_addr, e))
     })?;
 
-    let bound_addr = listener.local_addr().map_err(|e| {
-        SshError::ConnectionFailed(format!("Failed to get bound address: {}", e))
-    })?;
+    let bound_addr = listener
+        .local_addr()
+        .map_err(|e| SshError::ConnectionFailed(format!("Failed to get bound address: {}", e)))?;
 
     info!(
         "Started local port forward: {} -> {}:{}",
@@ -158,7 +159,7 @@ pub async fn start_local_forward(
                     info!("Local port forward stopped by request");
                     break;
                 }
-                
+
                 // Accept new connections
                 accept_result = listener.accept() => {
                     match accept_result {
@@ -166,21 +167,21 @@ pub async fn start_local_forward(
                             if !running_clone.load(Ordering::SeqCst) {
                                 break;
                             }
-                            
+
                             debug!("Accepted connection from {} for forward", peer_addr);
-                            
+
                             // Update stats
                             {
                                 let mut s = stats_clone.write();
                                 s.connection_count += 1;
                                 s.active_connections += 1;
                             }
-                            
+
                             // Clone for the connection handler
                             let controller = handle_controller.clone();
                             let remote_host_clone = remote_host.clone();
                             let stats_for_conn = stats_clone.clone();
-                            
+
                             // Spawn a task to handle this connection
                             tokio::spawn(async move {
                                 let result = handle_forward_connection(
@@ -190,13 +191,13 @@ pub async fn start_local_forward(
                                     remote_port,
                                     stats_for_conn.clone(),
                                 ).await;
-                                
+
                                 // Decrement active connections when done
                                 {
                                     let mut s = stats_for_conn.write();
                                     s.active_connections = s.active_connections.saturating_sub(1);
                                 }
-                                
+
                                 if let Err(e) = result {
                                     warn!("Forward connection error: {}", e);
                                 }
@@ -211,7 +212,7 @@ pub async fn start_local_forward(
                 }
             }
         }
-        
+
         running_clone.store(false, Ordering::SeqCst);
         info!("Local port forward task exited");
     });
@@ -235,25 +236,23 @@ async fn handle_forward_connection(
 ) -> Result<(), SshError> {
     // Open direct-tcpip channel to remote via Handle Owner Task
     let channel = handle_controller
-        .open_direct_tcpip(
-            remote_host,
-            remote_port as u32,
-            "127.0.0.1",
-            0,
-        )
+        .open_direct_tcpip(remote_host, remote_port as u32, "127.0.0.1", 0)
         .await?;
 
-    debug!("Opened channel for forward to {}:{}", remote_host, remote_port);
+    debug!(
+        "Opened channel for forward to {}:{}",
+        remote_host, remote_port
+    );
 
     // Bridge the connection
     // We need to handle data in both directions
     let (mut local_read, mut local_write) = local_stream.split();
-    
+
     // Create a wrapper to handle the channel I/O
     let channel = Arc::new(tokio::sync::Mutex::new(channel));
     let channel_for_read = channel.clone();
     let channel_for_write = channel.clone();
-    
+
     let stats_for_send = stats.clone();
     let stats_for_recv = stats.clone();
 

@@ -203,7 +203,10 @@ impl SessionStateMachine {
 
     /// Check if session is active (connected or connecting)
     pub fn is_active(&self) -> bool {
-        matches!(self.state, SessionState::Connecting | SessionState::Connected)
+        matches!(
+            self.state,
+            SessionState::Connecting | SessionState::Connected
+        )
     }
 
     fn transition_to(&mut self, new_state: SessionState) {
@@ -256,7 +259,7 @@ mod tests {
         let mut sm = SessionStateMachine::new();
         sm.start_connecting().unwrap();
         sm.connect_failed("Connection refused".to_string()).unwrap();
-        
+
         assert_eq!(sm.state(), SessionState::Error);
         assert_eq!(sm.error(), Some("Connection refused"));
     }

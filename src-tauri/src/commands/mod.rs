@@ -1,13 +1,13 @@
 //! Tauri Commands module
-//! 
+//!
 //! This module contains all Tauri commands exposed to the frontend.
 
-mod connect_v2;
 pub mod config;
+mod connect_v2;
 pub mod forwarding;
 pub mod health;
-pub mod sftp;
 pub mod oxide_export;
+pub mod sftp;
 
 pub use connect_v2::*;
 pub use forwarding::*;

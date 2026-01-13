@@ -3,12 +3,14 @@
 //! Provides local, remote, and dynamic port forwarding for SSH connections.
 //! Designed for HPC/supercomputing workflows (Jupyter, TensorBoard, etc.)
 
-mod local;
-pub mod remote;
 mod dynamic;
+mod local;
 pub mod manager;
+pub mod remote;
 
-pub use local::{LocalForward, LocalForwardHandle, start_local_forward};
-pub use remote::{RemoteForward, RemoteForwardHandle, start_remote_forward, RemoteForwardRegistry};
-pub use dynamic::{DynamicForward, DynamicForwardHandle, start_dynamic_forward};
-pub use manager::{ForwardingManager, ForwardRule, ForwardRuleUpdate, ForwardStatus, ForwardType, ForwardStats};
+pub use dynamic::{start_dynamic_forward, DynamicForward, DynamicForwardHandle};
+pub use local::{start_local_forward, LocalForward, LocalForwardHandle};
+pub use manager::{
+    ForwardRule, ForwardRuleUpdate, ForwardStats, ForwardStatus, ForwardType, ForwardingManager,
+};
+pub use remote::{start_remote_forward, RemoteForward, RemoteForwardHandle, RemoteForwardRegistry};

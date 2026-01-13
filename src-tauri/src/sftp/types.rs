@@ -52,8 +52,8 @@ impl FileType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PreviewContent {
     /// Plain text content (code, config, logs, etc.)
-    Text { 
-        data: String, 
+    Text {
+        data: String,
         mime_type: Option<String>,
         /// Language hint for syntax highlighting (e.g., "rust", "python", "bash")
         language: Option<String>,
@@ -65,15 +65,15 @@ pub enum PreviewContent {
     /// Base64-encoded audio content (for small audio < 50MB)
     Audio { data: String, mime_type: String },
     /// Base64-encoded PDF content (native or converted from Office)
-    Pdf { 
-        data: String, 
+    Pdf {
+        data: String,
         /// Original MIME type if converted from Office document
         original_mime: Option<String>,
     },
     /// Hex dump for binary files (incremental loading)
-    Hex { 
+    Hex {
         /// Hex dump string
-        data: String, 
+        data: String,
         /// Total file size
         total_size: u64,
         /// Current offset (for incremental loading)
@@ -84,15 +84,15 @@ pub enum PreviewContent {
         has_more: bool,
     },
     /// File is too large to preview
-    TooLarge { 
-        size: u64, 
-        max_size: u64, 
+    TooLarge {
+        size: u64,
+        max_size: u64,
         /// Recommend downloading instead
         recommend_download: bool,
     },
     /// File type cannot be previewed
-    Unsupported { 
-        mime_type: String, 
+    Unsupported {
+        mime_type: String,
         /// Human-readable reason
         reason: String,
     },
@@ -219,25 +219,25 @@ pub struct ListFilter {
 pub mod constants {
     /// Default chunk size for file transfers (64 KB)
     pub const DEFAULT_CHUNK_SIZE: usize = 64 * 1024;
-    
+
     /// Maximum file size for preview (10 MB)
     pub const MAX_PREVIEW_SIZE: u64 = 10 * 1024 * 1024;
-    
+
     /// Maximum text preview size (1 MB)
     pub const MAX_TEXT_PREVIEW_SIZE: u64 = 1024 * 1024;
-    
+
     /// Maximum video/audio preview size (50 MB)
     pub const MAX_MEDIA_PREVIEW_SIZE: u64 = 50 * 1024 * 1024;
-    
+
     /// Maximum Office document size for conversion (10 MB)
     pub const MAX_OFFICE_CONVERT_SIZE: u64 = 10 * 1024 * 1024;
-    
+
     /// Hex preview chunk size (16 KB)
     pub const HEX_CHUNK_SIZE: u64 = 16 * 1024;
-    
+
     /// Maximum concurrent transfers
     pub const MAX_CONCURRENT_TRANSFERS: usize = 3;
-    
+
     /// Buffer size for streaming transfers
     pub const STREAM_BUFFER_SIZE: usize = 256 * 1024;
 }
@@ -297,7 +297,8 @@ pub fn extension_to_language(ext: &str) -> Option<String> {
 
 /// Check if file extension indicates a text/script file
 pub fn is_text_extension(ext: &str) -> bool {
-    matches!(ext.to_lowercase().as_str(),
+    matches!(
+        ext.to_lowercase().as_str(),
         // Scripts & configs
         "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" |
         "conf" | "cfg" | "ini" | "properties" | "env" | "envrc" |
@@ -330,7 +331,8 @@ pub fn is_audio_mime(mime: &str) -> bool {
 
 /// Check if file is an Office document
 pub fn is_office_extension(ext: &str) -> bool {
-    matches!(ext.to_lowercase().as_str(),
+    matches!(
+        ext.to_lowercase().as_str(),
         // Microsoft Office
         "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
         // LibreOffice
@@ -348,16 +350,16 @@ pub fn is_pdf_extension(ext: &str) -> bool {
 /// Generate hex dump from bytes
 pub fn generate_hex_dump(data: &[u8], offset: u64) -> String {
     use std::fmt::Write;
-    
+
     let mut result = String::new();
     let bytes_per_line = 16;
-    
+
     for (i, chunk) in data.chunks(bytes_per_line).enumerate() {
         let addr = offset + (i * bytes_per_line) as u64;
-        
+
         // Address
         write!(result, "{:08X}  ", addr).unwrap();
-        
+
         // Hex bytes
         for (j, byte) in chunk.iter().enumerate() {
             if j == 8 {
@@ -365,7 +367,7 @@ pub fn generate_hex_dump(data: &[u8], offset: u64) -> String {
             }
             write!(result, "{:02X} ", byte).unwrap();
         }
-        
+
         // Padding for incomplete lines
         for j in chunk.len()..bytes_per_line {
             if j == 8 {
@@ -373,7 +375,7 @@ pub fn generate_hex_dump(data: &[u8], offset: u64) -> String {
             }
             result.push_str("   ");
         }
-        
+
         // ASCII representation
         result.push_str(" |");
         for byte in chunk {
@@ -386,6 +388,6 @@ pub fn generate_hex_dump(data: &[u8], offset: u64) -> String {
         }
         result.push_str("|\n");
     }
-    
+
     result
 }

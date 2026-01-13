@@ -6,10 +6,10 @@
 //! - ProxyJump: Multi-hop jump hosts
 //! - Port Forwarding: LocalForward, RemoteForward, DynamicForward
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
-use serde::{Serialize, Deserialize};
 
 /// Port forwarding rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +31,7 @@ impl PortForwardRule {
         if parts.len() != 2 {
             return None;
         }
-        
+
         // Parse local part: [bind_address:]port
         let (bind_address, local_port) = if parts[0].contains(':') {
             let local_parts: Vec<&str> = parts[0].rsplitn(2, ':').collect();
@@ -43,13 +43,13 @@ impl PortForwardRule {
         } else {
             ("localhost".to_string(), parts[0].parse().ok()?)
         };
-        
+
         // Parse remote part: host:hostport
         let remote_parts: Vec<&str> = parts[1].rsplitn(2, ':').collect();
         if remote_parts.len() != 2 {
             return None;
         }
-        
+
         Some(PortForwardRule {
             bind_address,
             local_port,
@@ -79,14 +79,14 @@ impl ProxyJumpHost {
         } else {
             (None, value)
         };
-        
+
         let (host, port) = if host_port.contains(':') {
             let parts: Vec<&str> = host_port.rsplitn(2, ':').collect();
             (parts[1].to_string(), parts[0].parse().unwrap_or(22))
         } else {
             (host_port.to_string(), 22)
         };
-        
+
         Some(ProxyJumpHost { user, host, port })
     }
 }
@@ -104,25 +104,25 @@ pub struct SshConfigHost {
     pub port: Option<u16>,
     /// Identity file path (IdentityFile directive)
     pub identity_file: Option<String>,
-    
+
     /// ProxyJump chain (parsed from ProxyJump directive)
     #[serde(default)]
     pub proxy_jump: Vec<ProxyJumpHost>,
-    
+
     /// ProxyCommand (alternative to ProxyJump)
     pub proxy_command: Option<String>,
-    
+
     /// Local port forwards
     #[serde(default)]
     pub local_forwards: Vec<PortForwardRule>,
-    
+
     /// Remote port forwards
     #[serde(default)]
     pub remote_forwards: Vec<PortForwardRule>,
-    
+
     /// Dynamic forward port (SOCKS proxy)
     pub dynamic_forward: Option<u16>,
-    
+
     /// Other directives we don't directly use
     #[serde(default)]
     pub other: HashMap<String, String>,
@@ -133,43 +133,47 @@ impl SshConfigHost {
     pub fn effective_hostname(&self) -> &str {
         self.hostname.as_deref().unwrap_or(&self.alias)
     }
-    
+
     /// Get effective port (port or 22)
     pub fn effective_port(&self) -> u16 {
         self.port.unwrap_or(22)
     }
-    
+
     /// Check if this is a wildcard pattern
     pub fn is_wildcard(&self) -> bool {
         self.alias.contains('*') || self.alias.contains('?')
     }
-    
+
     /// Check if this host requires a proxy jump
     pub fn has_proxy_jump(&self) -> bool {
         !self.proxy_jump.is_empty()
     }
-    
+
     /// Check if this host has any port forwards configured
     pub fn has_port_forwards(&self) -> bool {
-        !self.local_forwards.is_empty() 
-            || !self.remote_forwards.is_empty() 
+        !self.local_forwards.is_empty()
+            || !self.remote_forwards.is_empty()
             || self.dynamic_forward.is_some()
     }
-    
+
     /// Get proxy jump chain description (for UI display)
     pub fn proxy_jump_description(&self) -> Option<String> {
         if self.proxy_jump.is_empty() {
             return None;
         }
-        
-        let hops: Vec<String> = self.proxy_jump.iter().map(|hop| {
-            if let Some(ref user) = hop.user {
-                format!("{}@{}:{}", user, hop.host, hop.port)
-            } else {
-                format!("{}:{}", hop.host, hop.port)
-            }
-        }).collect();
-        
+
+        let hops: Vec<String> = self
+            .proxy_jump
+            .iter()
+            .map(|hop| {
+                if let Some(ref user) = hop.user {
+                    format!("{}@{}:{}", user, hop.host, hop.port)
+                } else {
+                    format!("{}:{}", hop.host, hop.port)
+                }
+            })
+            .collect();
+
         Some(hops.join(" → "))
     }
 }
@@ -179,10 +183,10 @@ impl SshConfigHost {
 pub enum SshConfigError {
     #[error("Failed to determine home directory")]
     NoHomeDir,
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Parse error at line {line}: {message}")]
     Parse { line: usize, message: String },
 }
@@ -200,7 +204,7 @@ pub async fn parse_ssh_config(path: Option<PathBuf>) -> Result<Vec<SshConfigHost
         Some(p) => p,
         None => default_ssh_config_path()?,
     };
-    
+
     let content = match fs::read_to_string(&path).await {
         Ok(c) => c,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -208,7 +212,7 @@ pub async fn parse_ssh_config(path: Option<PathBuf>) -> Result<Vec<SshConfigHost
         }
         Err(e) => return Err(SshConfigError::Io(e)),
     };
-    
+
     parse_ssh_config_content(&content)
 }
 
@@ -216,15 +220,15 @@ pub async fn parse_ssh_config(path: Option<PathBuf>) -> Result<Vec<SshConfigHost
 pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, SshConfigError> {
     let mut hosts = Vec::new();
     let mut current_host: Option<SshConfigHost> = None;
-    
+
     for (_line_num, line) in content.lines().enumerate() {
         let line = line.trim();
-        
+
         // Skip empty lines and comments
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        
+
         // Parse "Key Value" or "Key=Value"
         let (key, value) = if let Some(eq_pos) = line.find('=') {
             let key = line[..eq_pos].trim();
@@ -237,9 +241,9 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
             }
             (parts[0], parts[1].trim())
         };
-        
+
         let key_lower = key.to_lowercase();
-        
+
         if key_lower == "host" {
             // Save previous host if exists
             if let Some(host) = current_host.take() {
@@ -247,7 +251,7 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
                     hosts.push(host);
                 }
             }
-            
+
             // Handle multiple hosts on same line (e.g., "Host foo bar")
             for alias in value.split_whitespace() {
                 // For now, we only take the first non-wildcard host
@@ -320,29 +324,26 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
             }
         }
     }
-    
+
     // Don't forget the last host
     if let Some(host) = current_host {
         if !host.is_wildcard() {
             hosts.push(host);
         }
     }
-    
+
     Ok(hosts)
 }
 
 /// Filter hosts suitable for import (non-wildcard, has hostname or is valid)
 pub fn filter_importable_hosts(hosts: Vec<SshConfigHost>) -> Vec<SshConfigHost> {
-    hosts
-        .into_iter()
-        .filter(|h| !h.is_wildcard())
-        .collect()
+    hosts.into_iter().filter(|h| !h.is_wildcard()).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_basic() {
         let content = r#"
@@ -357,20 +358,20 @@ Host otherserver
     HostName other.com
     User root
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         assert_eq!(hosts.len(), 2);
-        
+
         assert_eq!(hosts[0].alias, "myserver");
         assert_eq!(hosts[0].hostname, Some("example.com".to_string()));
         assert_eq!(hosts[0].user, Some("admin".to_string()));
         assert_eq!(hosts[0].port, Some(2222));
         assert!(hosts[0].identity_file.is_some());
-        
+
         assert_eq!(hosts[1].alias, "otherserver");
         assert_eq!(hosts[1].effective_port(), 22);
     }
-    
+
     #[test]
     fn test_skip_wildcards() {
         let content = r#"
@@ -383,12 +384,12 @@ Host dev-*
 Host prod
     HostName prod.example.com
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].alias, "prod");
     }
-    
+
     #[test]
     fn test_effective_values() {
         let host = SshConfigHost {
@@ -397,11 +398,11 @@ Host prod
             port: None,
             ..Default::default()
         };
-        
+
         assert_eq!(host.effective_hostname(), "myhost");
         assert_eq!(host.effective_port(), 22);
     }
-    
+
     #[test]
     fn test_parse_proxy_jump() {
         let content = r#"
@@ -415,22 +416,22 @@ Host bastion
     User zhangsan
     IdentityFile ~/.ssh/id_ed25519
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         assert_eq!(hosts.len(), 2);
-        
+
         // HPC host with ProxyJump
         assert_eq!(hosts[0].alias, "hpc");
         assert!(hosts[0].has_proxy_jump());
         assert_eq!(hosts[0].proxy_jump.len(), 1);
         assert_eq!(hosts[0].proxy_jump[0].host, "bastion");
         assert_eq!(hosts[0].proxy_jump[0].port, 22);
-        
+
         // Bastion host (no proxy)
         assert_eq!(hosts[1].alias, "bastion");
         assert!(!hosts[1].has_proxy_jump());
     }
-    
+
     #[test]
     fn test_parse_multi_hop_proxy() {
         let content = r#"
@@ -439,13 +440,13 @@ Host compute
     User admin
     ProxyJump bastion,hpc
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         assert_eq!(hosts[0].proxy_jump.len(), 2);
         assert_eq!(hosts[0].proxy_jump[0].host, "bastion");
         assert_eq!(hosts[0].proxy_jump[1].host, "hpc");
     }
-    
+
     #[test]
     fn test_parse_proxy_jump_with_user_port() {
         let content = r#"
@@ -453,14 +454,14 @@ Host target
     HostName target.example.com
     ProxyJump admin@jump.example.com:2222
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         let proxy = &hosts[0].proxy_jump[0];
         assert_eq!(proxy.user, Some("admin".to_string()));
         assert_eq!(proxy.host, "jump.example.com");
         assert_eq!(proxy.port, 2222);
     }
-    
+
     #[test]
     fn test_parse_port_forwards() {
         let content = r#"
@@ -471,32 +472,40 @@ Host hpc
     RemoteForward 3000 localhost:3000
     DynamicForward 1080
 "#;
-        
+
         let hosts = parse_ssh_config_content(content).unwrap();
         let host = &hosts[0];
-        
+
         assert_eq!(host.local_forwards.len(), 2);
         assert_eq!(host.local_forwards[0].local_port, 8888);
         assert_eq!(host.local_forwards[0].remote_port, 8888);
         assert_eq!(host.local_forwards[1].bind_address, "127.0.0.1");
-        
+
         assert_eq!(host.remote_forwards.len(), 1);
         assert_eq!(host.remote_forwards[0].remote_port, 3000);
-        
+
         assert_eq!(host.dynamic_forward, Some(1080));
     }
-    
+
     #[test]
     fn test_proxy_jump_description() {
         let host = SshConfigHost {
             alias: "target".to_string(),
             proxy_jump: vec![
-                ProxyJumpHost { user: Some("admin".to_string()), host: "jump1".to_string(), port: 22 },
-                ProxyJumpHost { user: None, host: "jump2".to_string(), port: 2222 },
+                ProxyJumpHost {
+                    user: Some("admin".to_string()),
+                    host: "jump1".to_string(),
+                    port: 22,
+                },
+                ProxyJumpHost {
+                    user: None,
+                    host: "jump2".to_string(),
+                    port: 2222,
+                },
             ],
             ..Default::default()
         };
-        
+
         let desc = host.proxy_jump_description().unwrap();
         assert_eq!(desc, "admin@jump1:22 → jump2:2222");
     }

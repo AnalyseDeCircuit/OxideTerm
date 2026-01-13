@@ -2,26 +2,26 @@
 //!
 //! Built with Rust, Tauri, and xterm.js for high-performance terminal emulation.
 
-pub mod ssh;
 pub mod bridge;
 pub mod commands;
-pub mod session;
 pub mod config;
 pub mod forwarding;
-pub mod sftp;
-pub mod state;
 pub mod oxide_file;
+pub mod session;
+pub mod sftp;
+pub mod ssh;
+pub mod state;
 
-use std::sync::Arc;
-use std::fs::OpenOptions;
-use std::io::Write;
 use bridge::BridgeManager;
-use session::SessionRegistry;
 use commands::config::ConfigState;
 use commands::HealthRegistry;
+use session::SessionRegistry;
 use sftp::session::SftpRegistry;
 use sftp::TransferManager;
 use state::StateStore;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::sync::Arc;
 use tauri::Manager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -30,13 +30,9 @@ fn write_startup_log(message: &str) {
     if let Ok(log_dir) = config::storage::log_dir() {
         // Ensure log directory exists
         let _ = std::fs::create_dir_all(&log_dir);
-        
+
         let log_file = log_dir.join("startup.log");
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file)
-        {
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&log_file) {
             let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
             let _ = writeln!(file, "[{}] {}", timestamp, message);
         }
@@ -57,14 +53,19 @@ fn show_startup_error(title: &str, message: &str) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::ptr::null_mut;
-    
+
     let title: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
     let message: Vec<u16> = OsStr::new(message).encode_wide().chain(Some(0)).collect();
-    
+
     unsafe {
         #[link(name = "user32")]
         extern "system" {
-            fn MessageBoxW(hwnd: *mut std::ffi::c_void, text: *const u16, caption: *const u16, type_: u32) -> i32;
+            fn MessageBoxW(
+                hwnd: *mut std::ffi::c_void,
+                text: *const u16,
+                caption: *const u16,
+                type_: u32,
+            ) -> i32;
         }
         MessageBoxW(null_mut(), message.as_ptr(), title.as_ptr(), 0x10); // MB_ICONERROR
     }
@@ -78,7 +79,7 @@ fn show_startup_error(_title: &str, _message: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     write_startup_log("OxideTerm starting...");
-    
+
     init_logging();
 
     tracing::info!("Starting OxideTerm...");
@@ -95,34 +96,37 @@ pub fn run() {
             return;
         }
     };
-    
+
     write_startup_log(&format!("State DB path: {:?}", state_db_path));
-    
+
     let state_store = match StateStore::new(state_db_path.clone()) {
         Ok(store) => Arc::new(store),
         Err(e) => {
-            let msg = format!("Failed to initialize state store at {:?}: {}", state_db_path, e);
+            let msg = format!(
+                "Failed to initialize state store at {:?}: {}",
+                state_db_path, e
+            );
             tracing::error!("{}", msg);
             write_startup_log(&msg);
             show_startup_error("OxideTerm Startup Error", &msg);
             return;
         }
     };
-    
+
     write_startup_log("State store initialized");
-    
+
     // Create shared session registry with state store
     let registry = Arc::new(SessionRegistry::new(state_store.clone()));
-    
+
     // Create forwarding registry with state store
     let forwarding_registry = commands::ForwardingRegistry::new_with_state(state_store.clone());
-    
+
     // Create health registry
     let health_registry = HealthRegistry::new();
-    
+
     // Create SFTP registry
     let sftp_registry = Arc::new(SftpRegistry::new());
-    
+
     // Create transfer manager for concurrent transfer control
     let transfer_manager = Arc::new(TransferManager::new());
 
@@ -142,21 +146,21 @@ pub fn run() {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
             write_startup_log("Initializing config state...");
-            
+
             match tauri::async_runtime::block_on(ConfigState::new()) {
-                    Ok(config_state) => {
+                Ok(config_state) => {
                     app.manage(Arc::new(config_state));
                     tracing::info!("Config state initialized successfully");
                     write_startup_log("Config state initialized successfully");
-                    }
-                    Err(e) => {
-                        let msg = format!("Failed to initialize config state: {}", e);
-                        tracing::error!("{}", msg);
-                        write_startup_log(&msg);
+                }
+                Err(e) => {
+                    let msg = format!("Failed to initialize config state: {}", e);
+                    tracing::error!("{}", msg);
+                    write_startup_log(&msg);
                     return Err(e.into());
                 }
             }
-            
+
             write_startup_log("Tauri setup complete");
             Ok(())
         })
