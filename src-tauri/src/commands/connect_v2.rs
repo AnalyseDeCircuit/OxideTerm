@@ -296,3 +296,59 @@ pub async fn check_ssh_keys() -> Result<Vec<String>, String> {
     let keys = crate::session::auth::list_available_keys();
     Ok(keys.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
 }
+
+/// Restore persisted sessions (returns session metadata for selective restoration)
+#[tauri::command]
+pub async fn restore_sessions(
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<Vec<PersistedSessionDto>, String> {
+    let sessions = registry
+        .restore_sessions()
+        .map_err(|e| format!("Failed to restore sessions: {:?}", e))?;
+    
+    Ok(sessions
+        .into_iter()
+        .map(|s| PersistedSessionDto {
+            id: s.id,
+            host: s.config.host,
+            port: s.config.port,
+            username: s.config.username,
+            name: s.config.name,
+            created_at: s.created_at.to_rfc3339(),
+            order: s.order,
+        })
+        .collect())
+}
+
+/// List persisted session IDs
+#[tauri::command]
+pub async fn list_persisted_sessions(
+    registry: State<'_, Arc<SessionRegistry>>,
+) -> Result<Vec<String>, String> {
+    registry
+        .list_persisted_sessions()
+        .map_err(|e| format!("Failed to list persisted sessions: {:?}", e))
+}
+
+/// Delete a persisted session
+#[tauri::command]
+pub async fn delete_persisted_session(
+    registry: State<'_, Arc<SessionRegistry>>,
+    session_id: String,
+) -> Result<(), String> {
+    registry
+        .delete_persisted_session(&session_id)
+        .map_err(|e| format!("Failed to delete persisted session: {:?}", e))
+}
+
+/// DTO for persisted session info (without sensitive data)
+#[derive(Debug, Serialize)]
+pub struct PersistedSessionDto {
+    pub id: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub name: Option<String>,
+    pub created_at: String,
+    pub order: usize,
+}

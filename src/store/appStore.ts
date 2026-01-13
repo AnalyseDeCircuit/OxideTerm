@@ -5,12 +5,14 @@ import {
   Tab, 
   ConnectRequest, 
   TabType,
-  SessionState
+  SessionState,
+  ConnectionInfo
 } from '../types';
 
 interface ModalsState {
   newConnection: boolean;
   settings: boolean;
+  editConnection: boolean;
 }
 
 interface AppStore {
@@ -21,6 +23,10 @@ interface AppStore {
   sidebarCollapsed: boolean;
   sidebarActiveSection: 'sessions' | 'sftp' | 'forwards';
   modals: ModalsState;
+  savedConnections: ConnectionInfo[];
+  groups: string[];
+  selectedGroup: string | null;
+  editingConnection: ConnectionInfo | null;
 
   // Actions - Sessions
   connect: (request: ConnectRequest) => Promise<string>;
@@ -38,6 +44,13 @@ interface AppStore {
   setSidebarSection: (section: 'sessions' | 'sftp' | 'forwards') => void;
   toggleModal: (modal: keyof ModalsState, isOpen: boolean) => void;
   
+  // Actions - Connections & Groups
+  loadSavedConnections: () => Promise<void>;
+  loadGroups: () => Promise<void>;
+  setSelectedGroup: (group: string | null) => void;
+  connectToSaved: (connectionId: string) => Promise<void>;
+  openConnectionEditor: (connectionId: string) => void;
+  
   // Computed (Helper methods)
   getSession: (sessionId: string) => SessionInfo | undefined;
 }
@@ -51,7 +64,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   modals: {
     newConnection: false,
     settings: false,
+    editConnection: false,
   },
+  savedConnections: [],
+  groups: [],
+  selectedGroup: null,
+  editingConnection: null,
 
   connect: async (request: ConnectRequest) => {
     try {
@@ -221,6 +239,81 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => ({
       modals: { ...state.modals, [modal]: isOpen }
     }));
+  },
+
+  loadSavedConnections: async () => {
+    try {
+      const connections = await api.getConnections();
+      set({ savedConnections: connections });
+    } catch (error) {
+      console.error('Failed to load saved connections:', error);
+    }
+  },
+
+  loadGroups: async () => {
+    try {
+      const groups = await api.getGroups();
+      set({ groups });
+    } catch (error) {
+      console.error('Failed to load groups:', error);
+    }
+  },
+
+  setSelectedGroup: (group) => {
+    set({ selectedGroup: group });
+  },
+
+  connectToSaved: async (connectionId) => {
+    try {
+      const connection = get().savedConnections.find(c => c.id === connectionId);
+      if (!connection) {
+        throw new Error('Connection not found');
+      }
+
+      // Try to get password from keychain if needed
+      let password: string | undefined;
+      if (connection.auth_type === 'password') {
+        try {
+          password = await api.getConnectionPassword(connectionId);
+        } catch (e) {
+          // Password not found, open editor dialog
+          console.log('Password not found in keychain, opening editor');
+          get().openConnectionEditor(connectionId);
+          return;
+        }
+      }
+
+      // If key auth but no key path, open editor
+      if (connection.auth_type === 'key' && !connection.key_path) {
+        get().openConnectionEditor(connectionId);
+        return;
+      }
+
+      const request: ConnectRequest = {
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        auth_type: connection.auth_type,
+        password,
+        key_path: connection.auth_type === 'key' ? connection.key_path : undefined,
+        name: connection.name,
+      };
+
+      await get().connect(request);
+      await api.markConnectionUsed(connectionId);
+    } catch (error) {
+      console.error('Failed to connect to saved connection:', error);
+      // Open editor on any error
+      get().openConnectionEditor(connectionId);
+    }
+  },
+
+  openConnectionEditor: (connectionId) => {
+    const connection = get().savedConnections.find(c => c.id === connectionId);
+    if (connection) {
+      set({ editingConnection: connection });
+      get().toggleModal('editConnection', true);
+    }
   },
 
   getSession: (sessionId) => {

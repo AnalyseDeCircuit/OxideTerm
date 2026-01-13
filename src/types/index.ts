@@ -28,6 +28,17 @@ export interface ConnectRequest {
   group?: string;
 }
 
+// Persisted Session Types
+export interface PersistedSessionInfo {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  name?: string;
+  created_at: string;
+  order: number;
+}
+
 // Tab Types
 export type TabType = 'terminal' | 'sftp' | 'forwards';
 
@@ -135,6 +146,19 @@ export interface ForwardRequest {
   target_port: number;
   description?: string;
   check_health?: boolean; // Default: true - check port availability before creating forward
+}
+
+// Persisted Forward Types
+export interface PersistedForwardInfo {
+  id: string;
+  session_id: string;
+  forward_type: string;
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  auto_start: boolean;
+  created_at: string;
 }
 
 export interface ForwardRule {

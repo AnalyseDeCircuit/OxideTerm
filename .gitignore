@@ -68,3 +68,9 @@ docs/UI_REFACTOR_PLAN.md
 sftptodo
 docs/HANDLE_OWNER_TASK.md
 forwarding-todo.md
+
+# User data and state (DO NOT COMMIT)
+*.redb
+*.redb.backup
+config.json
+keychain.json

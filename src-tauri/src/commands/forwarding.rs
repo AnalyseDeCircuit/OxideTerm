@@ -11,10 +11,12 @@ use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
 use crate::forwarding::{ForwardingManager, ForwardRule, ForwardRuleUpdate, ForwardStatus, ForwardType, ForwardStats};
+use crate::state::{StateStore, PersistedForward, forwarding::ForwardPersistence};
 
 /// Global registry of forwarding managers (one per session)
 pub struct ForwardingRegistry {
     managers: RwLock<HashMap<String, Arc<ForwardingManager>>>,
+    persistence: Option<ForwardPersistence>,
 }
 
 impl ForwardingRegistry {
@@ -22,6 +24,15 @@ impl ForwardingRegistry {
     pub fn new() -> Self {
         Self {
             managers: RwLock::new(HashMap::new()),
+            persistence: None,
+        }
+    }
+    
+    /// Create a new forwarding registry with state persistence
+    pub fn new_with_state(state_store: Arc<StateStore>) -> Self {
+        Self {
+            managers: RwLock::new(HashMap::new()),
+            persistence: Some(ForwardPersistence::new(state_store)),
         }
     }
 
@@ -40,6 +51,53 @@ impl ForwardingRegistry {
         if let Some(manager) = self.managers.write().await.remove(session_id) {
             manager.stop_all().await;
         }
+        
+        // Delete persisted forwards for this session
+        if let Some(persistence) = &self.persistence {
+            if let Err(e) = persistence.delete_by_session(session_id) {
+                error!("Failed to delete persisted forwards for session {}: {:?}", session_id, e);
+            }
+        }
+    }
+    
+    /// Persist a forward rule
+    pub async fn persist_forward(&self, forward: PersistedForward) -> Result<(), String> {
+        if let Some(persistence) = &self.persistence {
+            persistence.save(&forward)
+                .map_err(|e| format!("Failed to persist forward: {:?}", e))?;
+            info!("Persisted forward rule: {}", forward.id);
+        }
+        Ok(())
+    }
+    
+    /// Delete a persisted forward
+    pub async fn delete_persisted_forward(&self, forward_id: &str) -> Result<(), String> {
+        if let Some(persistence) = &self.persistence {
+            persistence.delete(forward_id)
+                .map_err(|e| format!("Failed to delete persisted forward: {:?}", e))?;
+            info!("Deleted persisted forward: {}", forward_id);
+        }
+        Ok(())
+    }
+    
+    /// Load persisted forwards for a session
+    pub async fn load_persisted_forwards(&self, session_id: &str) -> Result<Vec<PersistedForward>, String> {
+        if let Some(persistence) = &self.persistence {
+            persistence.load_by_session(session_id)
+                .map_err(|e| format!("Failed to load persisted forwards: {:?}", e))
+        } else {
+            Ok(Vec::new())
+        }
+    }
+    
+    /// Update auto-start flag for a forward
+    pub async fn update_auto_start(&self, forward_id: &str, auto_start: bool) -> Result<(), String> {
+        if let Some(persistence) = &self.persistence {
+            persistence.update_auto_start(forward_id, auto_start)
+                .map_err(|e| format!("Failed to update auto_start: {:?}", e))?;
+            info!("Updated auto_start for forward {}: {}", forward_id, auto_start);
+        }
+        Ok(())
     }
 }
 
@@ -531,4 +589,65 @@ pub async fn get_port_forward_stats(
         .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
     Ok(manager.get_forward_stats(&forward_id).await.map(|s| s.into()))
+}
+
+/// List saved forwards for a session
+#[tauri::command]
+pub async fn list_saved_forwards(
+    registry: State<'_, ForwardingRegistry>,
+    session_id: String,
+) -> Result<Vec<PersistedForwardDto>, String> {
+    info!("Listing saved forwards for session {}", session_id);
+    
+    let forwards = registry.load_persisted_forwards(&session_id).await?;
+    
+    Ok(forwards
+        .into_iter()
+        .map(|f| PersistedForwardDto {
+            id: f.id,
+            session_id: f.session_id,
+            forward_type: format!("{:?}", f.forward_type).to_lowercase(),
+            bind_address: f.rule.bind_address,
+            bind_port: f.rule.bind_port,
+            target_host: f.rule.target_host,
+            target_port: f.rule.target_port,
+            auto_start: f.auto_start,
+            created_at: f.created_at.to_rfc3339(),
+        })
+        .collect())
+}
+
+/// Set auto-start flag for a forward
+#[tauri::command]
+pub async fn set_forward_auto_start(
+    registry: State<'_, ForwardingRegistry>,
+    forward_id: String,
+    auto_start: bool,
+) -> Result<(), String> {
+    info!("Setting auto_start={} for forward {}", auto_start, forward_id);
+    registry.update_auto_start(&forward_id, auto_start).await
+}
+
+/// Delete a persisted forward rule
+#[tauri::command]
+pub async fn delete_saved_forward(
+    registry: State<'_, ForwardingRegistry>,
+    forward_id: String,
+) -> Result<(), String> {
+    info!("Deleting saved forward {}", forward_id);
+    registry.delete_persisted_forward(&forward_id).await
+}
+
+/// DTO for persisted forward info
+#[derive(Debug, Serialize)]
+pub struct PersistedForwardDto {
+    pub id: String,
+    pub session_id: String,
+    pub forward_type: String,
+    pub bind_address: String,
+    pub bind_port: u16,
+    pub target_host: String,
+    pub target_port: u16,
+    pub auto_start: bool,
+    pub created_at: String,
 }

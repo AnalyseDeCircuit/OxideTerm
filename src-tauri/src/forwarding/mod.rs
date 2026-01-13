@@ -6,7 +6,7 @@
 mod local;
 pub mod remote;
 mod dynamic;
-mod manager;
+pub mod manager;
 
 pub use local::{LocalForward, LocalForwardHandle, start_local_forward};
 pub use remote::{RemoteForward, RemoteForwardHandle, start_remote_forward, RemoteForwardRegistry};

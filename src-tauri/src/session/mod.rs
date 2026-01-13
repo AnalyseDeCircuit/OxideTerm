@@ -9,7 +9,7 @@
 
 mod registry;
 mod state;
-mod types;
+pub mod types;
 mod reconnect;
 mod health;
 pub mod auth;

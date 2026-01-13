@@ -155,6 +155,9 @@ export const SettingsModal = () => {
           alert(`Successfully imported "${imported.name}" as a saved connection!`);
           // Remove from list to show it's imported
           setSshHosts(prev => prev.filter(h => h.alias !== alias));
+          // Refresh saved connections in sidebar
+          const { loadSavedConnections } = useAppStore.getState();
+          await loadSavedConnections();
       } catch (e) {
           console.error('Failed to import SSH host:', e);
           alert(`Failed to import host: ${e}`);

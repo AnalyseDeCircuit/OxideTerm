@@ -12,6 +12,7 @@ use tracing::{info, warn, debug};
 use super::state::SessionState;
 use super::types::{SessionConfig, SessionEntry, SessionInfo, SessionStats};
 use crate::ssh::{SessionCommand, HandleController};
+use crate::state::{StateStore, PersistedSession, session::SessionPersistence};
 
 /// Default maximum concurrent sessions
 const DEFAULT_MAX_SESSIONS: usize = 20;
@@ -24,21 +25,35 @@ pub struct SessionRegistry {
     order_counter: AtomicUsize,
     /// Maximum allowed concurrent sessions
     max_sessions: AtomicUsize,
+    /// State persistence
+    persistence: Option<SessionPersistence>,
 }
 
 impl Default for SessionRegistry {
     fn default() -> Self {
-        Self::new()
+        Self::new_without_persistence()
     }
 }
 
 impl SessionRegistry {
-    /// Create a new session registry
-    pub fn new() -> Self {
+    /// Create a new session registry with state persistence
+    pub fn new(state_store: Arc<StateStore>) -> Self {
+        let persistence = SessionPersistence::new(state_store);
         Self {
             sessions: DashMap::new(),
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
+            persistence: Some(persistence),
+        }
+    }
+    
+    /// Create a new session registry without persistence (for testing)
+    pub fn new_without_persistence() -> Self {
+        Self {
+            sessions: DashMap::new(),
+            order_counter: AtomicUsize::new(0),
+            max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
+            persistence: None,
         }
     }
 
@@ -48,6 +63,7 @@ impl SessionRegistry {
             sessions: DashMap::new(),
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(max),
+            persistence: None,
         }
     }
 
@@ -322,6 +338,59 @@ impl SessionRegistry {
             self.remove(&id);
         }
     }
+    
+    /// Persist a session's metadata
+    pub fn persist_session(&self, session_id: &str) -> Result<(), RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            let entry = self.sessions
+                .get(session_id)
+                .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
+            
+            let persisted = PersistedSession::new(
+                entry.id.clone(),
+                entry.config.clone(),
+                entry.order,
+            );
+            
+            persistence.save(&persisted)
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+            
+            debug!("Persisted session metadata: {}", session_id);
+        }
+        Ok(())
+    }
+    
+    /// Delete persisted session metadata
+    pub fn delete_persisted_session(&self, session_id: &str) -> Result<(), RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            persistence.delete(session_id)
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+            debug!("Deleted persisted session: {}", session_id);
+        }
+        Ok(())
+    }
+    
+    /// Restore sessions from persistence (returns session IDs for frontend to restore)
+    pub fn restore_sessions(&self) -> Result<Vec<PersistedSession>, RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            let sessions = persistence.load_all()
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+            info!("Restored {} persisted sessions", sessions.len());
+            Ok(sessions)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+    
+    /// List persisted session IDs
+    pub fn list_persisted_sessions(&self) -> Result<Vec<String>, RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            persistence.list_ids()
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))
+        } else {
+            Ok(Vec::new())
+        }
+    }
 }
 
 /// Registry error types
@@ -335,11 +404,14 @@ pub enum RegistryError {
 
     #[error("State transition error: {0}")]
     StateTransition(String),
+    
+    #[error("Persistence error: {0}")]
+    PersistenceError(String),
 }
 
-/// Create a shared session registry
+/// Create a shared session registry without persistence (for testing)
 pub fn create_shared_registry() -> Arc<SessionRegistry> {
-    Arc::new(SessionRegistry::new())
+    Arc::new(SessionRegistry::new_without_persistence())
 }
 
 #[cfg(test)]

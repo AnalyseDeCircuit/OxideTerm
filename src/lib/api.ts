@@ -10,7 +10,9 @@ import {
   ForwardRequest,
   ForwardRule,
   SshHostInfo,
-  SshKeyInfo
+  SshKeyInfo,
+  PersistedSessionInfo,
+  PersistedForwardInfo
 } from '../types';
 
 // Toggle this for development without a backend
@@ -55,6 +57,22 @@ export const api = {
   reorderSessions: async (orderedIds: string[]): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('reorder_sessions', { orderedIds });
+  },
+
+  // ============ Session Persistence ============
+  restoreSessions: async (): Promise<PersistedSessionInfo[]> => {
+    if (USE_MOCK) return [];
+    return invoke('restore_sessions');
+  },
+
+  listPersistedSessions: async (): Promise<string[]> => {
+    if (USE_MOCK) return [];
+    return invoke('list_persisted_sessions');
+  },
+
+  deletePersistedSession: async (sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('delete_persisted_session', { sessionId });
   },
 
   // ============ Connection Config ============
@@ -325,6 +343,22 @@ export const api = {
   forwardVscode: async (sessionId: string, localPort: number, remotePort: number): Promise<any> => {
     if (USE_MOCK) return { success: true, forward: { id: 'mock-vscode' } };
     return invoke('forward_vscode', { sessionId, localPort, remotePort });
+  },
+
+  // ============ Forward Persistence ============
+  listSavedForwards: async (sessionId: string): Promise<PersistedForwardInfo[]> => {
+    if (USE_MOCK) return [];
+    return invoke('list_saved_forwards', { sessionId });
+  },
+
+  setForwardAutoStart: async (forwardId: string, autoStart: boolean): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('set_forward_auto_start', { forwardId, autoStart });
+  },
+
+  deleteSavedForward: async (forwardId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('delete_saved_forward', { forwardId });
   },
 
   // ============ Health Check ============
