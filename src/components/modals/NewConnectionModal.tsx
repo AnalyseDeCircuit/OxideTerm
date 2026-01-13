@@ -5,30 +5,31 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
-import { 
-  Dialog, 
-  DialogContent, 
+import {
+  Dialog,
+  DialogContent,
   DialogDescription,
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
 } from '../ui/dialog';
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
 } from '../ui/tabs';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '../ui/select';
-import { ConnectRequest } from '../../types';
+import { ConnectRequest, ProxyHopConfig } from '../../types';
 import { api } from '../../lib/api';
-
+import { AddJumpServerDialog } from './AddJumpServerDialog';
+import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight } from 'lucide-react';
 export const NewConnectionModal = () => {
   const { modals, toggleModal, connect } = useAppStore();
   const [loading, setLoading] = useState(false);
@@ -44,6 +45,10 @@ export const NewConnectionModal = () => {
   const [saveConnection, setSaveConnection] = useState(false);
   const [group, setGroup] = useState('');
   const [groups, setGroups] = useState<string[]>([]);
+
+  const [proxyServers, setProxyServers] = useState<ProxyHopConfig[]>([]);
+  const [showAddJumpDialog, setShowAddJumpDialog] = useState(false);
+  const [proxyChainExpanded, setProxyChainExpanded] = useState(false);
 
   // Load groups when modal opens
   useEffect(() => {
@@ -68,9 +73,22 @@ export const NewConnectionModal = () => {
     }
   };
 
+  const handleAddJumpServer = (server: any) => {
+    setProxyServers([...proxyServers, server]);
+  };
+
+  const handleRemoveJumpServer = (index: number) => {
+    const newServers = proxyServers.filter((_, i) => i !== index);
+    setProxyServers(newServers);
+  };
+
+  const canConnect = () => {
+    return host && username;
+  };
+
   const handleConnect = async () => {
     if (!host || !username) return;
-    
+
     setLoading(true);
     try {
       const request: ConnectRequest = {
@@ -81,12 +99,13 @@ export const NewConnectionModal = () => {
         auth_type: authType,
         password: authType === 'password' ? password : undefined,
         key_path: authType === 'key' ? keyPath : undefined,
-        group: saveConnection ? group : undefined
+        group: saveConnection ? group : undefined,
+        proxy_chain: proxyServers.length > 0 ? proxyServers : undefined
       };
-      
+
       await connect(request);
       toggleModal('newConnection', false);
-      
+
       // Reset sensitive fields if not saved (TODO: Implement saving logic separately)
       setPassword('');
     } catch (e) {
@@ -98,133 +117,247 @@ export const NewConnectionModal = () => {
 
   return (
     <Dialog open={modals.newConnection} onOpenChange={(open) => toggleModal('newConnection', open)}>
-      <DialogContent className="sm:max-w-[425px]" aria-describedby="new-connection-description">
+      <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby="new-connection-description">
         <DialogHeader>
           <DialogTitle>New Connection</DialogTitle>
           <DialogDescription id="new-connection-description">
-            Enter the details for your new SSH connection.
+            Enter details for your new SSH connection.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="grid gap-4 py-4 px-6">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Name (Optional)</Label>
-            <Input 
-              id="name" 
-              placeholder="My Server" 
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          
-          <div className="grid grid-cols-4 gap-4">
-            <div className="col-span-3 grid gap-2">
-              <Label htmlFor="host">Host *</Label>
-              <Input 
-                id="host" 
-                placeholder="192.168.1.100" 
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-              />
-            </div>
+        <div className="space-y-6">
+          <div className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="port">Port</Label>
+              <Label htmlFor="name">Name (Optional)</Label>
               <Input 
-                id="port" 
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
+                id="name" 
+                placeholder="My Server" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
               />
+            </div>
+            
+            <div className="grid grid-cols-4 gap-4">
+              <div className="col-span-3 grid gap-2">
+                <Label htmlFor="host">Host *</Label>
+                <Input 
+                  id="host" 
+                  placeholder="192.168.1.100" 
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="port">Port</Label>
+                <Input 
+                  id="port" 
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                />
+              </div>
+            </div>
+   
+            <div className="grid gap-2">
+              <Label htmlFor="username">Username *</Label>
+              <Input 
+                id="username" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+   
+            <div className="grid gap-2">
+              <Label>Authentication</Label>
+              <Tabs 
+                value={authType} 
+                onValueChange={(v) => setAuthType(v as any)} 
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="password">Password</TabsTrigger>
+                  <TabsTrigger value="key">SSH Key</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="password">
+                  <div className="grid gap-2 pt-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input 
+                      id="password" 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <div className="flex items-center space-x-2 pt-1">
+                       <Checkbox id="save-pass" />
+                       <Label htmlFor="save-pass" className="font-normal">Save password to keychain</Label>
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="key">
+                   <div className="grid gap-2 pt-2">
+                     <Label htmlFor="keypath">Key File</Label>
+                     <div className="flex gap-2">
+                        <Input 
+                          id="keypath" 
+                          value={keyPath}
+                          onChange={(e) => setKeyPath(e.target.value)}
+                          placeholder="~/.ssh/id_rsa"
+                        />
+                        <Button variant="outline" onClick={handleBrowseKey}>Browse</Button>
+                     </div>
+                   </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+   
+            <div className="grid gap-2">
+              <Label>Group (Optional)</Label>
+              <Select value={group} onValueChange={setGroup}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a group" />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                  ))}
+                  {groups.length === 0 && (
+                    <SelectItem value="_none" disabled>No groups - create in Settings</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+   
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="save-conn" 
+                checked={saveConnection}
+                onCheckedChange={(c) => setSaveConnection(!!c)}
+              />
+              <Label htmlFor="save-conn">Save connection for future use</Label>
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="username">Username *</Label>
-            <Input 
-              id="username" 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Authentication</Label>
-            <Tabs 
-              value={authType} 
-              onValueChange={(v) => setAuthType(v as any)} 
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="password">Password</TabsTrigger>
-                <TabsTrigger value="key">SSH Key</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="password">
-                <div className="grid gap-2 pt-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <div className="flex items-center space-x-2 pt-1">
-                     <Checkbox id="save-pass" />
-                     <Label htmlFor="save-pass" className="font-normal">Save password to keychain</Label>
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="key">
-                 <div className="grid gap-2 pt-2">
-                  <Label htmlFor="keypath">Key File</Label>
-                  <div className="flex gap-2">
-                     <Input 
-                        id="keypath" 
-                        value={keyPath}
-                        onChange={(e) => setKeyPath(e.target.value)}
-                        placeholder="~/.ssh/id_rsa"
-                      />
-                     <Button variant="outline" onClick={handleBrowseKey}>Browse</Button>
-                  </div>
-                 </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Group (Optional)</Label>
-            <Select value={group} onValueChange={setGroup}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a group" />
-              </SelectTrigger>
-              <SelectContent>
-                {groups.map(g => (
-                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-                {groups.length === 0 && (
-                  <SelectItem value="_none" disabled>No groups - create in Settings</SelectItem>
+          <div className="border-t border-theme-border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-lg font-semibold">Proxy Chain</div>
+              <div className="flex items-center gap-2">
+                {proxyServers.length > 0 && (
+                  <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setProxyChainExpanded(!proxyChainExpanded)}
+                    >
+                    {proxyChainExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
                 )}
-              </SelectContent>
-            </Select>
-          </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddJumpDialog(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Jump Server
+                </Button>
+              </div>
+            </div>
+   
+            {proxyChainExpanded ? (
+              <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                {proxyServers.length === 0 ? (
+                  <div className="text-center text-zinc-500 py-6">
+                    No jump servers configured
+                  </div>
+                ) : (
+                  <>
+                    {proxyServers.map((server, index) => (
+                      <div key={server.id} className="relative">
+                        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 -translate-x-1/2">
+                          {index > 0 && (
+                            <div className="absolute top-1/2 -translate-y-1/2 w-8 h-0.5 bg-zinc-600" />
+                          )}
+                          <div className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-theme-bg border-2 border-zinc-600 flex items-center justify-center">
+                            {server.auth_type === 'key' || server.auth_type === 'default_key' ? (
+                              <Key className="h-4 w-4 text-zinc-400" />
+                            ) : (
+                              <Lock className="h-4 w-4 text-zinc-400" />
+                            )}
+                          </div>
+                        </div>
 
-          <div className="flex items-center space-x-2 border-t border-theme-border pt-4">
-            <Checkbox 
-              id="save-conn" 
-              checked={saveConnection}
-              onCheckedChange={(c) => setSaveConnection(!!c)}
-            />
-            <Label htmlFor="save-conn">Save connection for future use</Label>
+                        <div className="flex items-start gap-6 pl-12">
+                          <div className="flex-1 border border border-theme-border rounded-lg p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium text-zinc-600">
+                                {index + 1}. Jump Server
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveJumpServer(index)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-zinc-400 hover:text-red-500" />
+                              </Button>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-sm">
+                                <span className="text-zinc-500">Host:</span>
+                                <span className="font-medium ml-2">{server.host}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-zinc-500">Port:</span>
+                                <span className="font-medium ml-2">{server.port}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-zinc-500">Username:</span>
+                                <span className="font-medium ml-2">{server.username}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-zinc-500">Auth:</span>
+                                <span className="font-medium ml-2">
+                                  {server.auth_type === 'key' ? 'SSH Key' :
+                                   server.auth_type === 'default_key' ? 'Default Key' :
+                                   'Password'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-zinc-500 py-6">
+                {proxyServers.length === 0 ? (
+                  'No jump servers configured'
+                ) : (
+                  `${proxyServers.length} jump server${proxyServers.length > 1 ? 's' : ''} configured - click to expand`
+                )}
+              </div>
+            )}
           </div>
         </div>
-
+   
         <DialogFooter>
            <Button variant="ghost" onClick={() => toggleModal('newConnection', false)}>Cancel</Button>
-           <Button onClick={handleConnect} disabled={loading || !host || !username}>
-             {loading ? 'Connecting...' : 'Connect'}
+           <Button onClick={handleConnect} disabled={loading || !canConnect()}>
+              {loading ? 'Connecting...' : 'Connect'}
            </Button>
         </DialogFooter>
       </DialogContent>
+   
+      <AddJumpServerDialog
+        open={showAddJumpDialog}
+        onClose={() => setShowAddJumpDialog(false)}
+        onAdd={handleAddJumpServer}
+      />
     </Dialog>
   );
-};
+ };

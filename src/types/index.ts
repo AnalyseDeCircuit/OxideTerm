@@ -15,6 +15,17 @@ export interface SessionInfo {
   uptime_secs: number;
 }
 
+export interface ProxyHopConfig {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'default_key';
+  password?: string;
+  key_path?: string;
+  passphrase?: string;
+}
+
 export interface ConnectRequest {
   host: string;
   port: number;
@@ -27,6 +38,7 @@ export interface ConnectRequest {
   rows?: number;
   name?: string;
   group?: string;
+  proxy_chain?: ProxyHopConfig[];
 }
 
 // Persisted Session Types

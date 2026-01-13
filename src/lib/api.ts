@@ -21,11 +21,12 @@ const USE_MOCK = false;
 // --- API Implementation ---
 
 export const api = {
-  // ============ Session Management ============
   connect: async (request: ConnectRequest): Promise<SessionInfo> => {
     if (USE_MOCK) return mockConnect(request);
     // Backend returns ConnectResponseV2, extract session info and add ws_token
-    const response: any = await invoke('connect_v2', { request });
+    // Convert proxy_chain if present
+    const proxy_chain = request.proxy_chain;
+    const response: any = await invoke('connect_v2', { request, proxy_chain });
     const session = response.session || response;
     // Add ws_token from response if available
     if (response.ws_token) {
