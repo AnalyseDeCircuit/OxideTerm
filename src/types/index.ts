@@ -67,6 +67,20 @@ export interface ConnectionInfo {
   tags: string[];
 }
 
+export interface OxideMetadata {
+  exported_at: string;
+  exported_by: string;
+  description?: string;
+  num_connections: number;
+  connection_names: string[];
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
 export interface SaveConnectionRequest {
   id?: string;
   name: string;

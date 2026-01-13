@@ -11,7 +11,9 @@ import {
   Trash2,
   ListChecks,
   Check,
-  X
+  X,
+  Download,
+  Upload
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
@@ -19,6 +21,8 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditConnectionModal } from '../modals/EditConnectionModal';
+import { OxideExportModal } from '../modals/OxideExportModal';
+import { OxideImportModal } from '../modals/OxideImportModal';
 import { api } from '../../lib/api';
 
 export const Sidebar = () => {
@@ -44,6 +48,8 @@ export const Sidebar = () => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['ungrouped']));
   const [isManageMode, setIsManageMode] = useState(false);
   const [selectedConnections, setSelectedConnections] = useState<Set<string>>(new Set());
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Load saved connections and groups on mount
   useEffect(() => {
@@ -226,6 +232,24 @@ export const Sidebar = () => {
                   Saved Connections
                 </span>
                 <div className="flex items-center gap-1">
+                    <Button 
+                        variant="ghost"
+                        size="icon" 
+                        className="h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover"
+                        onClick={() => setShowImportModal(true)}
+                        title="Import from .oxide file"
+                    >
+                        <Upload className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                        variant="ghost"
+                        size="icon" 
+                        className="h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover"
+                        onClick={() => setShowExportModal(true)}
+                        title="Export to .oxide file"
+                    >
+                        <Download className="h-3 w-3" />
+                    </Button>
                     {isManageMode && selectedConnections.size > 0 && (
                         <Button
                             variant="ghost"
@@ -240,7 +264,7 @@ export const Sidebar = () => {
                     <Button 
                         variant={isManageMode ? "secondary" : "ghost"}
                         size="icon" 
-                        className={cn("h-6 w-6", isManageMode && "text-theme-accent")}
+                        className={cn("h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover", isManageMode && "text-theme-accent bg-theme-bg-hover")}
                         onClick={toggleManageMode}
                         title={isManageMode ? "Done" : "Manage Connections"}
                     >
@@ -427,6 +451,16 @@ export const Sidebar = () => {
         onConnect={() => {
           loadSavedConnections();
         }}
+      />
+      
+      <OxideExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
+      
+      <OxideImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
       />
     </div>
   );

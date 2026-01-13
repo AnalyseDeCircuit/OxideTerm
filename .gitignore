@@ -74,3 +74,4 @@ forwarding-todo.md
 *.redb.backup
 config.json
 keychain.json
+.cursorignore

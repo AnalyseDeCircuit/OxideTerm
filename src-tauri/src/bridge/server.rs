@@ -356,7 +356,7 @@ impl WsBridge {
                     }
                     Err(_) => {
                         warn!("WebSocket send timeout after 5s - client unresponsive, disconnecting");
-                        break;
+                    break;
                     }
                 }
             }
@@ -670,7 +670,7 @@ impl WsBridge {
                     }
                     Err(_) => {
                         warn!("WebSocket send timeout after 5s - client unresponsive, disconnecting");
-                        break;
+                    break;
                     }
                 }
             }

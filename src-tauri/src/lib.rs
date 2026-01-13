@@ -10,6 +10,7 @@ pub mod config;
 pub mod forwarding;
 pub mod sftp;
 pub mod state;
+pub mod oxide_file;
 
 use std::sync::Arc;
 use bridge::BridgeManager;
@@ -71,12 +72,12 @@ pub fn run() {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
             match tauri::async_runtime::block_on(ConfigState::new()) {
-                Ok(config_state) => {
+                    Ok(config_state) => {
                     app.manage(Arc::new(config_state));
                     tracing::info!("Config state initialized successfully");
-                }
-                Err(e) => {
-                    tracing::error!("Failed to initialize config state: {}", e);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to initialize config state: {}", e);
                     return Err(e.into());
                 }
             }
@@ -110,6 +111,10 @@ pub fn run() {
             commands::config::get_ssh_config_path,
             commands::config::create_group,
             commands::config::delete_group,
+            // Oxide file export/import commands
+            commands::oxide_export::export_to_oxide,
+            commands::oxide_export::validate_oxide_file,
+            commands::oxide_export::import_from_oxide,
             // Port forwarding commands
             commands::create_port_forward,
             commands::stop_port_forward,

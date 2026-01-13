@@ -36,6 +36,36 @@ impl ConfigState {
         let config = self.config.read().clone();
         self.storage.save(&config).await.map_err(|e| e.to_string())
     }
+    
+    /// Public API: Get a snapshot of the config
+    pub fn get_config_snapshot(&self) -> ConfigFile {
+        self.config.read().clone()
+    }
+    
+    /// Public API: Update config with a closure
+    pub fn update_config<F>(&self, f: F) -> Result<(), String> 
+    where
+        F: FnOnce(&mut ConfigFile)
+    {
+        let mut config = self.config.write();
+        f(&mut config);
+        Ok(())
+    }
+    
+    /// Public API: Get value from keychain
+    pub fn get_keychain_value(&self, key: &str) -> Result<String, String> {
+        self.keychain.get(key).map_err(|e| e.to_string())
+    }
+    
+    /// Public API: Store value in keychain
+    pub fn set_keychain_value(&self, key: &str, value: &str) -> Result<(), String> {
+        self.keychain.store(key, value).map_err(|e| e.to_string())
+    }
+    
+    /// Public API: Save config to disk
+    pub async fn save_config(&self) -> Result<(), String> {
+        self.save().await
+    }
 }
 
 /// Connection info for frontend (without sensitive data)

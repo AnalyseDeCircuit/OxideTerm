@@ -144,7 +144,7 @@ impl TransferManager {
         // Simplified: resume not supported in v0.1.0
         // User must re-initiate the transfer
         warn!("Resume not supported - transfer was cancelled: {}", transfer_id);
-        false
+            false
     }
 
     /// Cancel all active transfers
