@@ -35,6 +35,8 @@ pub struct ConnectResponseV2 {
     pub port: u16,
     /// Session information
     pub session: SessionInfo,
+    /// WebSocket authentication token (sent as first message after connection)
+    pub ws_token: String,
 }
 
 /// Connect request from frontend
@@ -184,7 +186,7 @@ async fn connect_with_timeout(
     let cmd_tx = session_handle.cmd_tx.clone();
 
     // Start WebSocket bridge
-    let (_, ws_port, _ws_token) = WsBridge::start_extended(session_handle)
+    let (_, ws_port, ws_token) = WsBridge::start_extended(session_handle)
         .await
         .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
@@ -212,6 +214,7 @@ async fn connect_with_timeout(
         ws_url,
         port: ws_port,
         session: session_info,
+        ws_token,
     })
 }
 

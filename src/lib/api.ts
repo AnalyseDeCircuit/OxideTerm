@@ -24,9 +24,14 @@ export const api = {
   // ============ Session Management ============
   connect: async (request: ConnectRequest): Promise<SessionInfo> => {
     if (USE_MOCK) return mockConnect(request);
-    // Backend returns ConnectResponseV2, extract session info
+    // Backend returns ConnectResponseV2, extract session info and add ws_token
     const response: any = await invoke('connect_v2', { request });
-    return response.session || response; // Handle both formats
+    const session = response.session || response;
+    // Add ws_token from response if available
+    if (response.ws_token) {
+      session.ws_token = response.ws_token;
+    }
+    return session;
   },
 
   disconnect: async (sessionId: string): Promise<void> => {
