@@ -394,11 +394,11 @@ pub async fn connect_via_single_hop(
 /// # Steps
 ///
 /// 1. Connect to Jump1 via SSH → Handle1
-/// 2. Open direct-tcpip to Jump2 → Channel1  
+/// 2. Open direct-tcpip to Jump2 → Channel1
 /// 3. Wrap Channel1 as ChannelStream → Stream1
 /// 4. Connect to Jump2 via SSH over Stream1 → Handle2
 /// 5. Repeat steps 2-4 until JumpN
-/// 6. Last hop: open direct-tcpip to Target → FinalChannel
+/// 6. Open direct-tcpip from JumpN to Target → FinalChannel
 /// 7. Wrap FinalChannel as ChannelStream → FinalStream
 /// 8. Connect to Target via SSH over FinalStream → TargetHandle
 ///
@@ -430,13 +430,10 @@ pub async fn connect_via_proxy(
         num_hops, target_username, target_host, target_port
     );
 
-    // === Phase 1: Build SSH-over-SSH tunnel chain ===
     let mut current_stream: Option<russh::ChannelStream<russh::client::Msg>> = None;
     let mut jump_handles: Vec<Handle<ClientHandler>> = Vec::with_capacity(num_hops);
 
     for (i, hop) in chain.hops.iter().enumerate() {
-        let is_last_proxy_hop = i == num_hops - 1;
-
         info!(
             "Proxy hop {}: connecting to {}@{}:{}",
             i + 1,
@@ -445,94 +442,75 @@ pub async fn connect_via_proxy(
             hop.port
         );
 
-        // Connect to current proxy hop
         let handle = if let Some(stream) = current_stream.take() {
-            // Connect via tunnel (SSH-over-SSH)
             connect_via_stream(hop, stream, timeout_secs).await?
         } else {
-            // Direct connection (first hop)
             direct_connect(hop, timeout_secs).await?
         };
 
-        if is_last_proxy_hop {
-            // === Last proxy hop: we're done building the tunnel ===
+        if i < num_hops - 1 {
+            let next_hop = &chain.hops[i + 1];
             info!(
-                "Last proxy hop ({}): tunnel established to {}@{}:{}",
+                "Proxy hop {}: opening tunnel to next hop {}@{}:{}",
                 i + 1,
-                hop.username,
-                hop.host,
-                hop.port
+                next_hop.username,
+                next_hop.host,
+                next_hop.port
             );
-            jump_handles.push(handle);
-            break;
+
+            let channel = handle
+                .channel_open_direct_tcpip(&next_hop.host, next_hop.port as u32, "127.0.0.1", 0)
+                .await
+                .map_err(|e| {
+                    SshError::ConnectionFailed(format!(
+                        "Failed to open tunnel to {}@{}:{}: {}",
+                        next_hop.username, next_hop.host, next_hop.port, e
+                    ))
+                })?;
+
+            current_stream = Some(channel.into_stream());
+        } else {
+            info!(
+                "Last proxy hop ({}): opening tunnel to target {}@{}:{}",
+                i + 1,
+                target_username,
+                target_host,
+                target_port
+            );
+
+            let channel = handle
+                .channel_open_direct_tcpip(target_host, target_port as u32, "127.0.0.1", 0)
+                .await
+                .map_err(|e| {
+                    SshError::ConnectionFailed(format!(
+                        "Failed to open tunnel to target {}@{}:{}: {}",
+                        target_username, target_host, target_port, e
+                    ))
+                })?;
+
+            current_stream = Some(channel.into_stream());
         }
 
-        // === Open tunnel to next hop ===
-        let next_hop = &chain.hops[i + 1];
-        info!(
-            "Proxy hop {}: opening tunnel to next hop {}@{}:{}",
-            i + 1,
-            next_hop.username,
-            next_hop.host,
-            next_hop.port
-        );
-
-        let channel = handle
-            .channel_open_direct_tcpip(&next_hop.host, next_hop.port as u32, "127.0.0.1", 0)
-            .await
-            .map_err(|e| {
-                SshError::ConnectionFailed(format!(
-                    "Failed to open tunnel to {}@{}:{}: {}",
-                    next_hop.username, next_hop.host, next_hop.port, e
-                ))
-            })?;
-
-        // Wrap channel as stream for next SSH connection
-        // ChannelStream provides AsyncRead + AsyncWrite impl
-        // This is the key to SSH-over-SSH!
-        let stream = channel.into_stream();
-        current_stream = Some(stream);
-
-        // Save the handle for this hop (after we've used it)
         jump_handles.push(handle);
-
-        info!(
-            "Proxy hop {}: tunnel to {}@{}:{} established",
-            i + 1,
-            next_hop.username,
-            next_hop.host,
-            next_hop.port
-        );
     }
 
-    // === Phase 2: Connect to target through tunnel ===
+    let target_hop = ProxyHop {
+        host: target_host.to_string(),
+        port: target_port,
+        username: target_username.to_string(),
+        auth: target_auth.clone(),
+    };
+
     info!(
-        "Connecting to target {}@{}:{} through tunnel",
+        "Connecting to target {}@{}:{} through final tunnel",
         target_username, target_host, target_port
     );
 
-    // Use tunnel (or direct if no proxies) to connect to target
-    let target_handle = if let Some(stream) = current_stream {
-        // Create target hop config
-        let target_hop = ProxyHop {
-            host: target_host.to_string(),
-            port: target_port,
-            username: target_username.to_string(),
-            auth: target_auth.clone(),
-        };
+    let stream = current_stream.ok_or_else(|| {
+        SshError::ConnectionFailed("No stream available for target connection".into())
+    })?;
 
-        // Connect via tunnel (SSH-over-SSH)
-        connect_via_stream(&target_hop, stream, timeout_secs).await?
-    } else {
-        // Direct connection (no proxy chain case - shouldn't happen due to earlier check)
-        let target_hop = ProxyHop {
-            host: target_host.to_string(),
-            port: target_port,
-            username: target_username.to_string(),
-            auth: target_auth.clone(),
-        };
-        direct_connect(&target_hop, timeout_secs).await?
-    };
+    let target_handle = connect_via_stream(&target_hop, stream, timeout_secs).await?;
 
     info!("Target connection established");
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
@@ -34,6 +35,22 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState<string>('');
+
+  const handleBrowseKey = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        directory: false,
+        title: 'Select SSH Key',
+        defaultPath: '~/.ssh'
+      });
+      if (selected && typeof selected === 'string') {
+        setKeyPath(selected);
+      }
+    } catch (e) {
+      console.error('Failed to open file dialog:', e);
+    }
+  };
 
   const handleAdd = () => {
     if (!host || !username) return;
@@ -97,7 +114,7 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
               onValueChange={(v) => setAuthType(v as any)}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="default_key">Default Key</TabsTrigger>
                 <TabsTrigger value="key">SSH Key</TabsTrigger>
                 <TabsTrigger value="password">Password</TabsTrigger>
@@ -112,12 +129,15 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
               <TabsContent value="key">
                 <div className="space-y-2 pt-2">
                   <Label htmlFor="jump-keypath">Key Path</Label>
-                  <Input
-                    id="jump-keypath"
-                    value={keyPath}
-                    onChange={(e) => setKeyPath(e.target.value)}
-                    placeholder="~/.ssh/id_rsa"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="jump-keypath"
+                      value={keyPath}
+                      onChange={(e) => setKeyPath(e.target.value)}
+                      placeholder="~/.ssh/id_rsa"
+                    />
+                    <Button variant="outline" onClick={handleBrowseKey} type="button">Browse</Button>
+                  </div>
                   <div className="space-y-1 pt-1">
                     <Label htmlFor="jump-passphrase" className="text-sm font-normal">Passphrase (Optional)</Label>
                     <Input

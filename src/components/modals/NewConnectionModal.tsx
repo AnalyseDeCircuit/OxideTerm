@@ -83,11 +83,18 @@ export const NewConnectionModal = () => {
   };
 
   const canConnect = () => {
+    if (proxyServers.length > 0) {
+      return proxyServers.every(server => server.host && server.username);
+    }
     return host && username;
   };
 
   const handleConnect = async () => {
-    if (!host || !username) return;
+    if (proxyServers.length > 0) {
+      if (!proxyServers.every(server => server.host && server.username)) return;
+    } else {
+      if (!host || !username) return;
+    }
 
     setLoading(true);
     try {
@@ -127,7 +134,7 @@ export const NewConnectionModal = () => {
         
         <div className="space-y-6 p-4">
           <div className="space-y-4">
-            <div className="grid gap-2">
+            <div className="space-y-2">
               <Label htmlFor="name">Name (Optional)</Label>
               <Input 
                 id="name" 
@@ -136,41 +143,69 @@ export const NewConnectionModal = () => {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            
+
+            {proxyServers.length > 0 && (
+              <div className="bg-theme-bg border-l-4 border-theme-border rounded p-3 mb-4">
+                <div className="space-y-2">
+                  <p className="text-sm">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">ⓘ跳板机已配置</span>
+                  </p>
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                    {proxyServers.map((server, idx) => (
+                      <div key={server.id} className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-zinc-400" />
+                        <span className="flex-1 truncate">
+                          <span className="font-mono">{idx + 1}.</span>
+                          <span className="ml-2">{server.username}@{server.host}:{server.port}</span>
+                          {server.auth_type === 'key' || server.auth_type === 'default_key' ? (
+                            <Key className="inline-block h-3.5 w-3.5 text-zinc-500 ml-1" />
+                          ) : (
+                            <Lock className="inline-block h-3.5 w-3.5 text-zinc-500 ml-1" />
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-4 gap-4">
               <div className="col-span-3 grid gap-2">
-                <Label htmlFor="host">Host *</Label>
-                <Input 
-                  id="host" 
-                  placeholder="192.168.1.100" 
+                <Label htmlFor="host">Target Host *</Label>
+                <Input
+                  id="host"
+                  placeholder="192.168.1.100"
                   value={host}
                   onChange={(e) => setHost(e.target.value)}
+                  className={proxyServers.length > 0 && !host ? 'border-orange-500' : ''}
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="port">Port</Label>
-                <Input 
-                  id="port" 
+                <Input
+                  id="port"
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
                 />
               </div>
             </div>
-   
+
             <div className="grid gap-2">
-              <Label htmlFor="username">Username *</Label>
-              <Input 
-                id="username" 
+              <Label htmlFor="username">Target Username *</Label>
+              <Input
+                id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                className={proxyServers.length > 0 && !username ? 'border-orange-500' : ''}
               />
             </div>
-   
+
             <div className="grid gap-2">
               <Label>Authentication</Label>
-              <Tabs 
-                value={authType} 
-                onValueChange={(v) => setAuthType(v as any)} 
+              <Tabs
+                value={authType}
+                onValueChange={(v) => setAuthType(v as any)}
                 className="w-full"
               >
                 <TabsList className="grid w-full grid-cols-2">
