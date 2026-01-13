@@ -53,7 +53,7 @@ target/
 **/*.rs.bk
 
 # Node
-package-lock.json
+# Note: package-lock.json should be committed for consistent builds
 yarn.lock
 pnpm-lock.yaml
 
