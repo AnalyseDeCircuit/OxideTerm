@@ -97,7 +97,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 p-4">
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-3 py-2 rounded-sm text-sm">
               {error}

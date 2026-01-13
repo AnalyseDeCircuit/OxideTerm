@@ -58,7 +58,7 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
           <DialogTitle>Add Jump Server</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 p-4">
           <div className="grid grid-cols-4 gap-4">
             <div className="col-span-3 space-y-2">
               <Label htmlFor="jump-host">Host *</Label>
