@@ -189,6 +189,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                         ws.close();
                         return;
                     }
+                    
+                    // SECURITY: Send authentication token as first message
+                    if (session?.ws_token) {
+                        ws.send(session.ws_token);
+                    } else {
+                        console.warn('No WebSocket token available - authentication may fail');
+                    }
+                    
                     term.writeln("Connected.\r\n");
                     // Initial resize using Wire Protocol v1
                     const frame = encodeResizeFrame(term.cols, term.rows);

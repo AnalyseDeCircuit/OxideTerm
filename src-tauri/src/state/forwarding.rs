@@ -86,12 +86,22 @@ impl ForwardPersistence {
         Self { store }
     }
     
-    /// Save a forward rule
+    /// Save a forward rule (synchronous)
     pub fn save(&self, forward: &PersistedForward) -> Result<(), StateError> {
         let data = forward.to_bytes()
             .map_err(|e| StateError::Serialization(e))?;
         
         self.store.save_forward(&forward.id, &data)?;
+        
+        Ok(())
+    }
+    
+    /// Save a forward rule (async, non-blocking)
+    pub async fn save_async(&self, forward: PersistedForward) -> Result<(), StateError> {
+        let data = forward.to_bytes()
+            .map_err(|e| StateError::Serialization(e))?;
+        
+        self.store.save_forward_async(forward.id, data).await?;
         
         Ok(())
     }
@@ -104,9 +114,14 @@ impl ForwardPersistence {
             .map_err(|e| StateError::Serialization(e))
     }
     
-    /// Delete a forward rule
+    /// Delete a forward rule (synchronous)
     pub fn delete(&self, id: &str) -> Result<(), StateError> {
         self.store.delete_forward(id)
+    }
+    
+    /// Delete a forward rule (async, non-blocking)
+    pub async fn delete_async(&self, id: String) -> Result<(), StateError> {
+        self.store.delete_forward_async(id).await
     }
     
     /// Update auto-start flag for a forward
@@ -117,7 +132,7 @@ impl ForwardPersistence {
         Ok(())
     }
     
-    /// Load all forwards
+    /// Load all forwards (synchronous)
     pub fn load_all(&self) -> Result<Vec<PersistedForward>, StateError> {
         let ids = self.store.list_forwards()?;
         
@@ -128,6 +143,27 @@ impl ForwardPersistence {
                 Err(e) => {
                     tracing::warn!("Failed to load forward {}: {:?}", id, e);
                     // Continue loading other forwards
+                }
+            }
+        }
+        
+        // Sort by creation time
+        forwards.sort_by_key(|f| f.created_at);
+        
+        Ok(forwards)
+    }
+    
+    /// Load all forwards (async, non-blocking, optimized bulk load)
+    pub async fn load_all_async(&self) -> Result<Vec<PersistedForward>, StateError> {
+        // Use bulk load to avoid N+1 queries (1 spawn_blocking instead of N+1)
+        let all_data = self.store.load_all_forwards_async().await?;
+        
+        let mut forwards = Vec::new();
+        for (id, data) in all_data {
+            match PersistedForward::from_bytes(&data) {
+                Ok(forward) => forwards.push(forward),
+                Err(e) => {
+                    tracing::warn!("Failed to deserialize forward {}: {:?}", id, e);
                 }
             }
         }

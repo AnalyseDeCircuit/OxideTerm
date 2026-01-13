@@ -68,19 +68,18 @@ pub fn run() {
         .manage(sftp_registry)
         .manage(transfer_manager)
         .setup(|app| {
-            // Initialize config state asynchronously
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                match ConfigState::new().await {
-                    Ok(config_state) => {
-                        handle.manage(Arc::new(config_state));
-                        tracing::info!("Config state initialized");
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to initialize config state: {}", e);
-                    }
+            // Initialize config state synchronously (blocking)
+            tracing::info!("Initializing config state...");
+            match tauri::async_runtime::block_on(ConfigState::new()) {
+                Ok(config_state) => {
+                    app.manage(Arc::new(config_state));
+                    tracing::info!("Config state initialized successfully");
                 }
-            });
+                Err(e) => {
+                    tracing::error!("Failed to initialize config state: {}", e);
+                    return Err(e.into());
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

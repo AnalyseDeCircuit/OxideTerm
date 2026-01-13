@@ -40,6 +40,54 @@ pub struct ExtendedSessionHandle {
     pub stdout_rx: mpsc::Receiver<Vec<u8>>,
 }
 
+impl Drop for SessionHandle {
+    fn drop(&mut self) {
+        // Best-effort cleanup - ignore errors
+        debug!("Dropping SessionHandle for session {}", self.id);
+        // stdin_tx will be dropped automatically, closing the channel
+    }
+}
+
+impl Drop for ExtendedSessionHandle {
+    fn drop(&mut self) {
+        // Send Close command to ensure SSH process cleanup
+        debug!("Dropping ExtendedSessionHandle for session {}", self.id);
+        let _ = self.cmd_tx.try_send(SessionCommand::Close);
+        // If send fails, the session is already dead - that's fine
+    }
+}
+
+// Allow taking ownership of handle contents despite Drop implementation
+impl SessionHandle {
+    /// Consumes the handle and returns its parts
+    pub fn into_parts(self) -> (String, mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) {
+        // Use ManuallyDrop to prevent Drop from running
+        let handle = std::mem::ManuallyDrop::new(self);
+        // Safety: We're taking ownership and preventing double-drop via ManuallyDrop
+        unsafe {
+            let id = std::ptr::read(&handle.id);
+            let stdin_tx = std::ptr::read(&handle.stdin_tx);
+            let stdout_rx = std::ptr::read(&handle.stdout_rx);
+            (id, stdin_tx, stdout_rx)
+        }
+    }
+}
+
+impl ExtendedSessionHandle {
+    /// Consumes the handle and returns its parts
+    pub fn into_parts(self) -> (String, mpsc::Sender<SessionCommand>, mpsc::Receiver<Vec<u8>>) {
+        // Use ManuallyDrop to prevent Drop from running
+        let handle = std::mem::ManuallyDrop::new(self);
+        // Safety: We're taking ownership and preventing double-drop via ManuallyDrop
+        unsafe {
+            let id = std::ptr::read(&handle.id);
+            let cmd_tx = std::ptr::read(&handle.cmd_tx);
+            let stdout_rx = std::ptr::read(&handle.stdout_rx);
+            (id, cmd_tx, stdout_rx)
+        }
+    }
+}
+
 /// SSH Session with PTY
 /// 
 /// This struct holds the Handle temporarily before spawning the Handle Owner Task.

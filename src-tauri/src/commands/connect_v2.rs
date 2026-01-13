@@ -184,7 +184,7 @@ async fn connect_with_timeout(
     let cmd_tx = session_handle.cmd_tx.clone();
 
     // Start WebSocket bridge
-    let (_, ws_port) = WsBridge::start_extended(session_handle)
+    let (_, ws_port, _ws_token) = WsBridge::start_extended(session_handle)
         .await
         .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
@@ -200,6 +200,7 @@ async fn connect_with_timeout(
     forwarding_registry.register(session_id.to_string(), forwarding_manager).await;
     info!("ForwardingManager registered for session {}", session_id);
 
+    // Token is sent as first message after connection, not in URL
     let ws_url = format!("ws://localhost:{}", ws_port);
     let session_info = registry.get(session_id)
         .ok_or_else(|| "Session disappeared from registry".to_string())?;

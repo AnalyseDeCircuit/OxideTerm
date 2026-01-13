@@ -63,12 +63,22 @@ impl SessionPersistence {
         Self { store }
     }
     
-    /// Save a session
+    /// Save a session (synchronous)
     pub fn save(&self, session: &PersistedSession) -> Result<(), StateError> {
         let data = session.to_bytes()
             .map_err(|e| StateError::Serialization(e))?;
         
         self.store.save_session(&session.id, &data)?;
+        
+        Ok(())
+    }
+    
+    /// Save a session (async, non-blocking)
+    pub async fn save_async(&self, session: PersistedSession) -> Result<(), StateError> {
+        let data = session.to_bytes()
+            .map_err(|e| StateError::Serialization(e))?;
+        
+        self.store.save_session_async(session.id, data).await?;
         
         Ok(())
     }
@@ -81,12 +91,17 @@ impl SessionPersistence {
             .map_err(|e| StateError::Serialization(e))
     }
     
-    /// Delete a session
+    /// Delete a session (synchronous)
     pub fn delete(&self, id: &str) -> Result<(), StateError> {
         self.store.delete_session(id)
     }
     
-    /// Load all sessions
+    /// Delete a session (async, non-blocking)
+    pub async fn delete_async(&self, id: String) -> Result<(), StateError> {
+        self.store.delete_session_async(id).await
+    }
+    
+    /// Load all sessions (synchronous)
     pub fn load_all(&self) -> Result<Vec<PersistedSession>, StateError> {
         let ids = self.store.list_sessions()?;
         
@@ -97,6 +112,27 @@ impl SessionPersistence {
                 Err(e) => {
                     tracing::warn!("Failed to load session {}: {:?}", id, e);
                     // Continue loading other sessions
+                }
+            }
+        }
+        
+        // Sort by order
+        sessions.sort_by_key(|s| s.order);
+        
+        Ok(sessions)
+    }
+    
+    /// Load all sessions (async, non-blocking, optimized bulk load)
+    pub async fn load_all_async(&self) -> Result<Vec<PersistedSession>, StateError> {
+        // Use bulk load to avoid N+1 queries
+        let all_data = self.store.load_all_sessions_async().await?;
+        
+        let mut sessions = Vec::new();
+        for (id, data) in all_data {
+            match PersistedSession::from_bytes(&data) {
+                Ok(session) => sessions.push(session),
+                Err(e) => {
+                    tracing::warn!("Failed to deserialize session {}: {:?}", id, e);
                 }
             }
         }

@@ -77,6 +77,25 @@ impl StateStore {
             }
         };
         
+        // Set file permissions to 600 (owner read/write only) for security
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)) {
+                warn!("Failed to set restrictive permissions on database file: {}", e);
+                // Don't fail - this is a security hardening, not critical
+            } else {
+                info!("Set database file permissions to 600 (owner-only)");
+            }
+        }
+        
+        #[cfg(windows)]
+        {
+            // TODO: Implement Windows ACL restrictions using winapi
+            // For now, log a warning
+            warn!("File permission restrictions not implemented on Windows - database may be world-readable");
+        }
+        
         let store = Self {
             db: Arc::new(db),
         };
@@ -89,7 +108,11 @@ impl StateStore {
     
     /// Initialize database tables and metadata
     fn initialize(&self) -> Result<(), StateError> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.db.begin_write()
+            .map_err(|e| {
+                error!("Failed to begin write transaction during initialization: {}", e);
+                e
+            })?;
         
         {
             // Create tables if they don't exist
@@ -98,7 +121,11 @@ impl StateStore {
             let _ = write_txn.open_table(METADATA_TABLE)?;
         }
         
-        write_txn.commit()?;
+        write_txn.commit()
+            .map_err(|e| {
+                error!("Failed to commit initialization transaction (possible disk full): {}", e);
+                e
+            })?;
         
         // Check/set version
         self.check_version()?;
@@ -109,7 +136,11 @@ impl StateStore {
     
     /// Check and set database version
     fn check_version(&self) -> Result<(), StateError> {
-        let write_txn = self.db.begin_write()?;
+        let write_txn = self.db.begin_write()
+            .map_err(|e| {
+                error!("Failed to begin write transaction for version check: {}", e);
+                e
+            })?;
         
         {
             let mut table = write_txn.open_table(METADATA_TABLE)?;
@@ -141,11 +172,15 @@ impl StateStore {
             }
         }
         
-        write_txn.commit()?;
+        write_txn.commit()
+            .map_err(|e| {
+                error!("Failed to commit version check transaction (possible disk full): {}", e);
+                e
+            })?;
         Ok(())
     }
     
-    /// Save a session to the database
+    /// Save a session to the database (synchronous - use save_session_async if possible)
     pub fn save_session(&self, id: &str, data: &[u8]) -> Result<(), StateError> {
         let write_txn = self.db.begin_write()?;
         
@@ -158,7 +193,51 @@ impl StateStore {
         Ok(())
     }
     
-    /// Load a session from the database
+    /// Save a session to the database (async, non-blocking)
+    pub async fn save_session_async(&self, id: String, data: Vec<u8>) -> Result<(), StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            // Wrap in catch_unwind to handle panics
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let write_txn = db.begin_write()?;
+                
+                {
+                    let mut table = write_txn.open_table(SESSIONS_TABLE)?;
+                    table.insert(id.as_str(), data.as_slice())?;
+                }
+                
+                write_txn.commit()?;
+                Ok(())
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        // Handle panic result
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database save_session operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Load a session from the database (synchronous - use load_session_async if possible)
     pub fn load_session(&self, id: &str) -> Result<Vec<u8>, StateError> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(SESSIONS_TABLE)?;
@@ -170,7 +249,48 @@ impl StateStore {
         }
     }
     
-    /// Delete a session from the database
+    /// Load a session from the database (async, non-blocking)
+    pub async fn load_session_async(&self, id: String) -> Result<Vec<u8>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(SESSIONS_TABLE)?;
+                
+                if let Some(value) = table.get(id.as_str())? {
+                    Ok(value.value().to_vec())
+                } else {
+                    Err(StateError::NotFound(format!("Session not found: {}", id)))
+                }
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database load_session operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Delete a session from the database (synchronous - use delete_session_async if possible)
     pub fn delete_session(&self, id: &str) -> Result<(), StateError> {
         let write_txn = self.db.begin_write()?;
         
@@ -183,7 +303,49 @@ impl StateStore {
         Ok(())
     }
     
-    /// List all session IDs
+    /// Delete a session from the database (async, non-blocking)
+    pub async fn delete_session_async(&self, id: String) -> Result<(), StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let write_txn = db.begin_write()?;
+                
+                {
+                    let mut table = write_txn.open_table(SESSIONS_TABLE)?;
+                    table.remove(id.as_str())?;
+                }
+                
+                write_txn.commit()?;
+                Ok(())
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database delete_session operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// List all session IDs (synchronous - use list_sessions_async if possible)
     pub fn list_sessions(&self) -> Result<Vec<String>, StateError> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(SESSIONS_TABLE)?;
@@ -197,7 +359,93 @@ impl StateStore {
         Ok(ids)
     }
     
-    /// Save a forward rule to the database
+    /// List all session IDs (async, non-blocking)
+    pub async fn list_sessions_async(&self) -> Result<Vec<String>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(SESSIONS_TABLE)?;
+                
+                let mut ids = Vec::new();
+                for item in table.iter()? {
+                    let (key, _) = item?;
+                    ids.push(key.value().to_string());
+                }
+                
+                Ok(ids)
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database list_sessions operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Load all sessions at once (async, non-blocking, efficient bulk load)
+    pub async fn load_all_sessions_async(&self) -> Result<Vec<(String, Vec<u8>)>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(SESSIONS_TABLE)?;
+                
+                let mut results = Vec::new();
+                for item in table.iter()? {
+                    let (key, value) = item?;
+                    results.push((key.value().to_string(), value.value().to_vec()));
+                }
+                
+                Ok(results)
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database load_all_sessions operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Save a forward rule to the database (synchronous - use save_forward_async if possible)
     pub fn save_forward(&self, id: &str, data: &[u8]) -> Result<(), StateError> {
         let write_txn = self.db.begin_write()?;
         
@@ -210,7 +458,49 @@ impl StateStore {
         Ok(())
     }
     
-    /// Load a forward rule from the database
+    /// Save a forward rule to the database (async, non-blocking)
+    pub async fn save_forward_async(&self, id: String, data: Vec<u8>) -> Result<(), StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let write_txn = db.begin_write()?;
+                
+                {
+                    let mut table = write_txn.open_table(FORWARDS_TABLE)?;
+                    table.insert(id.as_str(), data.as_slice())?;
+                }
+                
+                write_txn.commit()?;
+                Ok(())
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database save_forward operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Load a forward rule from the database (synchronous - use load_forward_async if possible)
     pub fn load_forward(&self, id: &str) -> Result<Vec<u8>, StateError> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(FORWARDS_TABLE)?;
@@ -222,7 +512,48 @@ impl StateStore {
         }
     }
     
-    /// Delete a forward rule from the database
+    /// Load a forward rule from the database (async, non-blocking)
+    pub async fn load_forward_async(&self, id: String) -> Result<Vec<u8>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(FORWARDS_TABLE)?;
+                
+                if let Some(value) = table.get(id.as_str())? {
+                    Ok(value.value().to_vec())
+                } else {
+                    Err(StateError::NotFound(format!("Forward not found: {}", id)))
+                }
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database load_forward operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Delete a forward rule from the database (synchronous - use delete_forward_async if possible)
     pub fn delete_forward(&self, id: &str) -> Result<(), StateError> {
         let write_txn = self.db.begin_write()?;
         
@@ -235,7 +566,49 @@ impl StateStore {
         Ok(())
     }
     
-    /// List all forward IDs
+    /// Delete a forward rule from the database (async, non-blocking)
+    pub async fn delete_forward_async(&self, id: String) -> Result<(), StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let write_txn = db.begin_write()?;
+                
+                {
+                    let mut table = write_txn.open_table(FORWARDS_TABLE)?;
+                    table.remove(id.as_str())?;
+                }
+                
+                write_txn.commit()?;
+                Ok(())
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database delete_forward operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// List all forward IDs (synchronous - use list_forwards_async if possible)
     pub fn list_forwards(&self) -> Result<Vec<String>, StateError> {
         let read_txn = self.db.begin_read()?;
         let table = read_txn.open_table(FORWARDS_TABLE)?;
@@ -247,6 +620,92 @@ impl StateStore {
         }
         
         Ok(ids)
+    }
+    
+    /// List all forward IDs (async, non-blocking)
+    pub async fn list_forwards_async(&self) -> Result<Vec<String>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(FORWARDS_TABLE)?;
+                
+                let mut ids = Vec::new();
+                for item in table.iter()? {
+                    let (key, _) = item?;
+                    ids.push(key.value().to_string());
+                }
+                
+                Ok(ids)
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database list_forwards operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
+    }
+    
+    /// Load all forwards at once (async, non-blocking, efficient bulk load)
+    pub async fn load_all_forwards_async(&self) -> Result<Vec<(String, Vec<u8>)>, StateError> {
+        let db = self.db.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let read_txn = db.begin_read()?;
+                let table = read_txn.open_table(FORWARDS_TABLE)?;
+                
+                let mut results = Vec::new();
+                for item in table.iter()? {
+                    let (key, value) = item?;
+                    results.push((key.value().to_string(), value.value().to_vec()));
+                }
+                
+                Ok(results)
+            }))
+        })
+        .await
+        .map_err(|e| StateError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Task join error: {}", e)
+        )))?;
+        
+        match result {
+            Ok(inner_result) => inner_result,
+            Err(panic_payload) => {
+                let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+                error!("Database load_all_forwards operation panicked: {}", panic_msg);
+                Err(StateError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database panic: {}", panic_msg)
+                )))
+            }
+        }
     }
     
     /// Get statistics about the database

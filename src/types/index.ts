@@ -10,6 +10,7 @@ export interface SessionInfo {
   state: SessionState;
   error?: string;
   ws_url?: string;
+  ws_token?: string; // Authentication token for WebSocket connection
   color: string;
   uptime_secs: number;
 }

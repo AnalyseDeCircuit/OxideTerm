@@ -360,7 +360,7 @@ impl SessionRegistry {
         Ok(())
     }
     
-    /// Delete persisted session metadata
+    /// Delete persisted session metadata (synchronous)
     pub fn delete_persisted_session(&self, session_id: &str) -> Result<(), RegistryError> {
         if let Some(persistence) = &self.persistence {
             persistence.delete(session_id)
@@ -370,10 +370,32 @@ impl SessionRegistry {
         Ok(())
     }
     
-    /// Restore sessions from persistence (returns session IDs for frontend to restore)
+    /// Delete persisted session metadata (async, non-blocking)
+    pub async fn delete_persisted_session_async(&self, session_id: String) -> Result<(), RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            persistence.delete_async(session_id).await
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+            debug!("Deleted persisted session");
+        }
+        Ok(())
+    }
+    
+    /// Restore sessions from persistence (returns session IDs for frontend to restore) - synchronous
     pub fn restore_sessions(&self) -> Result<Vec<PersistedSession>, RegistryError> {
         if let Some(persistence) = &self.persistence {
             let sessions = persistence.load_all()
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+            info!("Restored {} persisted sessions", sessions.len());
+            Ok(sessions)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+    
+    /// Restore sessions from persistence (async, non-blocking)
+    pub async fn restore_sessions_async(&self) -> Result<Vec<PersistedSession>, RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            let sessions = persistence.load_all_async().await
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
             info!("Restored {} persisted sessions", sessions.len());
             Ok(sessions)

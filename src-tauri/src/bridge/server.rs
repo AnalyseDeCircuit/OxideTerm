@@ -74,7 +74,10 @@ pub struct WsBridge;
 impl WsBridge {
     /// Start a new WebSocket bridge for an SSH session
     /// Returns the port number the WS server is listening on
-    pub async fn start(session_handle: SessionHandle) -> Result<(String, u16), String> {
+    pub async fn start(session_handle: SessionHandle) -> Result<(String, u16, String), String> {
+        // Generate one-time authentication token to prevent local process hijacking
+        let token = uuid::Uuid::new_v4().to_string();
+        
         // Bind to localhost (not 127.0.0.1) to avoid macOS sandbox issues with WebView
         // Using port 0 lets the OS assign an available port
         let listener = TcpListener::bind("localhost:0")
@@ -89,26 +92,30 @@ impl WsBridge {
         let session_id = session_handle.id.clone();
 
         info!(
-            "WebSocket bridge started on port {} for session {}",
+            "WebSocket bridge started on port {} for session {} with token auth",
             port, session_id
         );
 
         // Create a oneshot channel to signal when server is ready to accept
         let (ready_tx, ready_rx) = oneshot::channel::<()>();
 
-        // Spawn the server task
-        tokio::spawn(Self::run_server(listener, session_handle, ready_tx));
+        // Spawn the server task with token validation
+        let token_clone = token.clone();
+        tokio::spawn(Self::run_server(listener, session_handle, ready_tx, token_clone));
 
         // Wait for server to be ready (with timeout)
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
 
-        Ok((session_id, port))
+        Ok((session_id, port, token))
     }
 
     /// Start with resize channel support
     pub async fn start_with_resize(
         session_handle: SessionHandle,
-    ) -> Result<(String, u16, ResizeRx), String> {
+    ) -> Result<(String, u16, String, ResizeRx), String> {
+        // Generate one-time authentication token to prevent local process hijacking
+        let token = uuid::Uuid::new_v4().to_string();
+        
         let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(32);
 
         let listener = TcpListener::bind("localhost:0")
@@ -123,7 +130,7 @@ impl WsBridge {
         let session_id = session_handle.id.clone();
 
         info!(
-            "WebSocket bridge (with resize) started on port {} for session {}",
+            "WebSocket bridge (with resize) started on port {} for session {} with token auth",
             port, session_id
         );
 
@@ -134,18 +141,22 @@ impl WsBridge {
             resize_tx,
         };
 
-        tokio::spawn(Self::run_server_extended(listener, extended, ready_tx));
+        let token_clone = token.clone();
+        tokio::spawn(Self::run_server_extended(listener, extended, ready_tx, token_clone));
 
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
 
-        Ok((session_id, port, resize_rx))
+        Ok((session_id, port, token, resize_rx))
     }
 
     /// Start bridge for ExtendedSessionHandle (with command channel)
     /// This is the v2 API that works with SessionRegistry
     pub async fn start_extended(
         session_handle: SshExtendedSessionHandle,
-    ) -> Result<(String, u16), String> {
+    ) -> Result<(String, u16, String), String> {
+        // Generate one-time authentication token to prevent local process hijacking
+        let token = uuid::Uuid::new_v4().to_string();
+        
         let listener = TcpListener::bind("localhost:0")
             .await
             .map_err(|e| format!("Failed to bind WebSocket server: {}", e))?;
@@ -158,17 +169,18 @@ impl WsBridge {
         let session_id = session_handle.id.clone();
 
         info!(
-            "WebSocket bridge (v2) started on port {} for session {}",
+            "WebSocket bridge (v2) started on port {} for session {} with token auth",
             port, session_id
         );
 
         let (ready_tx, ready_rx) = oneshot::channel::<()>();
 
-        tokio::spawn(Self::run_server_v2(listener, session_handle, ready_tx));
+        let token_clone = token.clone();
+        tokio::spawn(Self::run_server_v2(listener, session_handle, ready_tx, token_clone));
 
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
 
-        Ok((session_id, port))
+        Ok((session_id, port, token))
     }
 
     /// Run the WebSocket server (legacy mode - backward compatible)
@@ -176,6 +188,7 @@ impl WsBridge {
         listener: TcpListener,
         session_handle: SessionHandle,
         ready_tx: oneshot::Sender<()>,
+        expected_token: String,
     ) {
         let session_id = session_handle.id.clone();
 
@@ -192,7 +205,7 @@ impl WsBridge {
                     "WebSocket connection from {} for session {}",
                     addr, session_id
                 );
-                if let Err(e) = Self::handle_connection_v1(stream, session_handle, None).await {
+                if let Err(e) = Self::handle_connection_v1(stream, session_handle, None, expected_token).await {
                     error!("WebSocket connection error: {}", e);
                 }
             }
@@ -212,6 +225,7 @@ impl WsBridge {
         listener: TcpListener,
         extended: ExtendedSessionHandle,
         ready_tx: oneshot::Sender<()>,
+        expected_token: String,
     ) {
         let session_id = extended.handle.id.clone();
 
@@ -227,7 +241,7 @@ impl WsBridge {
                     addr, session_id
                 );
                 if let Err(e) =
-                    Self::handle_connection_v1(stream, extended.handle, Some(extended.resize_tx))
+                    Self::handle_connection_v1(stream, extended.handle, Some(extended.resize_tx), expected_token)
                         .await
                 {
                     error!("WebSocket connection error: {}", e);
@@ -252,38 +266,98 @@ impl WsBridge {
         stream: TcpStream,
         session_handle: SessionHandle,
         resize_tx: Option<ResizeTx>,
+        expected_token: String,
     ) -> Result<(), String> {
+        // Perform WebSocket handshake (no auth yet)
         let ws_stream = accept_async(stream)
             .await
             .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
+        
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        
+        // Authenticate: expect first message to contain token
+        let auth_result = tokio::time::timeout(
+            Duration::from_secs(5),
+            ws_receiver.next()
+        ).await;
+        
+        match auth_result {
+            Ok(Some(Ok(Message::Text(token)))) => {
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful");
+                } else {
+                    error!("WebSocket token authentication failed: invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Ok(Message::Binary(data)))) => {
+                let token = String::from_utf8_lossy(&data);
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful (binary)");
+                } else {
+                    error!("WebSocket token authentication failed: invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Err(e))) => {
+                error!("WebSocket error during authentication: {}", e);
+                return Err(format!("Authentication failed: {}", e));
+            }
+            Ok(None) => {
+                error!("WebSocket closed before authentication");
+                return Err("Authentication failed: connection closed".to_string());
+            }
+            Err(_) => {
+                error!("WebSocket authentication timeout");
+                return Err("Authentication failed: timeout".to_string());
+            }
+            _ => {
+                error!("WebSocket authentication failed: unexpected message type");
+                return Err("Authentication failed: unexpected message".to_string());
+            }
+        }
+        
+        // Reunite the split stream for further processing
+        let ws_stream = ws_sender.reunite(ws_receiver)
+            .map_err(|e| format!("Failed to reunite WebSocket stream: {}", e))?;
 
         debug!(
-            "WebSocket handshake completed for session {}",
+            "WebSocket handshake and authentication completed for session {}",
             session_handle.id
         );
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-        let SessionHandle {
-            id,
-            stdin_tx,
-            mut stdout_rx,
-        } = session_handle;
+        // Extract parts from handle, consuming it properly
+        let (id, stdin_tx, mut stdout_rx) = session_handle.into_parts();
 
         let state = Arc::new(ConnectionState::new());
         let state_out = state.clone();
         let state_hb = state.clone();
 
-        // Channel for sending frames to WebSocket
-        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(256);
+        // Channel for sending frames to WebSocket (increased capacity to prevent deadlock)
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
         let frame_tx_ssh = frame_tx.clone();
         let frame_tx_hb = frame_tx.clone();
 
         // Task: Frame sender - consolidates all outgoing frames
         let sender_task = tokio::spawn(async move {
             while let Some(data) = frame_rx.recv().await {
-                if ws_sender.send(Message::Binary(data.to_vec())).await.is_err() {
-                    debug!("WebSocket send failed, client disconnected");
-                    break;
+                // Use timeout to detect dead clients (prevents deadlock)
+                match tokio::time::timeout(
+                    Duration::from_secs(5),
+                    ws_sender.send(Message::Binary(data.to_vec()))
+                ).await {
+                    Ok(Ok(_)) => {
+                        // Send successful
+                    }
+                    Ok(Err(e)) => {
+                        debug!("WebSocket send failed: {:?}", e);
+                        break;
+                    }
+                    Err(_) => {
+                        warn!("WebSocket send timeout after 5s - client unresponsive, disconnecting");
+                        break;
+                    }
                 }
             }
             debug!("Frame sender stopped");
@@ -328,10 +402,12 @@ impl WsBridge {
                     break;
                 }
 
-                // Send heartbeat
+                // Send heartbeat (non-blocking to avoid backpressure)
                 let seq = state_hb.next_seq();
                 let frame = heartbeat_frame(seq);
-                if frame_tx_hb.send(frame.encode()).await.is_err() {
+                if frame_tx_hb.try_send(frame.encode()).is_err() {
+                    // Channel full means frontend is overloaded - abort heartbeat
+                    debug!("Heartbeat channel full, terminating heartbeat task for session {}", sid_hb);
                     break;
                 }
                 debug!("Sent heartbeat seq={} for session {}", seq, sid_hb);
@@ -467,6 +543,7 @@ impl WsBridge {
         listener: TcpListener,
         session_handle: SshExtendedSessionHandle,
         ready_tx: oneshot::Sender<()>,
+        expected_token: String,
     ) {
         let session_id = session_handle.id.clone();
 
@@ -481,7 +558,7 @@ impl WsBridge {
                     "WebSocket connection (v2) from {} for session {}",
                     addr, session_id
                 );
-                if let Err(e) = Self::handle_connection_v2(stream, session_handle).await {
+                if let Err(e) = Self::handle_connection_v2(stream, session_handle, expected_token).await {
                     error!("WebSocket connection error: {}", e);
                 }
             }
@@ -500,10 +577,60 @@ impl WsBridge {
     async fn handle_connection_v2(
         stream: TcpStream,
         session_handle: SshExtendedSessionHandle,
+        expected_token: String,
     ) -> Result<(), String> {
+        // Perform WebSocket handshake (no auth yet)
         let ws_stream = accept_async(stream)
             .await
             .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
+        
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        
+        // Authenticate: expect first message to contain token
+        let auth_result = tokio::time::timeout(
+            Duration::from_secs(5),
+            ws_receiver.next()
+        ).await;
+        
+        match auth_result {
+            Ok(Some(Ok(Message::Text(token)))) => {
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful (v2)");
+                } else {
+                    error!("WebSocket token authentication failed (v2): invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Ok(Message::Binary(data)))) => {
+                let token = String::from_utf8_lossy(&data);
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful (v2, binary)");
+                } else {
+                    error!("WebSocket token authentication failed (v2): invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Err(e))) => {
+                error!("WebSocket error during authentication (v2): {}", e);
+                return Err(format!("Authentication failed: {}", e));
+            }
+            Ok(None) => {
+                error!("WebSocket closed before authentication (v2)");
+                return Err("Authentication failed: connection closed".to_string());
+            }
+            Err(_) => {
+                error!("WebSocket authentication timeout (v2)");
+                return Err("Authentication failed: timeout".to_string());
+            }
+            _ => {
+                error!("WebSocket authentication failed (v2): unexpected message type");
+                return Err("Authentication failed: unexpected message".to_string());
+            }
+        }
+        
+        // Reunite the split stream for further processing
+        let ws_stream = ws_sender.reunite(ws_receiver)
+            .map_err(|e| format!("Failed to reunite WebSocket stream: {}", e))?;
 
         debug!(
             "WebSocket handshake (v2) completed for session {}",
@@ -511,18 +638,15 @@ impl WsBridge {
         );
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-        let SshExtendedSessionHandle {
-            id,
-            cmd_tx,
-            mut stdout_rx,
-        } = session_handle;
+        // Extract parts from handle, consuming it properly
+        let (id, cmd_tx, mut stdout_rx) = session_handle.into_parts();
 
         let state = Arc::new(ConnectionState::new());
         let state_out = state.clone();
         let state_hb = state.clone();
 
-        // Channel for sending frames to WebSocket
-        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(256);
+        // Channel for sending frames to WebSocket (increased capacity to prevent deadlock)
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
         let frame_tx_ssh = frame_tx.clone();
         let frame_tx_hb = frame_tx.clone();
 
@@ -532,12 +656,22 @@ impl WsBridge {
         // Task: WebSocket sender (multiplexes frame_tx)
         let sender_task = tokio::spawn(async move {
             while let Some(frame) = frame_rx.recv().await {
-                if ws_sender
-                    .send(Message::Binary(frame.to_vec().into()))
-                    .await
-                    .is_err()
-                {
-                    break;
+                // Use timeout to detect dead clients (prevents deadlock)
+                match tokio::time::timeout(
+                    Duration::from_secs(5),
+                    ws_sender.send(Message::Binary(frame.to_vec().into()))
+                ).await {
+                    Ok(Ok(_)) => {
+                        // Send successful
+                    }
+                    Ok(Err(e)) => {
+                        debug!("WebSocket send failed: {:?}", e);
+                        break;
+                    }
+                    Err(_) => {
+                        warn!("WebSocket send timeout after 5s - client unresponsive, disconnecting");
+                        break;
+                    }
                 }
             }
             debug!("WebSocket sender task stopped");
@@ -574,7 +708,9 @@ impl WsBridge {
 
                 let seq = state_hb.next_seq();
                 let frame = heartbeat_frame(seq).encode();
-                if frame_tx_hb.send(frame).await.is_err() {
+                if frame_tx_hb.try_send(frame).is_err() {
+                    // Channel full means frontend is overloaded - abort heartbeat
+                    debug!("Heartbeat channel full, terminating heartbeat task");
                     break;
                 }
             }

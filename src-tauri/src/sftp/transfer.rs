@@ -125,11 +125,13 @@ impl TransferManager {
         }
     }
 
-    /// Pause a specific transfer
+    /// Pause a specific transfer (simplified: pause = cancel, resume = restart)
     pub fn pause(&self, transfer_id: &str) -> bool {
         if let Some(control) = self.controls.read().get(transfer_id) {
-            control.pause();
-            info!("Paused transfer: {}", transfer_id);
+            // Simplified approach: pause is same as cancel
+            // User must restart transfer to resume
+            control.cancel();
+            info!("Paused (cancelled) transfer: {}", transfer_id);
             true
         } else {
             warn!("Transfer not found for pause: {}", transfer_id);
@@ -137,16 +139,12 @@ impl TransferManager {
         }
     }
 
-    /// Resume a specific transfer
+    /// Resume a specific transfer (simplified: not supported, must restart transfer)
     pub fn resume(&self, transfer_id: &str) -> bool {
-        if let Some(control) = self.controls.read().get(transfer_id) {
-            control.resume();
-            info!("Resumed transfer: {}", transfer_id);
-            true
-        } else {
-            warn!("Transfer not found for resume: {}", transfer_id);
-            false
-        }
+        // Simplified: resume not supported in v0.1.0
+        // User must re-initiate the transfer
+        warn!("Resume not supported - transfer was cancelled: {}", transfer_id);
+        false
     }
 
     /// Cancel all active transfers
@@ -176,18 +174,13 @@ impl Default for TransferManager {
 
 /// Check loop helper for pause/cancel during transfer
 pub async fn check_transfer_control(control: &TransferControl) -> Result<(), super::error::SftpError> {
-    // Check cancellation
+    // Simplified: only check cancellation (pause = cancel in v0.1.0)
     if control.is_cancelled() {
         return Err(super::error::SftpError::TransferCancelled);
     }
 
-    // Wait while paused
-    while control.is_paused() {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        if control.is_cancelled() {
-            return Err(super::error::SftpError::TransferCancelled);
-        }
-    }
+    // Note: Pause functionality removed - pause now directly cancels the transfer
+    // Users must restart the transfer to continue
 
     Ok(())
 }

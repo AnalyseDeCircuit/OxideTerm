@@ -63,28 +63,34 @@ impl ForwardingRegistry {
     /// Persist a forward rule
     pub async fn persist_forward(&self, forward: PersistedForward) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {
-            persistence.save(&forward)
+            persistence.save_async(forward).await
                 .map_err(|e| format!("Failed to persist forward: {:?}", e))?;
-            info!("Persisted forward rule: {}", forward.id);
+            info!("Persisted forward rule");
         }
         Ok(())
     }
     
     /// Delete a persisted forward
-    pub async fn delete_persisted_forward(&self, forward_id: &str) -> Result<(), String> {
+    pub async fn delete_persisted_forward(&self, forward_id: String) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {
-            persistence.delete(forward_id)
+            persistence.delete_async(forward_id).await
                 .map_err(|e| format!("Failed to delete persisted forward: {:?}", e))?;
-            info!("Deleted persisted forward: {}", forward_id);
+            info!("Deleted persisted forward");
         }
         Ok(())
     }
     
-    /// Load persisted forwards for a session
+    /// Load persisted forwards for a session (uses async internally where possible)
     pub async fn load_persisted_forwards(&self, session_id: &str) -> Result<Vec<PersistedForward>, String> {
         if let Some(persistence) = &self.persistence {
-            persistence.load_by_session(session_id)
-                .map_err(|e| format!("Failed to load persisted forwards: {:?}", e))
+            // Use async load_all and filter (more efficient than loading all synchronously)
+            let all_forwards = persistence.load_all_async().await
+                .map_err(|e| format!("Failed to load persisted forwards: {:?}", e))?;
+            
+            Ok(all_forwards
+                .into_iter()
+                .filter(|f| f.session_id == session_id)
+                .collect())
         } else {
             Ok(Vec::new())
         }
@@ -635,7 +641,7 @@ pub async fn delete_saved_forward(
     forward_id: String,
 ) -> Result<(), String> {
     info!("Deleting saved forward {}", forward_id);
-    registry.delete_persisted_forward(&forward_id).await
+    registry.delete_persisted_forward(forward_id).await
 }
 
 /// DTO for persisted forward info

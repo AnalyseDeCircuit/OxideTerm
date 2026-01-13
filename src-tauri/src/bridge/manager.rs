@@ -14,6 +14,8 @@ use crate::ssh::SessionCommand;
 pub struct BridgeInfo {
     pub session_id: String,
     pub port: u16,
+    /// One-time authentication token to prevent local process hijacking
+    pub token: String,
     pub created_at: Instant,
     pub last_activity: Instant,
 }
@@ -38,12 +40,13 @@ impl BridgeManager {
     }
 
     /// Register a new bridge (legacy mode)
-    pub fn register(&self, session_id: String, port: u16) {
+    pub fn register(&self, session_id: String, port: u16, token: String) {
         let now = Instant::now();
         let handle = BridgeHandle {
             info: BridgeInfo {
                 session_id: session_id.clone(),
                 port,
+                token,
                 created_at: now,
                 last_activity: now,
             },
@@ -59,6 +62,7 @@ impl BridgeManager {
         &self,
         session_id: String,
         port: u16,
+        token: String,
         cmd_tx: mpsc::Sender<SessionCommand>,
     ) {
         let now = Instant::now();
@@ -66,6 +70,7 @@ impl BridgeManager {
             info: BridgeInfo {
                 session_id: session_id.clone(),
                 port,
+                token,
                 created_at: now,
                 last_activity: now,
             },
