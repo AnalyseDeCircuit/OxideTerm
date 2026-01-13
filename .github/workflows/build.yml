@@ -14,7 +14,7 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: ''
-          - platform: 'ubuntu-22.04'
+          - platform: 'ubuntu-24.04'
             args: ''
           - platform: 'windows-latest'
             args: ''
@@ -41,14 +41,14 @@ jobs:
           cache: 'npm'
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libjavascriptcoregtk-4.1-dev \
-            libsoup2.4-dev \
+            libsoup-3.0-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
@@ -79,7 +79,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Build Tauri app (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: npm run tauri build
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -116,7 +116,7 @@ jobs:
         with:
           files: |
             artifacts/macos-latest-artifacts/**/*
-            artifacts/ubuntu-22.04-artifacts/**/*
+            artifacts/ubuntu-24.04-artifacts/**/*
             artifacts/windows-latest-artifacts/**/*
           draft: false
           prerelease: false
