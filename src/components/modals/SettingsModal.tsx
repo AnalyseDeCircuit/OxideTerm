@@ -238,8 +238,8 @@ export const SettingsModal = () => {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="jetbrains">JetBrains Mono</SelectItem>
-                                            <SelectItem value="sfmono">SF Mono</SelectItem>
-                                            <SelectItem value="fira">Fira Code</SelectItem>
+                                            <SelectItem value="meslo">MesloLGM Nerd Font</SelectItem>
+                                            <SelectItem value="tinos">Tinos Nerd Font</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -356,8 +356,8 @@ export const SettingsModal = () => {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="default">OxideTerm Default</SelectItem>
-                                        <SelectItem value="oxide">Oxide (Rust)</SelectItem>
+                                        <SelectItem value="default">Neutral</SelectItem>
+                                        <SelectItem value="oxide">Oxide</SelectItem>
                                         <SelectItem value="dracula">Dracula</SelectItem>
                                         <SelectItem value="nord">Nord</SelectItem>
                                         <SelectItem value="solarized-dark">Solarized Dark</SelectItem>

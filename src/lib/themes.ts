@@ -2,9 +2,9 @@ import { ITheme } from '@xterm/xterm';
 
 export const themes: Record<string, ITheme> = {
   default: {
-    background: '#09090b', // oxide-bg
-    foreground: '#f4f4f5', // oxide-text
-    cursor: '#ea580c',     // oxide-accent
+    background: '#09090b', // Neutral deep void
+    foreground: '#f4f4f5', // Neutral text
+    cursor: '#ea580c',     // Orange cursor
     selectionBackground: 'rgba(234, 88, 12, 0.3)',
     black: '#09090b',
     red: '#ef4444',
@@ -21,6 +21,28 @@ export const themes: Record<string, ITheme> = {
     brightBlue: '#60a5fa',
     brightMagenta: '#e879f9',
     brightCyan: '#22d3ee',
+    brightWhite: '#ffffff',
+  },
+  oxide: {
+    background: '#331a0d', // Vibrant rust-orange background
+    foreground: '#fef3e2', // Warm cream text
+    cursor: '#FF6B00',     // Vibrant Rust Orange (iPhone 17 Pro inspired)
+    selectionBackground: 'rgba(255, 107, 0, 0.35)',
+    black: '#331a0d',
+    red: '#ff6b6b',
+    green: '#51cf66',
+    yellow: '#ffd43b',
+    blue: '#4dabf7',
+    magenta: '#e599f7',
+    cyan: '#3bc9db',
+    white: '#fef3e2',
+    brightBlack: '#8b6f47',
+    brightRed: '#ff8787',
+    brightGreen: '#8ce99a',
+    brightYellow: '#ffe066',
+    brightBlue: '#74c0fc',
+    brightMagenta: '#eebefa',
+    brightCyan: '#66d9e8',
     brightWhite: '#ffffff',
   },
   dracula: {
@@ -132,27 +154,5 @@ export const themes: Record<string, ITheme> = {
     brightMagenta: '#d2a8ff',
     brightCyan: '#56d4dd',
     brightWhite: '#f0f6fc',
-  },
-  oxide: {
-    background: '#1c1917', // zinc-900 (warm dark)
-    foreground: '#e7e5e4', // stone-200
-    cursor: '#f97316',     // orange-500
-    selectionBackground: 'rgba(249, 115, 22, 0.3)',
-    black: '#1c1917',
-    red: '#ef4444',
-    green: '#22c55e',
-    yellow: '#eab308',
-    blue: '#3b82f6',
-    magenta: '#d946ef',
-    cyan: '#06b6d4',
-    white: '#e7e5e4',
-    brightBlack: '#57534e',
-    brightRed: '#f87171',
-    brightGreen: '#4ade80',
-    brightYellow: '#facc15',
-    brightBlue: '#60a5fa',
-    brightMagenta: '#e879f9',
-    brightCyan: '#22d3ee',
-    brightWhite: '#ffffff',
   },
 };

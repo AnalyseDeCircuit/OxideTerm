@@ -115,10 +115,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   const getFontFamily = (val: string) => {
       switch(val) {
-          case 'jetbrains': return '"JetBrains Mono", "SF Mono", monospace';
-          case 'sfmono': return '"SF Mono", "Fira Code", monospace';
-          case 'fira': return '"Fira Code", monospace';
-          default: return 'monospace';
+          case 'jetbrains': return '"JetBrains Mono", monospace';
+          case 'meslo': return '"MesloLGM Nerd Font", monospace';
+          case 'tinos': return '"Tinos Nerd Font", monospace';
+          default: return '"JetBrains Mono", monospace';
       }
   };
 

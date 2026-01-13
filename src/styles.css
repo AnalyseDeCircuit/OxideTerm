@@ -1,5 +1,97 @@
 @import "tailwindcss";
 
+/* ===== Font Declarations ===== */
+
+/* JetBrains Mono Nerd Font */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Meslo Nerd Font */
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Tinos Nerd Font */
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 @theme {
   /* Oxide-Industrial Palette (Legacy - kept for backward compatibility) */
   --color-oxide-bg: #09090b;       /* Deep Void */
@@ -38,27 +130,39 @@
   --background: var(--color-oxide-bg);
   --foreground: var(--color-oxide-text);
   
-  /* Theme Variables - Default Theme */
+  /* Theme Variables - Default Theme (Neutral) */
   --theme-bg: #09090b;
   --theme-bg-panel: #18181b;
   --theme-bg-hover: #27272a;
-  --theme-border: #3f3f46;
+  --theme-border: #27272a;
   --theme-text: #f4f4f5;
   --theme-text-muted: #a1a1aa;
   --theme-accent: #ea580c;
   --theme-accent-hover: #c2410c;
 }
 
-/* Oxide Theme */
+/* Neutral Theme (Default) */
+[data-theme="neutral"] {
+  --theme-bg: #09090b;
+  --theme-bg-panel: #18181b;
+  --theme-bg-hover: #27272a;
+  --theme-border: #27272a;
+  --theme-text: #f4f4f5;
+  --theme-text-muted: #a1a1aa;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+}
+
+/* Oxide Theme (Vibrant Rust Orange) */
 [data-theme="oxide"] {
-  --theme-bg: #1c1917;
-  --theme-bg-panel: #292524;
-  --theme-bg-hover: #44403c;
-  --theme-border: #57534e;
-  --theme-text: #e7e5e4;
-  --theme-text-muted: #a8a29e;
-  --theme-accent: #f97316;
-  --theme-accent-hover: #ea580c;
+  --theme-bg: #331a0d;
+  --theme-bg-panel: #4d2414;
+  --theme-bg-hover: #663018;
+  --theme-border: #663018;
+  --theme-text: #fef3e2;
+  --theme-text-muted: #d4a574;
+  --theme-accent: #FF6B00;
+  --theme-accent-hover: #FF8533;
 }
 
 /* Dracula Theme */
@@ -66,7 +170,7 @@
   --theme-bg: #282a36;
   --theme-bg-panel: #34354a;
   --theme-bg-hover: #44475a;
-  --theme-border: #6272a4;
+  --theme-border: #44475a;
   --theme-text: #f8f8f2;
   --theme-text-muted: #6272a4;
   --theme-accent: #bd93f9;
@@ -78,7 +182,7 @@
   --theme-bg: #2e3440;
   --theme-bg-panel: #3b4252;
   --theme-bg-hover: #434c5e;
-  --theme-border: #4c566a;
+  --theme-border: #3b4252;
   --theme-text: #eceff4;
   --theme-text-muted: #81a1c1;
   --theme-accent: #88c0d0;
@@ -90,7 +194,7 @@
   --theme-bg: #002b36;
   --theme-bg-panel: #073642;
   --theme-bg-hover: #0a4a58;
-  --theme-border: #586e75;
+  --theme-border: #073642;
   --theme-text: #fdf6e3;
   --theme-text-muted: #93a1a1;
   --theme-accent: #268bd2;
@@ -102,7 +206,7 @@
   --theme-bg: #272822;
   --theme-bg-panel: #34352a;
   --theme-bg-hover: #49483e;
-  --theme-border: #75715e;
+  --theme-border: #49483e;
   --theme-text: #f8f8f2;
   --theme-text-muted: #75715e;
   --theme-accent: #66d9ef;
@@ -114,7 +218,7 @@
   --theme-bg: #0d1117;
   --theme-bg-panel: #161b22;
   --theme-bg-hover: #1c2128;
-  --theme-border: #30363d;
+  --theme-border: #21262d;
   --theme-text: #f0f6fc;
   --theme-text-muted: #8b949e;
   --theme-accent: #58a6ff;
