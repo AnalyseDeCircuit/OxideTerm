@@ -126,7 +126,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   };
 
   return (
-    <div className="h-full w-full bg-oxide-bg p-4 overflow-y-auto">
+    <div className="h-full w-full bg-theme-bg p-4 overflow-y-auto">
       <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Quick Actions */}
@@ -166,9 +166,9 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
             </div>
           </div>
 
-          <div className="border border-oxide-border rounded-sm overflow-hidden min-h-[100px] bg-oxide-panel/50">
+          <div className="border border-theme-border rounded-sm overflow-hidden min-h-[100px] bg-theme-bg-panel/50">
              <table className="w-full text-sm text-left">
-               <thead className="bg-oxide-panel text-zinc-500 border-b border-oxide-border">
+               <thead className="bg-theme-bg-panel text-zinc-500 border-b border-theme-border">
                  <tr>
                    <th className="px-4 py-2 font-medium">Type</th>
                    <th className="px-4 py-2 font-medium">Local Address</th>
@@ -282,7 +282,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
 
         {/* New Forward Form */}
         {showNewForm && (
-            <div className="border border-oxide-border rounded-sm bg-oxide-panel/30 p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+            <div className="border border-theme-border rounded-sm bg-theme-bg-panel/30 p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-zinc-300">New Forward Rule</h3>
                     <Button variant="ghost" size="sm" onClick={() => setShowNewForm(false)}>Cancel</Button>
@@ -303,7 +303,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                     </div>
                 </RadioGroup>
 
-                <div className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-sm border border-oxide-border/50">
+                <div className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-sm border border-theme-border/50">
                     {/* Left Side (Source) */}
                     <div className="flex-1 space-y-2">
                         <Label className="text-xs">{forwardType === 'remote' ? 'Remote (Server)' : 'Local (Client)'}</Label>
@@ -399,7 +399,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
         {/* Edit Forward Modal */}
         {editingForward && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-oxide-panel border border-oxide-border rounded-lg p-6 w-[500px] space-y-4 animate-in fade-in zoom-in-95">
+                <div className="bg-theme-bg-panel border border-theme-border rounded-lg p-6 w-[500px] space-y-4 animate-in fade-in zoom-in-95">
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-medium text-zinc-300">Edit Forward Rule</h3>
                         <Button 
@@ -418,7 +418,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                         ID: <span className="text-zinc-400 font-mono">{editingForward.id.slice(0, 8)}...</span>
                     </div>
 
-                    <div className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-sm border border-oxide-border/50">
+                    <div className="flex items-center gap-4 p-4 bg-zinc-950/50 rounded-sm border border-theme-border/50">
                         <div className="flex-1 space-y-2">
                             <Label className="text-xs">Bind Address</Label>
                             <div className="flex gap-2">

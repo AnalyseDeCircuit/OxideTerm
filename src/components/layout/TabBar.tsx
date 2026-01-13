@@ -32,7 +32,7 @@ export const TabBar = () => {
   };
 
   return (
-    <div className="flex items-center h-9 bg-oxide-bg border-b border-oxide-border overflow-x-auto no-scrollbar">
+    <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border overflow-x-auto no-scrollbar">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         const session = getSession(tab.sessionId);
@@ -42,10 +42,10 @@ export const TabBar = () => {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              "group flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] border-r border-oxide-border cursor-pointer select-none text-sm transition-colors",
+              "group flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] border-r border-theme-border cursor-pointer select-none text-sm transition-colors",
               isActive 
-                ? "bg-oxide-panel text-oxide-text border-t-2 border-t-oxide-accent" 
-                : "bg-oxide-bg text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent"
+                ? "bg-theme-bg-panel text-oxide-text border-t-2 border-t-oxide-accent" 
+                : "bg-theme-bg text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent"
             )}
           >
             <TabIcon type={tab.type} />

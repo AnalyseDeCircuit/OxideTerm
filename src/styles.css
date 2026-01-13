@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* Oxide-Industrial Palette */
+  /* Oxide-Industrial Palette (Legacy - kept for backward compatibility) */
   --color-oxide-bg: #09090b;       /* Deep Void */
   --color-oxide-panel: #18181b;    /* Machine Grey */
   --color-oxide-border: #27272a;   /* Structural Steel */
@@ -9,6 +9,16 @@
   --color-oxide-accent-hover: #c2410c;
   --color-oxide-text: #f4f4f5;     /* Zinc 100 */
   --color-oxide-text-muted: #a1a1aa; /* Zinc 400 */
+  
+  /* Theme System Colors - Dynamically updated via CSS variables */
+  --color-theme-bg: var(--theme-bg);
+  --color-theme-bg-panel: var(--theme-bg-panel);
+  --color-theme-bg-hover: var(--theme-bg-hover);
+  --color-theme-border: var(--theme-border);
+  --color-theme-text: var(--theme-text);
+  --color-theme-text-muted: var(--theme-text-muted);
+  --color-theme-accent: var(--theme-accent);
+  --color-theme-accent-hover: var(--theme-accent-hover);
   
   /* Typography */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -27,6 +37,88 @@
   color-scheme: dark;
   --background: var(--color-oxide-bg);
   --foreground: var(--color-oxide-text);
+  
+  /* Theme Variables - Default Theme */
+  --theme-bg: #09090b;
+  --theme-bg-panel: #18181b;
+  --theme-bg-hover: #27272a;
+  --theme-border: #3f3f46;
+  --theme-text: #f4f4f5;
+  --theme-text-muted: #a1a1aa;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+}
+
+/* Oxide Theme */
+[data-theme="oxide"] {
+  --theme-bg: #1c1917;
+  --theme-bg-panel: #292524;
+  --theme-bg-hover: #44403c;
+  --theme-border: #57534e;
+  --theme-text: #e7e5e4;
+  --theme-text-muted: #a8a29e;
+  --theme-accent: #f97316;
+  --theme-accent-hover: #ea580c;
+}
+
+/* Dracula Theme */
+[data-theme="dracula"] {
+  --theme-bg: #282a36;
+  --theme-bg-panel: #34354a;
+  --theme-bg-hover: #44475a;
+  --theme-border: #6272a4;
+  --theme-text: #f8f8f2;
+  --theme-text-muted: #6272a4;
+  --theme-accent: #bd93f9;
+  --theme-accent-hover: #9572d4;
+}
+
+/* Nord Theme */
+[data-theme="nord"] {
+  --theme-bg: #2e3440;
+  --theme-bg-panel: #3b4252;
+  --theme-bg-hover: #434c5e;
+  --theme-border: #4c566a;
+  --theme-text: #eceff4;
+  --theme-text-muted: #81a1c1;
+  --theme-accent: #88c0d0;
+  --theme-accent-hover: #5e81ac;
+}
+
+/* Solarized Dark Theme */
+[data-theme="solarized-dark"] {
+  --theme-bg: #002b36;
+  --theme-bg-panel: #073642;
+  --theme-bg-hover: #0a4a58;
+  --theme-border: #586e75;
+  --theme-text: #fdf6e3;
+  --theme-text-muted: #93a1a1;
+  --theme-accent: #268bd2;
+  --theme-accent-hover: #2aa198;
+}
+
+/* Monokai Theme */
+[data-theme="monokai"] {
+  --theme-bg: #272822;
+  --theme-bg-panel: #34352a;
+  --theme-bg-hover: #49483e;
+  --theme-border: #75715e;
+  --theme-text: #f8f8f2;
+  --theme-text-muted: #75715e;
+  --theme-accent: #66d9ef;
+  --theme-accent-hover: #a6e22e;
+}
+
+/* GitHub Dark Theme */
+[data-theme="github-dark"] {
+  --theme-bg: #0d1117;
+  --theme-bg-panel: #161b22;
+  --theme-bg-hover: #1c2128;
+  --theme-border: #30363d;
+  --theme-text: #f0f6fc;
+  --theme-text-muted: #8b949e;
+  --theme-accent: #58a6ff;
+  --theme-accent-hover: #1f6feb;
 }
 
 body {

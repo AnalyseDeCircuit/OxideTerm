@@ -10,9 +10,9 @@ const buttonVariants = cva(
         default:
           "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 shadow-none border border-transparent",
         secondary:
-          "bg-oxide-panel text-oxide-text border border-oxide-border hover:bg-zinc-800",
+          "bg-theme-bg-panel text-oxide-text border border-theme-border hover:bg-zinc-800",
         outline:
-          "border border-oxide-border bg-transparent hover:bg-zinc-800 text-oxide-text",
+          "border border-theme-border bg-transparent hover:bg-zinc-800 text-oxide-text",
         ghost: "hover:bg-zinc-800 hover:text-zinc-100 text-oxide-text",
         destructive:
           "bg-red-900 text-red-100 hover:bg-red-800 border border-red-900",

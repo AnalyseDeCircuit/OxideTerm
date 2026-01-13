@@ -71,8 +71,8 @@ export const TransferQueue = () => {
   };
 
   return (
-    <div className="h-48 bg-oxide-bg border-t border-oxide-border flex flex-col">
-      <div className="flex items-center justify-between px-2 py-1 bg-oxide-panel border-b border-oxide-border">
+    <div className="h-48 bg-theme-bg border-t border-theme-border flex flex-col">
+      <div className="flex items-center justify-between px-2 py-1 bg-theme-bg-panel border-b border-theme-border">
         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
           Transfer Queue {activeCount > 0 ? `(${activeCount} active)` : ''}
         </span>
@@ -109,7 +109,7 @@ export const TransferQueue = () => {
              <div 
                key={item.id} 
                className={`flex items-center gap-3 text-sm p-2 bg-zinc-900/50 rounded-sm border ${
-                 item.state === 'error' ? 'border-red-500/50' : 'border-transparent hover:border-oxide-border'
+                 item.state === 'error' ? 'border-red-500/50' : 'border-transparent hover:border-theme-border'
                }`}
              >
                  <div className="w-4 text-center text-zinc-500 font-bold">

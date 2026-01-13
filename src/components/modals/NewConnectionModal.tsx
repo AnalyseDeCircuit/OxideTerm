@@ -208,7 +208,7 @@ export const NewConnectionModal = () => {
             </Select>
           </div>
 
-          <div className="flex items-center space-x-2 border-t border-oxide-border pt-4">
+          <div className="flex items-center space-x-2 border-t border-theme-border pt-4">
             <Checkbox 
               id="save-conn" 
               checked={saveConnection}

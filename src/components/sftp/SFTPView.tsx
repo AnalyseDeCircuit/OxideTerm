@@ -234,9 +234,9 @@ const FileList = ({
   return (
     <div 
       className={cn(
-        "flex flex-col h-full bg-oxide-bg border transition-all duration-200",
-        active ? "border-oxide-accent/50" : "border-oxide-border",
-        isDragOver && "border-oxide-accent border-2 bg-oxide-accent/10 ring-2 ring-oxide-accent/30"
+        "flex flex-col h-full bg-theme-bg border transition-all duration-200",
+        active ? "border-oxide-accent/50" : "border-theme-border",
+        isDragOver && "border-oxide-accent border-2 bg-theme-accent/10 ring-2 ring-oxide-accent/30"
       )}
       onClick={onActivate}
       onContextMenu={(e) => handleContextMenu(e)}
@@ -247,10 +247,10 @@ const FileList = ({
       {/* Header */}
       <div className={cn(
         "flex items-center gap-2 p-2 border-b transition-colors h-10",
-        active ? "bg-zinc-800/50 border-oxide-accent/30" : "bg-oxide-panel border-oxide-border"
+        active ? "bg-zinc-800/50 border-oxide-accent/30" : "bg-theme-bg-panel border-theme-border"
       )}>
         <span className="font-semibold text-xs text-zinc-400 uppercase tracking-wider min-w-16">{title}</span>
-        <div className="flex-1 flex items-center gap-1 bg-zinc-950 border border-oxide-border px-2 py-0.5 rounded-sm overflow-hidden">
+        <div className="flex-1 flex items-center gap-1 bg-zinc-950 border border-theme-border px-2 py-0.5 rounded-sm overflow-hidden">
            <span className="text-zinc-500 text-xs truncate select-all">{path}</span>
         </div>
         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onNavigate('..')}>
@@ -277,11 +277,11 @@ const FileList = ({
       </div>
 
       {/* Column Headers with Sort */}
-      <div className="flex items-center px-2 py-1 bg-zinc-900 border-b border-oxide-border text-xs text-zinc-500">
+      <div className="flex items-center px-2 py-1 bg-zinc-900 border-b border-theme-border text-xs text-zinc-500">
         <button 
           className={cn(
             "flex-1 flex items-center gap-1 hover:text-zinc-300 transition-colors text-left",
-            sortField === 'name' && "text-oxide-accent"
+            sortField === 'name' && "text-theme-accent"
           )}
           onClick={() => onSortChange?.('name')}
         >
@@ -293,7 +293,7 @@ const FileList = ({
         <button 
           className={cn(
             "w-20 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
-            sortField === 'size' && "text-oxide-accent"
+            sortField === 'size' && "text-theme-accent"
           )}
           onClick={() => onSortChange?.('size')}
         >
@@ -303,7 +303,7 @@ const FileList = ({
         <button 
           className={cn(
             "w-24 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
-            sortField === 'modified' && "text-oxide-accent"
+            sortField === 'modified' && "text-theme-accent"
           )}
           onClick={() => onSortChange?.('modified')}
         >
@@ -314,7 +314,7 @@ const FileList = ({
 
       {/* Filter Input */}
       {onFilterChange && (
-        <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 border-b border-oxide-border">
+        <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 border-b border-theme-border">
           <Search className="h-3 w-3 text-zinc-500" />
           <input
             type="text"
@@ -371,7 +371,7 @@ const FileList = ({
               onContextMenu={(e) => handleContextMenu(e, file)}
               className={cn(
                 "flex items-center px-2 py-1 text-xs cursor-default select-none border-b border-transparent hover:bg-zinc-800",
-                isSelected && "bg-oxide-accent/20 text-oxide-accent"
+                isSelected && "bg-theme-accent/20 text-theme-accent"
               )}
             >
               <div className="flex-1 flex items-center gap-2 truncate">
@@ -392,7 +392,7 @@ const FileList = ({
       {/* Context Menu */}
       {contextMenu && (
         <div 
-          className="fixed z-50 bg-oxide-panel border border-oxide-border rounded-sm shadow-lg py-1 min-w-[180px]"
+          className="fixed z-50 bg-theme-bg-panel border border-theme-border rounded-sm shadow-lg py-1 min-w-[180px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {/* Transfer */}
@@ -462,7 +462,7 @@ const FileList = ({
             </button>
           )}
           
-          <div className="border-t border-oxide-border my-1" />
+          <div className="border-t border-theme-border my-1" />
           
           {/* New Folder */}
           {onNewFolder && (
@@ -1059,7 +1059,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-oxide-bg p-2 gap-2">
+    <div className="flex flex-col h-full w-full bg-theme-bg p-2 gap-2">
       <div className="flex-1 flex gap-2 min-h-0">
         {/* Local Pane */}
         <div className="flex-1 min-w-0">
@@ -1129,7 +1129,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
       {/* Preview Dialog */}
       <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
         <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 gap-0" aria-describedby="preview-desc">
-            <DialogHeader className="px-4 py-2 border-b border-oxide-border bg-oxide-panel flex flex-row items-center justify-between">
+            <DialogHeader className="px-4 py-2 border-b border-theme-border bg-theme-bg-panel flex flex-row items-center justify-between">
                 <div className="flex flex-col gap-1">
                     <DialogTitle className="text-sm font-mono flex items-center gap-2">
                         {previewFile?.name}
@@ -1139,7 +1139,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                             </span>
                         )}
                         {previewFile?.language && (
-                            <span className="text-xs px-1.5 py-0.5 bg-oxide-accent/20 text-oxide-accent rounded">
+                            <span className="text-xs px-1.5 py-0.5 bg-theme-accent/20 text-theme-accent rounded">
                                 {previewFile.language}
                             </span>
                         )}
@@ -1279,7 +1279,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                 )}
             </div>
             
-            <DialogFooter className="p-2 border-t border-oxide-border bg-oxide-panel justify-between sm:justify-between">
+            <DialogFooter className="p-2 border-t border-theme-border bg-theme-bg-panel justify-between sm:justify-between">
                 <div className="text-xs text-zinc-500 self-center px-2 truncate max-w-md">
                     {previewFile?.path}
                 </div>
@@ -1295,9 +1295,9 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                             console.error("Download failed:", e);
                         }
                     }}>
-                        <Download className="h-3 w-3 mr-2" /> 下载
+                        <Download className="h-3 w-3 mr-2" /> Download
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>关闭</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>Close</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

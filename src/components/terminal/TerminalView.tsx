@@ -7,6 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
+import { themes } from '../../lib/themes';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -82,6 +83,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
             terminalRef.current.options.fontSize = e.detail.fontSize;
             terminalRef.current.options.cursorStyle = e.detail.cursorStyle;
             terminalRef.current.options.cursorBlink = e.detail.cursorBlink;
+            terminalRef.current.options.lineHeight = e.detail.lineHeight;
+            
+            // Apply theme update - must set each property individually for xterm to detect changes
+            const themeConfig = themes[e.detail.theme] || themes.default;
+            if (terminalRef.current) {
+                Object.keys(themeConfig).forEach((key) => {
+                    (terminalRef.current!.options as any)[key] = (themeConfig as any)[key];
+                });
+            }
+            
             terminalRef.current.refresh(0, terminalRef.current.rows - 1);
             fitAddonRef.current?.fit();
         }
@@ -123,28 +134,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       fontFamily: getFontFamily(settings.fontFamily),
       fontSize: settings.fontSize,
       lineHeight: 1.2,
-      theme: {
-        background: '#09090b', // oxide-bg
-        foreground: '#f4f4f5', // oxide-text
-        cursor: '#ea580c',     // oxide-accent
-        selectionBackground: 'rgba(234, 88, 12, 0.3)',
-        black: '#09090b',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#d946ef',
-        cyan: '#06b6d4',
-        white: '#f4f4f5',
-        brightBlack: '#71717a',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#facc15',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#e879f9',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff',
-      },
+      theme: themes[settings.theme] || themes.default,
       allowProposedApi: true,
     });
 
@@ -310,10 +300,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     terminalRef.current?.focus();
   };
 
+  const currentTheme = themes[settings.theme] || themes.default;
+  
   return (
     <div 
-      className="terminal-container h-full w-full bg-oxide-bg overflow-hidden" 
-      style={{ padding: '4px' }}
+      className="terminal-container h-full w-full overflow-hidden" 
+      style={{ 
+        padding: '4px',
+        backgroundColor: currentTheme.background 
+      }}
       onClick={handleContainerClick}
     >
        <div 

@@ -22,6 +22,30 @@ import {
 import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
+import { themes } from '../../lib/themes';
+import { applyGlobalTheme } from '../../lib/themeManager';
+
+const ThemePreview = ({ themeName }: { themeName: string }) => {
+    const theme = themes[themeName] || themes.default;
+    
+    return (
+        <div className="mt-2 p-3 rounded-md border border-theme-border" style={{ backgroundColor: theme.background }}>
+            <div className="flex gap-2 mb-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.red }}></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.yellow }}></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.green }}></div>
+            </div>
+            <div className="font-mono text-xs space-y-1" style={{ color: theme.foreground }}>
+                <div>$ echo "Hello World"</div>
+                <div style={{ color: theme.blue }}>~ <span style={{ color: theme.magenta }}>git</span> status</div>
+                <div className="flex items-center">
+                    <span>&gt; </span>
+                    <span className="w-2 h-4 ml-1 animate-pulse" style={{ backgroundColor: theme.cursor }}></span>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // Extended persistence hook
 const usePersistedSettings = () => {
@@ -54,6 +78,11 @@ const usePersistedSettings = () => {
 
     const updateSetting = (key: string, value: any) => {
         setSettings((prev: any) => ({ ...prev, [key]: value }));
+        
+        // Apply global theme immediately when theme changes
+        if (key === 'theme') {
+            applyGlobalTheme(value);
+        }
     };
 
     return { settings, updateSetting };
@@ -142,7 +171,7 @@ export const SettingsModal = () => {
         
         <div className="flex h-full">
             {/* Sidebar */}
-            <div className="w-48 bg-oxide-panel border-r border-oxide-border flex flex-col pt-4 pb-4">
+            <div className="w-48 bg-theme-bg-panel border-r border-theme-border flex flex-col pt-4 pb-4">
                 <div className="px-4 mb-4 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
                     <Button 
@@ -187,7 +216,7 @@ export const SettingsModal = () => {
             </div>
 
             {/* Content */}
-            <div className="flex-1 bg-oxide-bg overflow-y-auto p-6">
+            <div className="flex-1 bg-theme-bg overflow-y-auto p-6">
                 {activeTab === 'terminal' && (
                     <div className="space-y-6">
                         <div>
@@ -197,23 +226,6 @@ export const SettingsModal = () => {
                         <Separator />
                         
                         <div className="grid gap-4">
-                            <div className="grid gap-2">
-                                <Label>Theme</Label>
-                                <Select 
-                                    value={settings.theme} 
-                                    onValueChange={(v) => updateSetting('theme', v)}
-                                >
-                                    <SelectTrigger className="w-[240px]">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="default">OxideTerm Default</SelectItem>
-                                        <SelectItem value="dracula">Dracula</SelectItem>
-                                        <SelectItem value="nord">Nord</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="grid gap-2">
                                     <Label>Font Family</Label>
@@ -334,6 +346,28 @@ export const SettingsModal = () => {
                         </div>
                         <Separator />
                         <div className="grid gap-4">
+                            <div className="grid gap-2">
+                                <Label>Theme</Label>
+                                <Select 
+                                    value={settings.theme} 
+                                    onValueChange={(v) => updateSetting('theme', v)}
+                                >
+                                    <SelectTrigger className="w-[240px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="default">OxideTerm Default</SelectItem>
+                                        <SelectItem value="oxide">Oxide (Rust)</SelectItem>
+                                        <SelectItem value="dracula">Dracula</SelectItem>
+                                        <SelectItem value="nord">Nord</SelectItem>
+                                        <SelectItem value="solarized-dark">Solarized Dark</SelectItem>
+                                        <SelectItem value="monokai">Monokai</SelectItem>
+                                        <SelectItem value="github-dark">GitHub Dark</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <ThemePreview themeName={settings.theme} />
+                            </div>
+
                              <div className="flex items-center space-x-2">
                                 <Checkbox 
                                     id="sidebar-col" 
@@ -389,7 +423,7 @@ export const SettingsModal = () => {
                             
                             <div className="space-y-1">
                                 {groups.map(group => (
-                                    <div key={group} className="flex items-center justify-between p-2 bg-oxide-panel rounded-sm border border-oxide-border">
+                                    <div key={group} className="flex items-center justify-between p-2 bg-theme-bg-panel rounded-sm border border-theme-border">
                                         <span className="text-sm">{group}</span>
                                         <Button size="icon" variant="ghost" className="h-6 w-6 text-zinc-500 hover:text-red-400" onClick={() => handleDeleteGroup(group)}>
                                             <Trash2 className="h-3 w-3" />
@@ -404,7 +438,7 @@ export const SettingsModal = () => {
                             <p className="text-sm text-zinc-500 mb-2">Scan ~/.ssh/config for hosts.</p>
                             <Separator className="mb-2" />
                             
-                            <div className="h-32 overflow-y-auto border border-oxide-border rounded-sm bg-oxide-panel p-1">
+                            <div className="h-32 overflow-y-auto border border-theme-border rounded-sm bg-theme-bg-panel p-1">
                                 {sshHosts.map(host => (
                                     <div key={host.alias} className="flex items-center justify-between p-2 hover:bg-zinc-800 rounded-sm">
                                         <div className="flex flex-col">
@@ -436,9 +470,9 @@ export const SettingsModal = () => {
                         
                         <div className="space-y-2">
                             {keys.map(key => (
-                                <div key={key.name} className="flex items-center justify-between p-3 bg-oxide-panel border border-oxide-border rounded-sm">
+                                <div key={key.name} className="flex items-center justify-between p-3 bg-theme-bg-panel border border-theme-border rounded-sm">
                                     <div className="flex items-center gap-3">
-                                        <Key className="h-5 w-5 text-oxide-accent" />
+                                        <Key className="h-5 w-5 text-theme-accent" />
                                         <div className="flex flex-col">
                                             <span className="text-sm font-medium text-zinc-200">{key.name}</span>
                                             <span className="text-xs text-zinc-500">{key.key_type} · {key.path}</span>

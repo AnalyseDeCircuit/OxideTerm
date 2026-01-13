@@ -31,9 +31,9 @@ export const Sidebar = () => {
   const sessionList = Array.from(sessions.values());
 
   return (
-    <div className="flex h-full border-r border-oxide-border bg-oxide-panel w-64 flex-col">
+    <div className="flex h-full border-r border-theme-border bg-theme-bg-panel w-64 flex-col">
       {/* Activity Bar (Top of sidebar) */}
-      <div className="flex items-center p-2 gap-1 border-b border-oxide-border">
+      <div className="flex items-center p-2 gap-1 border-b border-theme-border">
         <Button 
           variant={sidebarActiveSection === 'sessions' ? 'secondary' : 'ghost'} 
           size="icon"
