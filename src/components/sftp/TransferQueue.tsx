@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Pause, Play, Check, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';

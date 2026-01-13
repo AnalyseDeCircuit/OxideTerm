@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -40,7 +40,9 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
 
   useEffect(() => {
     if (open && connection) {
-      setAuthType(connection.auth_type);
+      // Map auth_type to modal's authType (only 'password' or 'key')
+      const modalAuthType = connection.auth_type === 'password' ? 'password' : 'key';
+      setAuthType(modalAuthType);
       setKeyPath(connection.key_path || '');
       setGroup(connection.group || '');
       setPassword('');

@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Toast,
   ToastClose,
@@ -6,7 +5,7 @@ import {
   ToastProvider,
   ToastTitle,
   ToastViewport,
-} from './toast';
+} from './Toast';
 import { useToastStore } from '../../hooks/useToast';
 
 export const Toaster = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';

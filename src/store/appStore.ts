@@ -289,13 +289,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return;
       }
 
+      // Map auth_type: 'agent' -> 'default_key', others stay the same
+      const authType = connection.auth_type === 'agent' ? 'default_key' : connection.auth_type;
+      
       const request: ConnectRequest = {
         host: connection.host,
         port: connection.port,
         username: connection.username,
-        auth_type: connection.auth_type,
+        auth_type: authType,
         password,
-        key_path: connection.auth_type === 'key' ? connection.key_path : undefined,
+        key_path: connection.auth_type === 'key' ? (connection.key_path || undefined) : undefined,
         name: connection.name,
       };
 

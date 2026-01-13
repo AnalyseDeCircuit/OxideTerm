@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -8,7 +8,6 @@ import { Separator } from '../ui/separator';
 import { 
   Dialog, 
   DialogContent, 
-  DialogHeader, 
   DialogTitle, 
   DialogDescription
 } from '../ui/dialog';

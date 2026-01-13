@@ -1,4 +1,3 @@
-import React from 'react';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { useAppStore } from '../../store/appStore';

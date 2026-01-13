@@ -18,7 +18,7 @@ const TabIcon = ({ type }: { type: string }) => {
 };
 
 export const TabBar = () => {
-  const { tabs, activeTabId, setActiveTab, closeTab, reconnect, getSession } = useAppStore();
+  const { tabs, activeTabId, setActiveTab, closeTab, reconnect } = useAppStore();
   const [reconnecting, setReconnecting] = React.useState<string | null>(null);
 
   const handleReconnect = async (e: React.MouseEvent, sessionId: string) => {
@@ -35,7 +35,6 @@ export const TabBar = () => {
     <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border overflow-x-auto no-scrollbar">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
-        const session = getSession(tab.sessionId);
         const isReconnecting = reconnecting === tab.sessionId;
         return (
           <div
