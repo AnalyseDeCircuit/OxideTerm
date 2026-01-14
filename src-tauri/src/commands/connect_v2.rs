@@ -264,12 +264,13 @@ pub async fn connect_v2(
             .ok_or_else(|| "Session not found in registry".to_string())?;
 
         // Start WebSocket bridge with disconnect tracking
-        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
-            .await
-            .map_err(|e| {
-                registry.remove(&sid);
-                format!("Failed to start WebSocket bridge: {}", e)
-            })?;
+        let (_, port, token, disconnect_rx) =
+            WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
+                .await
+                .map_err(|e| {
+                    registry.remove(&sid);
+                    format!("Failed to start WebSocket bridge: {}", e)
+                })?;
 
         // Spawn task to handle disconnect and emit event
         let app_handle_clone = app_handle.clone();
@@ -277,13 +278,10 @@ pub async fn connect_v2(
         let registry_clone = registry.inner().clone();
         tokio::spawn(async move {
             if let Ok(reason) = disconnect_rx.await {
-                warn!(
-                    "Session {} disconnected: {:?}",
-                    sid_clone, reason
-                );
+                warn!("Session {} disconnected: {:?}", sid_clone, reason);
                 // Update registry state
                 let _ = registry_clone.disconnect_complete(&sid_clone, false);
-                
+
                 // Emit disconnect event to frontend
                 let payload = SessionDisconnectedPayload {
                     session_id: sid_clone.clone(),
@@ -437,12 +435,13 @@ pub async fn connect_v2(
             .ok_or_else(|| "Session not found in registry".to_string())?;
 
         // Start WebSocket bridge with disconnect tracking
-        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
-            .await
-            .map_err(|e| {
-                registry.remove(&sid);
-                format!("Failed to start WebSocket bridge: {}", e)
-            })?;
+        let (_, port, token, disconnect_rx) =
+            WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
+                .await
+                .map_err(|e| {
+                    registry.remove(&sid);
+                    format!("Failed to start WebSocket bridge: {}", e)
+                })?;
 
         // Spawn task to handle disconnect and emit event
         let app_handle_clone = app_handle.clone();
@@ -450,13 +449,10 @@ pub async fn connect_v2(
         let registry_clone = registry.inner().clone();
         tokio::spawn(async move {
             if let Ok(reason) = disconnect_rx.await {
-                warn!(
-                    "Session {} disconnected: {:?}",
-                    sid_clone, reason
-                );
+                warn!("Session {} disconnected: {:?}", sid_clone, reason);
                 // Update registry state
                 let _ = registry_clone.disconnect_complete(&sid_clone, false);
-                
+
                 // Emit disconnect event to frontend
                 let payload = SessionDisconnectedPayload {
                     session_id: sid_clone.clone(),

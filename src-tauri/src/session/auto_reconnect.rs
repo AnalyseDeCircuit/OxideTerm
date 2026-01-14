@@ -131,7 +131,10 @@ impl AutoReconnectService {
             }
 
             if let Err(e) = result {
-                error!("Reconnection failed for session {}: {:?}", session_id_clone, e);
+                error!(
+                    "Reconnection failed for session {}: {:?}",
+                    session_id_clone, e
+                );
             }
         });
     }
@@ -305,9 +308,10 @@ impl AutoReconnectService {
             .ok_or_else(|| "Session not found in registry".to_string())?;
 
         // Start WebSocket bridge
-        let (_, ws_port, ws_token) = crate::bridge::WsBridge::start_extended(session_handle, scroll_buffer)
-            .await
-            .map_err(|e| format!("WebSocket bridge failed: {}", e))?;
+        let (_, ws_port, ws_token) =
+            crate::bridge::WsBridge::start_extended(session_handle, scroll_buffer)
+                .await
+                .map_err(|e| format!("WebSocket bridge failed: {}", e))?;
 
         // Get command sender
         let cmd_tx = handle_controller.cmd_tx_clone();
@@ -354,8 +358,7 @@ impl AutoReconnectService {
             );
 
             // Create new forwarding manager with the new handle_controller
-            let new_manager =
-                ForwardingManager::new(handle_controller, session_id.to_string());
+            let new_manager = ForwardingManager::new(handle_controller, session_id.to_string());
 
             // Restore each forward rule
             let mut restored_count = 0;
@@ -434,12 +437,8 @@ impl AutoReconnectService {
                     "Triggering reconnect for disconnected session {}",
                     session.id
                 );
-                self.trigger_reconnect(
-                    session.id.clone(),
-                    "Network recovered".to_string(),
-                    true,
-                )
-                .await;
+                self.trigger_reconnect(session.id.clone(), "Network recovered".to_string(), true)
+                    .await;
             }
         }
     }

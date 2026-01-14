@@ -3,14 +3,14 @@
 //! This module provides SSH Agent detection and user-friendly error messages.
 //!
 //! # Current Status
-//! 
+//!
 //! **⚠️ TODO: Full SSH Agent signing implementation pending**
-//! 
+//!
 //! SSH Agent authentication requires low-level protocol implementation to:
 //! 1. Request challenge from SSH server
 //! 2. Forward challenge to agent for signing
 //! 3. Return signed response to server
-//! 
+//!
 //! Current russh library (0.48) does not expose sufficient low-level APIs
 //! for agent signing integration. Waiting for library updates or will implement
 //! custom signing flow in future versions.
@@ -46,7 +46,7 @@ impl SshAgentClient {
 
         // TODO: Implement full agent connection
         // let stream = russh_keys::agent::client::AgentClient::connect_env().await?;
-        
+
         Err(SshError::AgentNotAvailable(format!(
             "SSH Agent authentication is not yet fully implemented.\n\n\
              This feature requires deep integration with SSH agent protocol for challenge signing.\n\

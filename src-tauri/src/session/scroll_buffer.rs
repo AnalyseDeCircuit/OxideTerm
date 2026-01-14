@@ -93,12 +93,12 @@ impl ScrollBuffer {
     /// If buffer is full, oldest line is removed
     pub async fn append(&self, line: TerminalLine) {
         let mut lines = self.lines.write().await;
-        
+
         // Remove oldest line if at capacity
         if lines.len() >= self.max_lines {
             lines.pop_front();
         }
-        
+
         lines.push_back(line);
         self.total_lines.fetch_add(1, Ordering::Relaxed);
     }
@@ -111,14 +111,14 @@ impl ScrollBuffer {
 
         let mut lines = self.lines.write().await;
         let count = new_lines.len();
-        
+
         for line in new_lines {
             if lines.len() >= self.max_lines {
                 lines.pop_front();
             }
             lines.push_back(line);
         }
-        
+
         self.total_lines.fetch_add(count as u64, Ordering::Relaxed);
     }
 
@@ -126,13 +126,8 @@ impl ScrollBuffer {
     /// Returns lines from start index up to count lines
     pub async fn get_range(&self, start: usize, count: usize) -> Vec<TerminalLine> {
         let lines = self.lines.read().await;
-        
-        lines
-            .iter()
-            .skip(start)
-            .take(count)
-            .cloned()
-            .collect()
+
+        lines.iter().skip(start).take(count).cloned().collect()
     }
 
     /// Get all lines in the buffer
@@ -145,12 +140,12 @@ impl ScrollBuffer {
     pub async fn stats(&self) -> BufferStats {
         let lines = self.lines.read().await;
         let current_count = lines.len();
-        
+
         // Estimate memory usage: each line averages ~100 bytes (text + overhead)
         let avg_line_size = 100.0;
         let memory_bytes = current_count as f64 * avg_line_size;
         let memory_mb = memory_bytes / (1024.0 * 1024.0);
-        
+
         BufferStats {
             current_lines: current_count,
             total_lines: self.total_lines.load(Ordering::Relaxed),
@@ -181,27 +176,27 @@ impl ScrollBuffer {
     /// Serialize buffer to bytes for persistence
     pub async fn save_to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
         let lines = self.lines.read().await;
-        
+
         let serialized = SerializedBuffer {
             lines: lines.iter().cloned().collect(),
             total_lines: self.total_lines.load(Ordering::Relaxed),
             captured_at: Utc::now(),
             max_lines: self.max_lines,
         };
-        
+
         bincode::serialize(&serialized)
     }
 
     /// Load buffer from serialized bytes
     pub async fn load_from_bytes(data: &[u8]) -> Result<Arc<Self>, bincode::Error> {
         let serialized: SerializedBuffer = bincode::deserialize(data)?;
-        
+
         let buffer = Self {
             lines: RwLock::new(serialized.lines.into_iter().collect()),
             max_lines: serialized.max_lines,
             total_lines: AtomicU64::new(serialized.total_lines),
         };
-        
+
         Ok(Arc::new(buffer))
     }
 
@@ -219,7 +214,7 @@ impl ScrollBuffer {
     /// Uses spawn_blocking to avoid blocking the tokio runtime
     pub async fn search(&self, options: SearchOptions) -> SearchResult {
         let lines = self.get_all().await;
-        
+
         // Execute search in a blocking task to avoid blocking the async runtime
         tokio::task::spawn_blocking(move || search_lines(&lines, options))
             .await
@@ -244,13 +239,13 @@ mod tests {
     #[tokio::test]
     async fn test_append_and_get() {
         let buffer = ScrollBuffer::new();
-        
+
         buffer.append(TerminalLine::new("line 1".to_string())).await;
         buffer.append(TerminalLine::new("line 2".to_string())).await;
         buffer.append(TerminalLine::new("line 3".to_string())).await;
-        
+
         assert_eq!(buffer.len().await, 3);
-        
+
         let lines = buffer.get_range(0, 10).await;
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0].text, "line 1");
@@ -260,15 +255,15 @@ mod tests {
     #[tokio::test]
     async fn test_circular_buffer() {
         let buffer = ScrollBuffer::with_capacity(3);
-        
+
         buffer.append(TerminalLine::new("line 1".to_string())).await;
         buffer.append(TerminalLine::new("line 2".to_string())).await;
         buffer.append(TerminalLine::new("line 3".to_string())).await;
         buffer.append(TerminalLine::new("line 4".to_string())).await; // Should evict line 1
-        
+
         assert_eq!(buffer.len().await, 3);
         assert_eq!(buffer.total_lines(), 4);
-        
+
         let lines = buffer.get_all().await;
         assert_eq!(lines[0].text, "line 2");
         assert_eq!(lines[2].text, "line 4");
@@ -277,11 +272,13 @@ mod tests {
     #[tokio::test]
     async fn test_stats() {
         let buffer = ScrollBuffer::with_capacity(100);
-        
+
         for i in 0..50 {
-            buffer.append(TerminalLine::new(format!("line {}", i))).await;
+            buffer
+                .append(TerminalLine::new(format!("line {}", i)))
+                .await;
         }
-        
+
         let stats = buffer.stats().await;
         assert_eq!(stats.current_lines, 50);
         assert_eq!(stats.total_lines, 50);
@@ -292,14 +289,14 @@ mod tests {
     #[tokio::test]
     async fn test_clear() {
         let buffer = ScrollBuffer::new();
-        
+
         buffer.append(TerminalLine::new("line 1".to_string())).await;
         buffer.append(TerminalLine::new("line 2".to_string())).await;
-        
+
         assert_eq!(buffer.len().await, 2);
-        
+
         buffer.clear().await;
-        
+
         assert_eq!(buffer.len().await, 0);
         assert_eq!(buffer.total_lines(), 2); // Historical count preserved
     }
@@ -307,13 +304,13 @@ mod tests {
     #[tokio::test]
     async fn test_serialization() {
         let buffer = ScrollBuffer::new();
-        
+
         buffer.append(TerminalLine::new("line 1".to_string())).await;
         buffer.append(TerminalLine::new("line 2".to_string())).await;
-        
+
         let bytes = buffer.save_to_bytes().await.unwrap();
         let restored = ScrollBuffer::load_from_bytes(&bytes).await.unwrap();
-        
+
         assert_eq!(restored.len().await, 2);
         let lines = restored.get_all().await;
         assert_eq!(lines[0].text, "line 1");
@@ -323,15 +320,15 @@ mod tests {
     #[tokio::test]
     async fn test_batch_append() {
         let buffer = ScrollBuffer::with_capacity(10);
-        
+
         let batch = vec![
             TerminalLine::new("line 1".to_string()),
             TerminalLine::new("line 2".to_string()),
             TerminalLine::new("line 3".to_string()),
         ];
-        
+
         buffer.append_batch(batch).await;
-        
+
         assert_eq!(buffer.len().await, 3);
         assert_eq!(buffer.total_lines(), 3);
     }
@@ -339,11 +336,13 @@ mod tests {
     #[tokio::test]
     async fn test_get_range() {
         let buffer = ScrollBuffer::new();
-        
+
         for i in 0..10 {
-            buffer.append(TerminalLine::new(format!("line {}", i))).await;
+            buffer
+                .append(TerminalLine::new(format!("line {}", i)))
+                .await;
         }
-        
+
         let lines = buffer.get_range(3, 4).await;
         assert_eq!(lines.len(), 4);
         assert_eq!(lines[0].text, "line 3");

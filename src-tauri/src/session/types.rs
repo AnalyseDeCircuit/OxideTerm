@@ -201,7 +201,12 @@ impl SessionEntry {
     }
 
     /// Create a new session entry with custom buffer size
-    pub fn with_buffer_config(id: String, config: SessionConfig, order: usize, max_lines: usize) -> Self {
+    pub fn with_buffer_config(
+        id: String,
+        config: SessionConfig,
+        order: usize,
+        max_lines: usize,
+    ) -> Self {
         Self {
             id,
             config,

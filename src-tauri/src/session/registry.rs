@@ -120,7 +120,11 @@ impl SessionRegistry {
     }
 
     /// Create session with custom buffer configuration
-    pub fn create_session_with_buffer(&self, config: SessionConfig, max_lines: usize) -> Result<String, RegistryError> {
+    pub fn create_session_with_buffer(
+        &self,
+        config: SessionConfig,
+        max_lines: usize,
+    ) -> Result<String, RegistryError> {
         // Hold lock to prevent TOCTOU race between count check and insert
         let _guard = self.create_lock.lock().unwrap();
 
@@ -389,11 +393,11 @@ impl SessionRegistry {
     /// Decrement active session count
     fn decrement_active(&self) {
         // Use saturating_sub behavior to prevent underflow
-        let prev = self.active_count.fetch_update(
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-            |x| Some(x.saturating_sub(1))
-        );
+        let prev = self
+            .active_count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
+                Some(x.saturating_sub(1))
+            });
         if let Ok(0) = prev {
             warn!("Active count was already 0, possible accounting error");
         }
@@ -542,7 +546,13 @@ impl SessionRegistry {
             };
 
             let persisted = if let Some(buffer_data) = buffer_data {
-                crate::state::PersistedSession::with_buffer(id, config, order, buffer_data, buffer_config)
+                crate::state::PersistedSession::with_buffer(
+                    id,
+                    config,
+                    order,
+                    buffer_data,
+                    buffer_config,
+                )
             } else {
                 crate::state::PersistedSession::new(id, config, order)
             };
@@ -724,7 +734,9 @@ mod tests {
         assert_eq!(registry.active_count(), 1);
 
         // Connection fails
-        registry.connect_failed(&id2, "test error".to_string()).unwrap();
+        registry
+            .connect_failed(&id2, "test error".to_string())
+            .unwrap();
         assert_eq!(registry.active_count(), 0);
     }
 }

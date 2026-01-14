@@ -641,10 +641,7 @@ impl ForwardingManager {
                 let mut rule = entry.rule.clone();
                 rule.status = ForwardStatus::Stopped;
                 saved_rules.push(rule.clone());
-                self.stopped_forwards
-                    .write()
-                    .await
-                    .insert(id, rule);
+                self.stopped_forwards.write().await.insert(id, rule);
             }
         }
 
@@ -656,10 +653,7 @@ impl ForwardingManager {
                 let mut rule = entry.rule.clone();
                 rule.status = ForwardStatus::Stopped;
                 saved_rules.push(rule.clone());
-                self.stopped_forwards
-                    .write()
-                    .await
-                    .insert(id, rule);
+                self.stopped_forwards.write().await.insert(id, rule);
             }
         }
 
@@ -671,10 +665,7 @@ impl ForwardingManager {
                 let mut rule = entry.rule.clone();
                 rule.status = ForwardStatus::Stopped;
                 saved_rules.push(rule.clone());
-                self.stopped_forwards
-                    .write()
-                    .await
-                    .insert(id, rule);
+                self.stopped_forwards.write().await.insert(id, rule);
             }
         }
 

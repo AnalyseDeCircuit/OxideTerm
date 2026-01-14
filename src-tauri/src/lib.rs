@@ -119,7 +119,9 @@ pub fn run() {
     let registry = Arc::new(SessionRegistry::new(state_store.clone()));
 
     // Create forwarding registry with state store (Arc for sharing with reconnect service)
-    let forwarding_registry = Arc::new(commands::ForwardingRegistry::new_with_state(state_store.clone()));
+    let forwarding_registry = Arc::new(commands::ForwardingRegistry::new_with_state(
+        state_store.clone(),
+    ));
 
     // Create health registry
     let health_registry = HealthRegistry::new();

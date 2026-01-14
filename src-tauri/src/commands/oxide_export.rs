@@ -8,8 +8,8 @@ use tracing::info;
 use crate::commands::config::ConfigState;
 use crate::config::types::SavedAuth;
 use crate::oxide_file::{
-    compute_checksum, encrypt_oxide_file, EncryptedAuth, EncryptedConnection,
-    EncryptedPayload, EncryptedProxyHop, OxideMetadata,
+    compute_checksum, encrypt_oxide_file, EncryptedAuth, EncryptedConnection, EncryptedPayload,
+    EncryptedProxyHop, OxideMetadata,
 };
 
 /// Validate password strength
@@ -69,19 +69,18 @@ pub async fn export_to_oxide(
                     has_passphrase,
                     passphrase_keychain_id,
                 } => {
-                    let passphrase = if *has_passphrase {
-                        if let Some(kc_id) = passphrase_keychain_id {
-                            Some(
-                                config_state
-                                    .get_keychain_value(kc_id)
-                                    .map_err(|e| format!("Keychain error for {}: {}", context, e))?,
-                            )
+                    let passphrase =
+                        if *has_passphrase {
+                            if let Some(kc_id) = passphrase_keychain_id {
+                                Some(config_state.get_keychain_value(kc_id).map_err(|e| {
+                                    format!("Keychain error for {}: {}", context, e)
+                                })?)
+                            } else {
+                                None
+                            }
                         } else {
                             None
-                        }
-                    } else {
-                        None
-                    };
+                        };
                     Ok(EncryptedAuth::Key {
                         key_path: key_path.clone(),
                         passphrase,
@@ -97,7 +96,10 @@ pub async fn export_to_oxide(
         if !saved_conn.proxy_chain.is_empty() {
             // New proxy_chain format
             for (hop_index, hop) in saved_conn.proxy_chain.iter().enumerate() {
-                let hop_auth = convert_auth(&hop.auth, &format!("hop {} of {}", hop_index, saved_conn.name))?;
+                let hop_auth = convert_auth(
+                    &hop.auth,
+                    &format!("hop {} of {}", hop_index, saved_conn.name),
+                )?;
                 encrypted_proxy_chain.push(EncryptedProxyHop {
                     host: hop.host.clone(),
                     port: hop.port,
@@ -107,13 +109,17 @@ pub async fn export_to_oxide(
             }
         } else if let Some(jump_id) = &saved_conn.options.jump_host {
             // Legacy jump_host format - convert to proxy_chain
-            let jump_conn = config.get_connection(jump_id)
-                .ok_or_else(|| format!(
+            let jump_conn = config.get_connection(jump_id).ok_or_else(|| {
+                format!(
                     "Connection '{}' references jump host '{}' which does not exist. \
                     Please ensure all jump hosts are saved before exporting.",
                     saved_conn.name, jump_id
-                ))?;
-            let hop_auth = convert_auth(&jump_conn.auth, &format!("jump host of {}", saved_conn.name))?;
+                )
+            })?;
+            let hop_auth = convert_auth(
+                &jump_conn.auth,
+                &format!("jump host of {}", saved_conn.name),
+            )?;
             encrypted_proxy_chain.push(EncryptedProxyHop {
                 host: jump_conn.host.clone(),
                 port: jump_conn.port,

@@ -89,15 +89,16 @@ impl KeyAuth {
 }
 
 /// Load a private key from file (async version - preferred in async contexts)
-pub async fn load_private_key_async(path: &Path, passphrase: Option<&str>) -> Result<KeyPair, KeyError> {
+pub async fn load_private_key_async(
+    path: &Path,
+    passphrase: Option<&str>,
+) -> Result<KeyPair, KeyError> {
     let path = path.to_path_buf();
     let passphrase = passphrase.map(|s| s.to_string());
-    
-    tokio::task::spawn_blocking(move || {
-        load_private_key_sync(&path, passphrase.as_deref())
-    })
-    .await
-    .map_err(|e| KeyError::ParseError(format!("Task join error: {}", e)))?
+
+    tokio::task::spawn_blocking(move || load_private_key_sync(&path, passphrase.as_deref()))
+        .await
+        .map_err(|e| KeyError::ParseError(format!("Task join error: {}", e)))?
 }
 
 /// Load a private key from file (sync version - use spawn_blocking in async contexts)

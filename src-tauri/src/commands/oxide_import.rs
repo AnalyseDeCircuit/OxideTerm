@@ -9,9 +9,7 @@ use uuid::Uuid;
 
 use crate::commands::config::ConfigState;
 use crate::config::types::{ProxyHopConfig, SavedAuth, SavedConnection, CONFIG_VERSION};
-use crate::oxide_file::{
-    decrypt_oxide_file, EncryptedAuth, EncryptedProxyHop, OxideMetadata,
-};
+use crate::oxide_file::{decrypt_oxide_file, EncryptedAuth, EncryptedProxyHop, OxideMetadata};
 
 /// Result of importing connections from .oxide file
 #[derive(Debug, Serialize)]
@@ -83,12 +81,9 @@ pub async fn import_from_oxide(
 
     // Helper function to convert EncryptedAuth to SavedAuth WITHOUT writing to keychain
     // Returns (SavedAuth, Vec<PendingKeychainEntry>)
-    fn prepare_auth(
-        auth: EncryptedAuth,
-        id: &str,
-    ) -> (SavedAuth, Vec<PendingKeychainEntry>) {
+    fn prepare_auth(auth: EncryptedAuth, id: &str) -> (SavedAuth, Vec<PendingKeychainEntry>) {
         let mut entries = Vec::new();
-        
+
         let saved_auth = match auth {
             EncryptedAuth::Password { password } => {
                 let keychain_id = format!("oxide_conn_{}", id);
@@ -98,7 +93,10 @@ pub async fn import_from_oxide(
                 });
                 SavedAuth::Password { keychain_id }
             }
-            EncryptedAuth::Key { key_path, passphrase } => {
+            EncryptedAuth::Key {
+                key_path,
+                passphrase,
+            } => {
                 let passphrase_keychain_id = if let Some(pass) = passphrase {
                     let kc_id = format!("oxide_key_{}", id);
                     entries.push(PendingKeychainEntry {
@@ -117,7 +115,7 @@ pub async fn import_from_oxide(
             }
             EncryptedAuth::Agent => SavedAuth::Agent,
         };
-        
+
         (saved_auth, entries)
     }
 
@@ -127,12 +125,12 @@ pub async fn import_from_oxide(
     ) -> (Vec<ProxyHopConfig>, Vec<PendingKeychainEntry>) {
         let mut hops = Vec::new();
         let mut all_entries = Vec::new();
-        
+
         for (hop_index, enc_hop) in proxy_chain.into_iter().enumerate() {
             let hop_id = format!("{}_hop{}", base_id, hop_index);
             let (hop_auth, entries) = prepare_auth(enc_hop.auth, &hop_id);
             all_entries.extend(entries);
-            
+
             hops.push(ProxyHopConfig {
                 host: enc_hop.host,
                 port: enc_hop.port,
@@ -140,17 +138,17 @@ pub async fn import_from_oxide(
                 auth: hop_auth,
             });
         }
-        
+
         (hops, all_entries)
     }
 
     for enc_conn in payload.connections {
         let new_id = Uuid::new_v4().to_string();
         let conn_name = enc_conn.name.clone();
-        
+
         // Prepare main connection auth
         let (auth, mut keychain_entries) = prepare_auth(enc_conn.auth, &new_id);
-        
+
         // Prepare proxy_chain auth
         let (proxy_chain, hop_entries) = prepare_proxy_chain(enc_conn.proxy_chain, &new_id);
         keychain_entries.extend(hop_entries);

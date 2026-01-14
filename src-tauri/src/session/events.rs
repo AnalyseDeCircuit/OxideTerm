@@ -1,7 +1,7 @@
 //! Session Events Module
 //!
 //! Defines Tauri events for session state changes, reconnection progress,
-//! and network status. These events are emitted from the backend and 
+//! and network status. These events are emitted from the backend and
 //! listened to by the frontend.
 
 use serde::{Deserialize, Serialize};

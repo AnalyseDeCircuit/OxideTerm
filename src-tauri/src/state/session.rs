@@ -69,7 +69,7 @@ impl Default for BufferConfig {
 impl PersistedSession {
     /// Create a new persisted session
     pub fn new(id: String, config: SessionConfig, order: usize) -> Self {
-            Self {
+        Self {
             id,
             config,
             created_at: Utc::now(),

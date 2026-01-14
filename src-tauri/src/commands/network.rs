@@ -15,14 +15,14 @@ pub async fn network_status_changed(
     reconnect_service: State<'_, Arc<AutoReconnectService>>,
 ) -> Result<(), String> {
     info!("Network status changed: online={}", online);
-    
+
     reconnect_service.set_network_status(online);
-    
+
     if online {
         // Network recovered - trigger reconnect for all disconnected sessions
         reconnect_service.reconnect_all_disconnected().await;
     }
-    
+
     Ok(())
 }
 

@@ -89,8 +89,7 @@ impl KnownHostsStore {
             return Ok(());
         }
 
-        let file = fs::File::open(&self.path)
-            .map_err(|e| SshError::IoError(e))?;
+        let file = fs::File::open(&self.path).map_err(|e| SshError::IoError(e))?;
 
         let reader = BufReader::new(file);
         let mut hosts = self.hosts.write();
@@ -127,12 +126,19 @@ impl KnownHostsStore {
 
                 // Normalize: remove [port] suffix if present
                 let normalized = Self::normalize_hostname(hostname);
-                hosts.entry(normalized).or_insert_with(Vec::new).push(entry.clone());
+                hosts
+                    .entry(normalized)
+                    .or_insert_with(Vec::new)
+                    .push(entry.clone());
                 entry_count += 1;
             }
         }
 
-        info!("Loaded {} known host entries ({} unique hosts)", entry_count, hosts.len());
+        info!(
+            "Loaded {} known host entries ({} unique hosts)",
+            entry_count,
+            hosts.len()
+        );
         Ok(())
     }
 
@@ -181,10 +187,14 @@ impl KnownHostsStore {
             for entry in entries {
                 if entry.key_type == actual_key_type {
                     if entry.key_data == actual_key_b64 {
-                        debug!("Host key verified for {} (type: {})", lookup_key, actual_key_type);
+                        debug!(
+                            "Host key verified for {} (type: {})",
+                            lookup_key, actual_key_type
+                        );
                         return Some(HostKeyVerification::Verified);
                     } else {
-                        let expected_fingerprint = Self::compute_fingerprint_from_b64(&entry.key_data);
+                        let expected_fingerprint =
+                            Self::compute_fingerprint_from_b64(&entry.key_data);
                         warn!(
                             "HOST KEY CHANGED for {} (type: {})! Expected {}, got {}",
                             lookup_key, actual_key_type, expected_fingerprint, fingerprint
@@ -206,7 +216,10 @@ impl KnownHostsStore {
                 return result;
             }
             // Host known but not for this key type - treat as new key type (auto-accept)
-            debug!("Host {} known but no {} key stored, treating as new", lookup_key, actual_key_type);
+            debug!(
+                "Host {} known but no {} key stored, treating as new",
+                lookup_key, actual_key_type
+            );
             return HostKeyVerification::Unknown { fingerprint };
         }
 
@@ -217,7 +230,10 @@ impl KnownHostsStore {
                 return result;
             }
             // Host known but not for this key type
-            debug!("Host {} known but no {} key stored, treating as new", host_only, actual_key_type);
+            debug!(
+                "Host {} known but no {} key stored, treating as new",
+                host_only, actual_key_type
+            );
             return HostKeyVerification::Unknown { fingerprint };
         }
 
@@ -250,13 +266,19 @@ impl KnownHostsStore {
                 key_type: key_type.clone(),
                 key_data: key_b64.clone(),
             };
-            hosts.entry(lookup_key.clone()).or_insert_with(Vec::new).push(entry);
+            hosts
+                .entry(lookup_key.clone())
+                .or_insert_with(Vec::new)
+                .push(entry);
         }
 
         // Append to file
         self.append_to_file(&lookup_key, &key_type, &key_b64)?;
 
-        info!("Added host key for {} (type: {}) to known_hosts", lookup_key, key_type);
+        info!(
+            "Added host key for {} (type: {}) to known_hosts",
+            lookup_key, key_type
+        );
         Ok(())
     }
 
@@ -285,8 +307,7 @@ impl KnownHostsStore {
             .open(&self.path)
             .map_err(|e| SshError::IoError(e))?;
 
-        writeln!(file, "{} {} {}", host, key_type, key_b64)
-            .map_err(|e| SshError::IoError(e))?;
+        writeln!(file, "{} {} {}", host, key_type, key_b64).map_err(|e| SshError::IoError(e))?;
 
         Ok(())
     }
@@ -314,8 +335,7 @@ impl KnownHostsStore {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&self.path)
-            .map_err(|e| SshError::IoError(e))?;
+        let content = fs::read_to_string(&self.path).map_err(|e| SshError::IoError(e))?;
 
         let filtered: Vec<&str> = content
             .lines()
@@ -325,12 +345,13 @@ impl KnownHostsStore {
                     return true; // Keep empty lines
                 }
                 let hostnames = parts[0];
-                !hostnames.split(',').any(|h| Self::normalize_hostname(h) == remove_host)
+                !hostnames
+                    .split(',')
+                    .any(|h| Self::normalize_hostname(h) == remove_host)
             })
             .collect();
 
-        fs::write(&self.path, filtered.join("\n") + "\n")
-            .map_err(|e| SshError::IoError(e))?;
+        fs::write(&self.path, filtered.join("\n") + "\n").map_err(|e| SshError::IoError(e))?;
 
         Ok(())
     }
@@ -351,14 +372,26 @@ mod tests {
 
     #[test]
     fn test_normalize_hostname() {
-        assert_eq!(KnownHostsStore::normalize_hostname("github.com"), "github.com");
-        assert_eq!(KnownHostsStore::normalize_hostname("[github.com]:22"), "github.com");
-        assert_eq!(KnownHostsStore::normalize_hostname("[server.example.com]:2222"), "server.example.com");
+        assert_eq!(
+            KnownHostsStore::normalize_hostname("github.com"),
+            "github.com"
+        );
+        assert_eq!(
+            KnownHostsStore::normalize_hostname("[github.com]:22"),
+            "github.com"
+        );
+        assert_eq!(
+            KnownHostsStore::normalize_hostname("[server.example.com]:2222"),
+            "server.example.com"
+        );
     }
 
     #[test]
     fn test_make_key() {
         assert_eq!(KnownHostsStore::make_key("github.com", 22), "github.com");
-        assert_eq!(KnownHostsStore::make_key("server.com", 2222), "[server.com]:2222");
+        assert_eq!(
+            KnownHostsStore::make_key("server.com", 2222),
+            "[server.com]:2222"
+        );
     }
 }

@@ -322,8 +322,14 @@ impl WsBridge {
                     "WebSocket connection from {} for session {}",
                     addr, session_id
                 );
-                if let Err(e) =
-                    Self::handle_connection_v1(stream, session_handle, None, expected_token, scroll_buffer).await
+                if let Err(e) = Self::handle_connection_v1(
+                    stream,
+                    session_handle,
+                    None,
+                    expected_token,
+                    scroll_buffer,
+                )
+                .await
                 {
                     error!("WebSocket connection error: {}", e);
                 }
@@ -503,7 +509,7 @@ impl WsBridge {
                 if !lines.is_empty() {
                     buffer_clone.append_batch(lines).await;
                 }
-                
+
                 // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data));
                 if frame_tx_ssh.send(frame.encode()).await.is_err() {
@@ -704,8 +710,13 @@ impl WsBridge {
                     "WebSocket connection (v2) from {} for session {}",
                     addr, session_id
                 );
-                if let Err(e) =
-                    Self::handle_connection_v2(stream, session_handle, expected_token, scroll_buffer).await
+                if let Err(e) = Self::handle_connection_v2(
+                    stream,
+                    session_handle,
+                    expected_token,
+                    scroll_buffer,
+                )
+                .await
                 {
                     error!("WebSocket connection error: {}", e);
                 }
@@ -746,7 +757,14 @@ impl WsBridge {
                     "WebSocket connection (v2+disconnect) from {} for session {}",
                     addr, session_id
                 );
-                match Self::handle_connection_v2_with_disconnect(stream, session_handle, expected_token, scroll_buffer).await {
+                match Self::handle_connection_v2_with_disconnect(
+                    stream,
+                    session_handle,
+                    expected_token,
+                    scroll_buffer,
+                )
+                .await
+                {
                     Ok(reason) => reason,
                     Err(e) => {
                         error!("WebSocket connection error: {}", e);
@@ -889,13 +907,13 @@ impl WsBridge {
         let ssh_out_task = tokio::spawn(async move {
             while let Some(data) = stdout_rx.recv().await {
                 state_out.touch();
-                
+
                 // Parse terminal output and append to scroll buffer
                 let lines = parse_terminal_output(&data);
                 if !lines.is_empty() {
                     buffer_clone.append_batch(lines).await;
                 }
-                
+
                 // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data)).encode();
                 if frame_tx_ssh.send(frame).await.is_err() {
@@ -1153,13 +1171,13 @@ impl WsBridge {
         let ssh_out_task = tokio::spawn(async move {
             while let Some(data) = stdout_rx.recv().await {
                 state_out.touch();
-                
+
                 // Parse terminal output and append to scroll buffer
                 let lines = parse_terminal_output(&data);
                 if !lines.is_empty() {
                     buffer_clone.append_batch(lines).await;
                 }
-                
+
                 // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data)).encode();
                 if frame_tx_ssh.send(frame).await.is_err() {
@@ -1294,7 +1312,9 @@ impl WsBridge {
             "heartbeat_timeout" => DisconnectReason::HeartbeatTimeout,
             "ssh_closed" => DisconnectReason::SshChannelClosed,
             "client_closed" => DisconnectReason::ClientClosed,
-            "network_error" | "send_timeout" => DisconnectReason::NetworkError(reason_str.to_string()),
+            "network_error" | "send_timeout" => {
+                DisconnectReason::NetworkError(reason_str.to_string())
+            }
             _ => DisconnectReason::ClientClosed,
         };
 
