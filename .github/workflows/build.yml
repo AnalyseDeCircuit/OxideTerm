@@ -15,7 +15,11 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
+            args: '--target aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            target: 'x86_64-apple-darwin'
           - platform: 'ubuntu-24.04'
             args: ''
           - platform: 'windows-latest'
@@ -30,11 +34,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add macOS targets
+      - name: Add macOS target
         if: matrix.platform == 'macos-latest'
-        run: |
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
+        run: rustup target add ${{ matrix.target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
