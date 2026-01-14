@@ -2,6 +2,7 @@
 
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -19,6 +20,47 @@ use crate::ssh::{
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 /// Heartbeat timeout - consider connection dead if no response (seconds)
 const HEARTBEAT_TIMEOUT_SECS: u64 = 90;
+
+/// Reason for WebSocket disconnection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DisconnectReason {
+    /// Client closed the connection normally
+    ClientClosed,
+    /// Heartbeat timeout - no response from client
+    HeartbeatTimeout,
+    /// SSH channel closed (remote side)
+    SshChannelClosed,
+    /// Network error
+    NetworkError(String),
+    /// Client never connected (accept timeout)
+    AcceptTimeout,
+    /// Authentication failed
+    AuthFailed,
+}
+
+impl DisconnectReason {
+    /// Check if the disconnection is recoverable (should trigger reconnect)
+    pub fn is_recoverable(&self) -> bool {
+        matches!(
+            self,
+            DisconnectReason::HeartbeatTimeout
+                | DisconnectReason::NetworkError(_)
+                | DisconnectReason::SshChannelClosed
+        )
+    }
+
+    /// Get a human-readable description
+    pub fn description(&self) -> String {
+        match self {
+            DisconnectReason::ClientClosed => "Client closed connection".to_string(),
+            DisconnectReason::HeartbeatTimeout => "Heartbeat timeout".to_string(),
+            DisconnectReason::SshChannelClosed => "SSH channel closed".to_string(),
+            DisconnectReason::NetworkError(e) => format!("Network error: {}", e),
+            DisconnectReason::AcceptTimeout => "Connection accept timeout".to_string(),
+            DisconnectReason::AuthFailed => "Authentication failed".to_string(),
+        }
+    }
+}
 
 /// Shared state for a connection
 struct ConnectionState {
@@ -198,6 +240,49 @@ impl WsBridge {
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
 
         Ok((session_id, port, token))
+    }
+
+    /// Start bridge for ExtendedSessionHandle (with command channel) and return disconnect reason
+    /// This is the v2 API that works with SessionRegistry
+    /// Returns: (session_id, port, token, disconnect_rx)
+    /// The disconnect_rx will receive the reason when the WebSocket connection ends
+    pub async fn start_extended_with_disconnect(
+        session_handle: SshExtendedSessionHandle,
+    ) -> Result<(String, u16, String, oneshot::Receiver<DisconnectReason>), String> {
+        // Generate one-time authentication token to prevent local process hijacking
+        let token = uuid::Uuid::new_v4().to_string();
+
+        let listener = TcpListener::bind("localhost:0")
+            .await
+            .map_err(|e| format!("Failed to bind WebSocket server: {}", e))?;
+
+        let addr = listener
+            .local_addr()
+            .map_err(|e| format!("Failed to get local address: {}", e))?;
+
+        let port = addr.port();
+        let session_id = session_handle.id.clone();
+
+        info!(
+            "WebSocket bridge (v2+disconnect) started on port {} for session {} with token auth",
+            port, session_id
+        );
+
+        let (ready_tx, ready_rx) = oneshot::channel::<()>();
+        let (disconnect_tx, disconnect_rx) = oneshot::channel::<DisconnectReason>();
+
+        let token_clone = token.clone();
+        tokio::spawn(Self::run_server_v2_with_disconnect(
+            listener,
+            session_handle,
+            ready_tx,
+            token_clone,
+            disconnect_tx,
+        ));
+
+        let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
+
+        Ok((session_id, port, token, disconnect_rx))
     }
 
     /// Run the WebSocket server (legacy mode - backward compatible)
@@ -612,6 +697,61 @@ impl WsBridge {
         info!("WebSocket server (v2) stopped for session {}", session_id);
     }
 
+    /// Run the WebSocket server v2 with disconnect reason reporting
+    async fn run_server_v2_with_disconnect(
+        listener: TcpListener,
+        session_handle: SshExtendedSessionHandle,
+        ready_tx: oneshot::Sender<()>,
+        expected_token: String,
+        disconnect_tx: oneshot::Sender<DisconnectReason>,
+    ) {
+        let session_id = session_handle.id.clone();
+
+        let _ = ready_tx.send(());
+
+        let accept_result = tokio::time::timeout(Duration::from_secs(30), listener.accept()).await;
+
+        let disconnect_reason = match accept_result {
+            Ok(Ok((stream, addr))) => {
+                // Disable Nagle's algorithm for low-latency interactive terminal
+                if let Err(e) = stream.set_nodelay(true) {
+                    warn!("Failed to set TCP_NODELAY: {}", e);
+                }
+                info!(
+                    "WebSocket connection (v2+disconnect) from {} for session {}",
+                    addr, session_id
+                );
+                match Self::handle_connection_v2_with_disconnect(stream, session_handle, expected_token).await {
+                    Ok(reason) => reason,
+                    Err(e) => {
+                        error!("WebSocket connection error: {}", e);
+                        if e.contains("Authentication") {
+                            DisconnectReason::AuthFailed
+                        } else {
+                            DisconnectReason::NetworkError(e)
+                        }
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                error!("Failed to accept WebSocket connection: {}", e);
+                DisconnectReason::NetworkError(e.to_string())
+            }
+            Err(_) => {
+                warn!("WebSocket accept timeout for session {}", session_id);
+                DisconnectReason::AcceptTimeout
+            }
+        };
+
+        info!(
+            "WebSocket server (v2+disconnect) stopped for session {}: {:?}",
+            session_id, disconnect_reason
+        );
+
+        // Send disconnect reason (ignore error if receiver dropped)
+        let _ = disconnect_tx.send(disconnect_reason);
+    }
+
     /// Handle connection with v2 protocol (uses SessionCommand)
     async fn handle_connection_v2(
         stream: TcpStream,
@@ -870,5 +1010,254 @@ impl WsBridge {
 
         info!("WebSocket bridge (v2) terminated for session {}", id);
         Ok(())
+    }
+
+    /// Handle connection with v2 protocol and return disconnect reason
+    async fn handle_connection_v2_with_disconnect(
+        stream: TcpStream,
+        session_handle: SshExtendedSessionHandle,
+        expected_token: String,
+    ) -> Result<DisconnectReason, String> {
+        // Perform WebSocket handshake (no auth yet)
+        let ws_stream = accept_async(stream)
+            .await
+            .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
+
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+
+        // Authenticate: expect first message to contain token
+        let auth_result = tokio::time::timeout(Duration::from_secs(5), ws_receiver.next()).await;
+
+        match auth_result {
+            Ok(Some(Ok(Message::Text(token)))) => {
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful (v2+disconnect)");
+                } else {
+                    error!("WebSocket token authentication failed: invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Ok(Message::Binary(data)))) => {
+                let token = String::from_utf8_lossy(&data);
+                if token.trim() == expected_token {
+                    debug!("WebSocket token authentication successful (v2+disconnect, binary)");
+                } else {
+                    error!("WebSocket token authentication failed: invalid token");
+                    return Err("Authentication failed: invalid token".to_string());
+                }
+            }
+            Ok(Some(Err(e))) => {
+                error!("WebSocket error during authentication: {}", e);
+                return Err(format!("Authentication failed: {}", e));
+            }
+            Ok(None) => {
+                error!("WebSocket closed before authentication");
+                return Err("Authentication failed: connection closed".to_string());
+            }
+            Err(_) => {
+                error!("WebSocket authentication timeout");
+                return Err("Authentication failed: timeout".to_string());
+            }
+            _ => {
+                error!("WebSocket authentication failed: unexpected message type");
+                return Err("Authentication failed: unexpected message".to_string());
+            }
+        }
+
+        // Reunite the split stream for further processing
+        let ws_stream = ws_sender
+            .reunite(ws_receiver)
+            .map_err(|e| format!("Failed to reunite WebSocket stream: {}", e))?;
+
+        debug!(
+            "WebSocket handshake (v2+disconnect) completed for session {}",
+            session_handle.id
+        );
+
+        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let (id, cmd_tx, mut stdout_rx) = session_handle.into_parts();
+
+        let state = Arc::new(ConnectionState::new());
+        let state_out = state.clone();
+        let state_hb = state.clone();
+
+        // Channel for sending frames to WebSocket
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
+        let frame_tx_ssh = frame_tx.clone();
+        let frame_tx_hb = frame_tx.clone();
+
+        let sid_in = id.clone();
+        let sid_out = id.clone();
+
+        // Task: WebSocket sender
+        let sender_task = tokio::spawn(async move {
+            while let Some(frame) = frame_rx.recv().await {
+                match tokio::time::timeout(
+                    Duration::from_secs(5),
+                    ws_sender.send(Message::Binary(frame.to_vec().into())),
+                )
+                .await
+                {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => {
+                        debug!("WebSocket send failed: {:?}", e);
+                        return "network_error";
+                    }
+                    Err(_) => {
+                        warn!("WebSocket send timeout - client unresponsive");
+                        return "send_timeout";
+                    }
+                }
+            }
+            "channel_closed"
+        });
+
+        // Task: SSH stdout -> WebSocket
+        let ssh_out_task = tokio::spawn(async move {
+            while let Some(data) = stdout_rx.recv().await {
+                state_out.touch();
+                let frame = data_frame(Bytes::from(data)).encode();
+                if frame_tx_ssh.send(frame).await.is_err() {
+                    return "channel_closed";
+                }
+            }
+            debug!("SSH -> WS forwarder stopped for session {}", sid_out);
+            "ssh_closed"
+        });
+
+        // Task: Heartbeat sender - returns reason if timeout
+        let heartbeat_task = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECS));
+            loop {
+                interval.tick().await;
+
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+                let last = state_hb.last_seen_millis();
+                if now.saturating_sub(last) > HEARTBEAT_TIMEOUT_SECS * 1000 {
+                    warn!("Heartbeat timeout detected for session");
+                    return "heartbeat_timeout";
+                }
+
+                let seq = state_hb.next_seq();
+                let frame = heartbeat_frame(seq).encode();
+                if frame_tx_hb.try_send(frame).is_err() {
+                    debug!("Heartbeat channel full");
+                    return "channel_full";
+                }
+            }
+        });
+
+        // Task: WebSocket -> SSH
+        let cmd_tx_clone = cmd_tx.clone();
+        let input_task = tokio::spawn(async move {
+            let mut codec = FrameCodec::new();
+            let start = Instant::now();
+
+            while let Some(msg) = ws_receiver.next().await {
+                match msg {
+                    Ok(Message::Binary(data)) => {
+                        state.touch();
+                        codec.feed(&data);
+
+                        while let Ok(Some(frame)) = codec.decode_next() {
+                            match frame {
+                                Frame::Data(payload) => {
+                                    if cmd_tx_clone
+                                        .send(SessionCommand::Data(payload.to_vec()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        return "ssh_closed";
+                                    }
+                                }
+                                Frame::Resize { cols, rows } => {
+                                    info!("Resize: {}x{} for session {}", cols, rows, sid_in);
+                                    if cmd_tx_clone
+                                        .send(SessionCommand::Resize(cols, rows))
+                                        .await
+                                        .is_err()
+                                    {
+                                        return "ssh_closed";
+                                    }
+                                }
+                                Frame::Heartbeat(seq) => {
+                                    debug!("Received heartbeat echo: seq={}", seq);
+                                }
+                                Frame::Error(msg) => {
+                                    error!("Error frame from client: {}", msg);
+                                }
+                            }
+                        }
+
+                        if codec.is_overflow() {
+                            if start.elapsed() < Duration::from_secs(5) {
+                                if cmd_tx_clone
+                                    .send(SessionCommand::Data(data.to_vec()))
+                                    .await
+                                    .is_err()
+                                {
+                                    return "ssh_closed";
+                                }
+                            }
+                            codec.clear();
+                            break;
+                        }
+                    }
+                    Ok(Message::Text(text)) => {
+                        state.touch();
+                        if cmd_tx_clone
+                            .send(SessionCommand::Data(text.into_bytes()))
+                            .await
+                            .is_err()
+                        {
+                            return "ssh_closed";
+                        }
+                    }
+                    Ok(Message::Close(_)) => {
+                        info!("WebSocket close message received for session {}", sid_in);
+                        let _ = cmd_tx_clone.send(SessionCommand::Close).await;
+                        return "client_closed";
+                    }
+                    Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
+                        state.touch();
+                    }
+                    Ok(Message::Frame(_)) => {}
+                    Err(e) => {
+                        warn!("WebSocket receive error: {} for session {}", e, sid_in);
+                        return "network_error";
+                    }
+                }
+            }
+            "client_closed"
+        });
+
+        // Wait for any task to complete and determine disconnect reason
+        let reason_str = tokio::select! {
+            result = sender_task => result.unwrap_or("unknown"),
+            result = ssh_out_task => result.unwrap_or("ssh_closed"),
+            result = heartbeat_task => result.unwrap_or("heartbeat_timeout"),
+            result = input_task => result.unwrap_or("client_closed"),
+        };
+
+        // Send close command to SSH
+        let _ = cmd_tx.send(SessionCommand::Close).await;
+
+        let disconnect_reason = match reason_str {
+            "heartbeat_timeout" => DisconnectReason::HeartbeatTimeout,
+            "ssh_closed" => DisconnectReason::SshChannelClosed,
+            "client_closed" => DisconnectReason::ClientClosed,
+            "network_error" | "send_timeout" => DisconnectReason::NetworkError(reason_str.to_string()),
+            _ => DisconnectReason::ClientClosed,
+        };
+
+        info!(
+            "WebSocket bridge (v2+disconnect) terminated for session {}: {:?}",
+            id, disconnect_reason
+        );
+
+        Ok(disconnect_reason)
     }
 }

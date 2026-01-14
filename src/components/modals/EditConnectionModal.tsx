@@ -162,7 +162,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="group" className="text-theme-text">Group (Optional)</Label>
+            <Label htmlFor="group" className="text-theme-text">Group</Label>
             <Select value={group} onValueChange={setGroup}>
               <SelectTrigger className="w-full bg-theme-bg-panel border-theme-border text-theme-text focus:ring-theme-accent">
                 <SelectValue placeholder="No group" />

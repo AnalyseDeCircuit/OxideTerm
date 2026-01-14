@@ -43,7 +43,7 @@ export const NewConnectionModal = () => {
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [saveConnection, setSaveConnection] = useState(false);
-  const [group, setGroup] = useState('');
+  const [group, setGroup] = useState('Ungrouped');
   const [groups, setGroups] = useState<string[]>([]);
 
   const [proxyServers, setProxyServers] = useState<ProxyHopConfig[]>([]);
@@ -113,7 +113,7 @@ export const NewConnectionModal = () => {
         auth_type: authType,
         password: authType === 'password' ? password : undefined,
         key_path: authType === 'key' ? keyPath : undefined,
-        group: saveConnection ? group : undefined,
+        group: saveConnection ? (group || undefined) : undefined,
         proxy_chain: proxyServers.length > 0 ? proxyServers : undefined
       };
 
@@ -254,17 +254,18 @@ export const NewConnectionModal = () => {
             </div>
    
             <div className="grid gap-2">
-              <Label>Group (Optional)</Label>
+              <Label>Group</Label>
               <Select value={group} onValueChange={setGroup}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a group" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="Ungrouped">Ungrouped</SelectItem>
                   {groups.map(g => (
                     <SelectItem key={g} value={g}>{g}</SelectItem>
                   ))}
                   {groups.length === 0 && (
-                    <SelectItem value="_none" disabled>No groups - create in Settings</SelectItem>
+                    <SelectItem value="_help" disabled className="text-zinc-500">Create groups in Settings</SelectItem>
                   )}
                 </SelectContent>
               </Select>

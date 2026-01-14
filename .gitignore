@@ -77,3 +77,4 @@ keychain.json
 .cursorignore
 AGENTS.md
 docs/ISSUES.md
+docs/RECONNECT_BACKPRESSURE.md

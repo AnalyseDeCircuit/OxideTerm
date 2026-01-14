@@ -15,7 +15,7 @@ pub mod state;
 use bridge::BridgeManager;
 use commands::config::ConfigState;
 use commands::HealthRegistry;
-use session::SessionRegistry;
+use session::{AutoReconnectService, SessionRegistry};
 use sftp::session::SftpRegistry;
 use sftp::TransferManager;
 use state::StateStore;
@@ -137,12 +137,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(BridgeManager::new())
-        .manage(registry)
+        .manage(registry.clone())
         .manage(forwarding_registry)
         .manage(health_registry)
         .manage(sftp_registry)
         .manage(transfer_manager)
-        .setup(|app| {
+        .setup(move |app| {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
             write_startup_log("Initializing config state...");
@@ -160,6 +160,14 @@ pub fn run() {
                     return Err(e.into());
                 }
             }
+
+            // Initialize auto reconnect service
+            let reconnect_service = Arc::new(AutoReconnectService::new(
+                registry.clone(),
+                app.handle().clone(),
+            ));
+            app.manage(reconnect_service);
+            tracing::info!("Auto reconnect service initialized");
 
             write_startup_log("Tauri setup complete");
             Ok(())
@@ -240,6 +248,10 @@ pub fn run() {
             commands::sftp_pause_transfer,
             commands::sftp_resume_transfer,
             commands::sftp_transfer_stats,
+            // Network and reconnect commands
+            commands::network_status_changed,
+            commands::cancel_reconnect,
+            commands::is_reconnecting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

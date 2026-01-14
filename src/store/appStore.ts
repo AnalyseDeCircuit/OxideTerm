@@ -6,7 +6,12 @@ import {
   ConnectRequest, 
   TabType,
   SessionState,
-  ConnectionInfo
+  ConnectionInfo,
+  SessionDisconnectedPayload,
+  SessionReconnectingPayload,
+  SessionReconnectedPayload,
+  SessionReconnectFailedPayload,
+  SessionReconnectCancelledPayload,
 } from '../types';
 
 interface ModalsState {
@@ -27,12 +32,24 @@ interface AppStore {
   groups: string[];
   selectedGroup: string | null;
   editingConnection: ConnectionInfo | null;
+  networkOnline: boolean;
 
   // Actions - Sessions
   connect: (request: ConnectRequest) => Promise<string>;
   disconnect: (sessionId: string) => Promise<void>;
   reconnect: (sessionId: string) => Promise<void>;
+  cancelReconnect: (sessionId: string) => Promise<void>;
   updateSessionState: (sessionId: string, state: SessionState, error?: string) => void;
+  
+  // Actions - Reconnect Events (internal)
+  _handleSessionDisconnected: (payload: SessionDisconnectedPayload) => void;
+  _handleSessionReconnecting: (payload: SessionReconnectingPayload) => void;
+  _handleSessionReconnected: (payload: SessionReconnectedPayload) => void;
+  _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => void;
+  _handleSessionReconnectCancelled: (payload: SessionReconnectCancelledPayload) => void;
+  
+  // Actions - Network
+  setNetworkOnline: (online: boolean) => void;
   
   // Actions - Tabs
   createTab: (type: TabType, sessionId: string) => void;
@@ -70,6 +87,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   groups: [],
   selectedGroup: null,
   editingConnection: null,
+  networkOnline: true,
 
   connect: async (request: ConnectRequest) => {
     try {
@@ -168,6 +186,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
+  cancelReconnect: async (sessionId: string) => {
+    try {
+      await api.cancelReconnect(sessionId);
+      // State will be updated via event handler
+    } catch (error) {
+      console.error('Failed to cancel reconnect:', error);
+    }
+  },
+
   updateSessionState: (sessionId, state, error) => {
     set((s) => {
       const session = s.sessions.get(sessionId);
@@ -176,6 +203,106 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const newSessions = new Map(s.sessions);
       newSessions.set(sessionId, { ...session, state, error });
       return { sessions: newSessions };
+    });
+  },
+
+  // Internal event handlers for Tauri events
+  _handleSessionDisconnected: (payload: SessionDisconnectedPayload) => {
+    console.log('Session disconnected:', payload);
+    set((s) => {
+      const session = s.sessions.get(payload.session_id);
+      if (!session) return {};
+      
+      const newSessions = new Map(s.sessions);
+      newSessions.set(payload.session_id, {
+        ...session,
+        state: payload.recoverable ? 'reconnecting' : 'disconnected',
+        error: payload.reason,
+        reconnectAttempt: payload.recoverable ? 0 : undefined,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  _handleSessionReconnecting: (payload: SessionReconnectingPayload) => {
+    console.log('Session reconnecting:', payload);
+    set((s) => {
+      const session = s.sessions.get(payload.session_id);
+      if (!session) return {};
+      
+      const newSessions = new Map(s.sessions);
+      newSessions.set(payload.session_id, {
+        ...session,
+        state: 'reconnecting',
+        reconnectAttempt: payload.attempt,
+        reconnectMaxAttempts: payload.max_attempts,
+        reconnectNextRetry: payload.next_attempt_at,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  _handleSessionReconnected: (payload: SessionReconnectedPayload) => {
+    console.log('Session reconnected:', payload);
+    set((s) => {
+      const session = s.sessions.get(payload.session_id);
+      if (!session) return {};
+      
+      const newSessions = new Map(s.sessions);
+      newSessions.set(payload.session_id, {
+        ...session,
+        state: 'connected',
+        error: undefined,
+        reconnectAttempt: undefined,
+        reconnectMaxAttempts: undefined,
+        reconnectNextRetry: undefined,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => {
+    console.log('Session reconnect failed:', payload);
+    set((s) => {
+      const session = s.sessions.get(payload.session_id);
+      if (!session) return {};
+      
+      const newSessions = new Map(s.sessions);
+      newSessions.set(payload.session_id, {
+        ...session,
+        state: 'error',
+        error: `Reconnect failed after ${payload.total_attempts} attempts: ${payload.error}`,
+        reconnectAttempt: undefined,
+        reconnectMaxAttempts: undefined,
+        reconnectNextRetry: undefined,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  _handleSessionReconnectCancelled: (payload: SessionReconnectCancelledPayload) => {
+    console.log('Session reconnect cancelled:', payload);
+    set((s) => {
+      const session = s.sessions.get(payload.session_id);
+      if (!session) return {};
+      
+      const newSessions = new Map(s.sessions);
+      newSessions.set(payload.session_id, {
+        ...session,
+        state: 'disconnected',
+        reconnectAttempt: undefined,
+        reconnectMaxAttempts: undefined,
+        reconnectNextRetry: undefined,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  setNetworkOnline: (online: boolean) => {
+    set({ networkOnline: online });
+    // Notify backend of network status change
+    api.networkStatusChanged(online).catch((e) => {
+      console.error('Failed to notify network status:', e);
     });
   },
 

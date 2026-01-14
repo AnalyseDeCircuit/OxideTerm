@@ -60,6 +60,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true); // Track mount state for StrictMode
   
+  // P3: Backpressure handling - batch terminal writes with RAF
+  const pendingDataRef = useRef<Uint8Array[]>([]);
+  const rafIdRef = useRef<number | null>(null);
+  
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
 
@@ -217,7 +221,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                         
                         if (type === MSG_TYPE_DATA) {
                             const payload = new Uint8Array(data, HEADER_SIZE, length);
-                            term.write(payload);
+                            // P3: Queue data and batch writes with RAF for backpressure handling
+                            pendingDataRef.current.push(payload);
+                            
+                            // Schedule RAF flush if not already scheduled
+                            if (rafIdRef.current === null) {
+                                rafIdRef.current = requestAnimationFrame(() => {
+                                    rafIdRef.current = null;
+                                    if (!isMountedRef.current || !terminalRef.current) return;
+                                    
+                                    // Flush all pending data in one batch
+                                    const pending = pendingDataRef.current;
+                                    if (pending.length === 0) return;
+                                    
+                                    // Concatenate all chunks for single write
+                                    const totalLength = pending.reduce((sum, chunk) => sum + chunk.length, 0);
+                                    const combined = new Uint8Array(totalLength);
+                                    let offset = 0;
+                                    for (const chunk of pending) {
+                                        combined.set(chunk, offset);
+                                        offset += chunk.length;
+                                    }
+                                    
+                                    pendingDataRef.current = [];
+                                    terminalRef.current.write(combined);
+                                });
+                            }
                         } else if (type === MSG_TYPE_HEARTBEAT) {
                             // Heartbeat ping from server - respond with pong
                             if (length === 4) {
@@ -297,6 +326,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       if (wsConnectTimeout) {
           clearTimeout(wsConnectTimeout);
       }
+      // Cancel pending RAF
+      if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+      }
+      pendingDataRef.current = [];
       if (wsRef.current) {
           wsRef.current.close();
           wsRef.current = null;

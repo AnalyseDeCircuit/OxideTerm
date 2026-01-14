@@ -9,14 +9,15 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::ForwardingRegistry;
 use crate::bridge::{BridgeManager, WsBridge};
 use crate::forwarding::ForwardingManager;
 use crate::session::{
+    events::{event_names, SessionDisconnectedPayload},
     AuthMethod, KeyAuth, SessionConfig, SessionInfo, SessionRegistry, SessionStats,
 };
 use crate::sftp::session::SftpRegistry;
@@ -91,6 +92,7 @@ fn default_rows() -> u32 {
 /// Connect to SSH server (v2 with registry)
 #[tauri::command]
 pub async fn connect_v2(
+    app_handle: AppHandle,
     request: ConnectRequest,
     registry: State<'_, Arc<SessionRegistry>>,
     forwarding_registry: State<'_, ForwardingRegistry>,
@@ -242,13 +244,36 @@ pub async fn connect_v2(
         // Get command sender for resize support
         let cmd_tx = session_handle.cmd_tx.clone();
 
-        // Start WebSocket bridge
-        let (_, port, token) = WsBridge::start_extended(session_handle)
+        // Start WebSocket bridge with disconnect tracking
+        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle)
             .await
             .map_err(|e| {
                 registry.remove(&sid);
                 format!("Failed to start WebSocket bridge: {}", e)
             })?;
+
+        // Spawn task to handle disconnect and emit event
+        let app_handle_clone = app_handle.clone();
+        let sid_clone = sid.clone();
+        let registry_clone = registry.inner().clone();
+        tokio::spawn(async move {
+            if let Ok(reason) = disconnect_rx.await {
+                warn!(
+                    "Session {} disconnected: {:?}",
+                    sid_clone, reason
+                );
+                // Update registry state
+                let _ = registry_clone.disconnect_complete(&sid_clone, false);
+                
+                // Emit disconnect event to frontend
+                let payload = SessionDisconnectedPayload {
+                    session_id: sid_clone.clone(),
+                    reason: reason.description(),
+                    recoverable: reason.is_recoverable(),
+                };
+                let _ = app_handle_clone.emit(event_names::SESSION_DISCONNECTED, &payload);
+            }
+        });
 
         // Clone the handle controller for the forwarding manager
         let forwarding_controller = handle_controller.clone();
@@ -381,13 +406,36 @@ pub async fn connect_v2(
         // Get command sender for resize support
         let cmd_tx = session_handle.cmd_tx.clone();
 
-        // Start WebSocket bridge
-        let (_, port, token) = WsBridge::start_extended(session_handle)
+        // Start WebSocket bridge with disconnect tracking
+        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle)
             .await
             .map_err(|e| {
                 registry.remove(&sid);
                 format!("Failed to start WebSocket bridge: {}", e)
             })?;
+
+        // Spawn task to handle disconnect and emit event
+        let app_handle_clone = app_handle.clone();
+        let sid_clone = sid.clone();
+        let registry_clone = registry.inner().clone();
+        tokio::spawn(async move {
+            if let Ok(reason) = disconnect_rx.await {
+                warn!(
+                    "Session {} disconnected: {:?}",
+                    sid_clone, reason
+                );
+                // Update registry state
+                let _ = registry_clone.disconnect_complete(&sid_clone, false);
+                
+                // Emit disconnect event to frontend
+                let payload = SessionDisconnectedPayload {
+                    session_id: sid_clone.clone(),
+                    reason: reason.description(),
+                    recoverable: reason.is_recoverable(),
+                };
+                let _ = app_handle_clone.emit(event_names::SESSION_DISCONNECTED, &payload);
+            }
+        });
 
         // Clone the handle controller for the forwarding manager
         let forwarding_controller = handle_controller.clone();

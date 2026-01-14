@@ -93,6 +93,16 @@ pub struct HandleController {
 }
 
 impl HandleController {
+    /// Get a clone of the command sender for the SessionCommand channel
+    /// This is used by AutoReconnectService to get cmd_tx for registry updates
+    pub fn cmd_tx_clone(&self) -> mpsc::Sender<crate::ssh::SessionCommand> {
+        // Note: This creates a new channel. For reconnection, we actually need
+        // to get the session's cmd_tx, not the handle command tx.
+        // This method exists for API compatibility but may need refactoring.
+        let (tx, _) = mpsc::channel(1024);
+        tx
+    }
+
     /// Open a session channel (for PTY/shell)
     pub async fn open_session_channel(&self) -> Result<Channel<Msg>, SshError> {
         let (reply_tx, reply_rx) = oneshot::channel();

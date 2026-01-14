@@ -386,6 +386,22 @@ export const api = {
   getHealthForDisplay: async (sessionId: string): Promise<any> => {
     if (USE_MOCK) return { session_id: sessionId, status: 'healthy', latency_ms: 10 };
     return invoke('get_health_for_display', { sessionId });
+  },
+
+  // ============ Network & Reconnect ============
+  networkStatusChanged: async (online: boolean): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('network_status_changed', { online });
+  },
+
+  cancelReconnect: async (sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('cancel_reconnect', { sessionId });
+  },
+
+  isReconnecting: async (sessionId: string): Promise<boolean> => {
+    if (USE_MOCK) return false;
+    return invoke('is_reconnecting', { sessionId });
   }
 };
 
