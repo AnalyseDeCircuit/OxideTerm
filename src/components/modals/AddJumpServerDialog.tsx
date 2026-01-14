@@ -11,7 +11,7 @@ interface JumpServer {
   host: string;
   port: string;
   username: string;
-  authType: 'password' | 'key' | 'default_key';
+  authType: 'password' | 'key' | 'default_key' | 'agent';
   password?: string;
   keyPath?: string;
   passphrase?: string;
