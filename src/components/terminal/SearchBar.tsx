@@ -29,7 +29,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Focus input when opened
   useEffect(() => {
