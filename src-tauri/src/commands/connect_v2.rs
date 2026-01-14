@@ -95,7 +95,7 @@ pub async fn connect_v2(
     app_handle: AppHandle,
     request: ConnectRequest,
     registry: State<'_, Arc<SessionRegistry>>,
-    forwarding_registry: State<'_, ForwardingRegistry>,
+    forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
 ) -> Result<ConnectResponseV2, String> {
     info!(
         "Connect request: {}@{}:{}",
@@ -482,7 +482,7 @@ pub async fn disconnect_v2(
     registry: State<'_, Arc<SessionRegistry>>,
     bridge_manager: State<'_, BridgeManager>,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
-    forwarding_registry: State<'_, ForwardingRegistry>,
+    forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
 ) -> Result<bool, String> {
     info!("Disconnecting session: {}", session_id);
 

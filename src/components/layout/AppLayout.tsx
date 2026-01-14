@@ -1,13 +1,23 @@
+import { lazy, Suspense } from 'react';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { useAppStore } from '../../store/appStore';
 import { TerminalView } from '../terminal/TerminalView';
-import { SFTPView } from '../sftp/SFTPView';
-import { ForwardsView } from '../forwards/ForwardsView';
 import { Button } from '../ui/button';
 import { NewConnectionModal } from '../modals/NewConnectionModal';
 import { SettingsModal } from '../modals/SettingsModal';
 import { Plus } from 'lucide-react';
+
+// Lazy load non-critical views (only loaded when user opens SFTP/Forwards tab)
+const SFTPView = lazy(() => import('../sftp/SFTPView').then(m => ({ default: m.SFTPView })));
+const ForwardsView = lazy(() => import('../forwards/ForwardsView').then(m => ({ default: m.ForwardsView })));
+
+// Loading fallback for lazy components
+const ViewLoader = () => (
+  <div className="flex items-center justify-center h-full text-zinc-500">
+    <div className="animate-pulse">Loading...</div>
+  </div>
+);
 
 export const AppLayout = () => {
   const { tabs, activeTabId, toggleModal } = useAppStore();
@@ -42,8 +52,16 @@ export const AppLayout = () => {
                    className={`absolute inset-0 ${tab.id === activeTabId ? 'z-10 block' : 'z-0 hidden'}`}
                  >
                    {tab.type === 'terminal' && <TerminalView sessionId={tab.sessionId} isActive={tab.id === activeTabId} />}
-                   {tab.type === 'sftp' && <SFTPView sessionId={tab.sessionId} />}
-                   {tab.type === 'forwards' && <ForwardsView sessionId={tab.sessionId} />}
+                   {tab.type === 'sftp' && (
+                     <Suspense fallback={<ViewLoader />}>
+                       <SFTPView sessionId={tab.sessionId} />
+                     </Suspense>
+                   )}
+                   {tab.type === 'forwards' && (
+                     <Suspense fallback={<ViewLoader />}>
+                       <ForwardsView sessionId={tab.sessionId} />
+                     </Suspense>
+                   )}
                  </div>
               ))}
             </>

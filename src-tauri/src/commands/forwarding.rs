@@ -215,7 +215,7 @@ impl From<ForwardRule> for ForwardRuleDto {
 /// Create a new port forward
 #[tauri::command]
 pub async fn create_port_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     request: CreateForwardRequest,
 ) -> Result<ForwardResponse, String> {
     info!(
@@ -314,7 +314,7 @@ pub async fn create_port_forward(
 /// Stop a port forward
 #[tauri::command]
 pub async fn stop_port_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
@@ -351,7 +351,7 @@ pub async fn stop_port_forward(
 /// List all port forwards for a session
 #[tauri::command]
 pub async fn list_port_forwards(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
 ) -> Result<Vec<ForwardRuleDto>, String> {
     let manager = registry
@@ -366,7 +366,7 @@ pub async fn list_port_forwards(
 /// Quick forward for Jupyter (convenience command)
 #[tauri::command]
 pub async fn forward_jupyter(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     local_port: u16,
     remote_port: u16,
@@ -398,7 +398,7 @@ pub async fn forward_jupyter(
 /// Quick forward for TensorBoard (convenience command)
 #[tauri::command]
 pub async fn forward_tensorboard(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     local_port: u16,
     remote_port: u16,
@@ -430,7 +430,7 @@ pub async fn forward_tensorboard(
 /// Quick forward for VS Code (convenience command)
 #[tauri::command]
 pub async fn forward_vscode(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     local_port: u16,
     remote_port: u16,
@@ -462,7 +462,7 @@ pub async fn forward_vscode(
 /// Stop all forwards for a session
 #[tauri::command]
 pub async fn stop_all_forwards(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
 ) -> Result<(), String> {
     info!("Stopping all port forwards for session {}", session_id);
@@ -516,7 +516,7 @@ impl From<ForwardStats> for ForwardStatsDto {
 /// Delete a port forward (permanently remove)
 #[tauri::command]
 pub async fn delete_port_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
@@ -553,7 +553,7 @@ pub async fn delete_port_forward(
 /// Restart a stopped port forward
 #[tauri::command]
 pub async fn restart_port_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
@@ -590,7 +590,7 @@ pub async fn restart_port_forward(
 /// Update a stopped port forward's configuration
 #[tauri::command]
 pub async fn update_port_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     request: UpdateForwardRequest,
 ) -> Result<ForwardResponse, String> {
     info!(
@@ -634,7 +634,7 @@ pub async fn update_port_forward(
 /// Get statistics for a port forward
 #[tauri::command]
 pub async fn get_port_forward_stats(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<Option<ForwardStatsDto>, String> {
@@ -652,7 +652,7 @@ pub async fn get_port_forward_stats(
 /// List saved forwards for a session
 #[tauri::command]
 pub async fn list_saved_forwards(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     session_id: String,
 ) -> Result<Vec<PersistedForwardDto>, String> {
     info!("Listing saved forwards for session {}", session_id);
@@ -678,7 +678,7 @@ pub async fn list_saved_forwards(
 /// Set auto-start flag for a forward
 #[tauri::command]
 pub async fn set_forward_auto_start(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     forward_id: String,
     auto_start: bool,
 ) -> Result<(), String> {
@@ -692,7 +692,7 @@ pub async fn set_forward_auto_start(
 /// Delete a persisted forward rule
 #[tauri::command]
 pub async fn delete_saved_forward(
-    registry: State<'_, ForwardingRegistry>,
+    registry: State<'_, Arc<ForwardingRegistry>>,
     forward_id: String,
 ) -> Result<(), String> {
     info!("Deleting saved forward {}", forward_id);

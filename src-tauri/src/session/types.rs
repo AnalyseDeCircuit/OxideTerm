@@ -166,6 +166,8 @@ pub struct SessionEntry {
     pub state_machine: SessionStateMachine,
     /// WebSocket port for this session
     pub ws_port: Option<u16>,
+    /// WebSocket authentication token
+    pub ws_token: Option<String>,
     /// Command channel to SSH session
     pub cmd_tx: Option<mpsc::Sender<SessionCommand>>,
     /// Handle controller for opening additional channels (e.g., SFTP, forwarding)
@@ -185,6 +187,7 @@ impl SessionEntry {
             config,
             state_machine: SessionStateMachine::new(),
             ws_port: None,
+            ws_token: None,
             cmd_tx: None,
             handle_controller: None,
             created_at: Instant::now(),
@@ -263,6 +266,7 @@ pub struct SessionInfo {
     pub state: SessionState,
     pub error: Option<String>,
     pub ws_url: Option<String>,
+    pub ws_token: Option<String>,
     pub color: String,
     pub uptime_secs: u64,
     pub order: usize,
@@ -279,6 +283,7 @@ impl From<&SessionEntry> for SessionInfo {
             state: entry.state(),
             error: entry.error().map(String::from),
             ws_url: entry.ws_url(),
+            ws_token: entry.ws_token.clone(),
             color: entry.config.auto_color(),
             uptime_secs: entry.uptime_secs(),
             order: entry.order,

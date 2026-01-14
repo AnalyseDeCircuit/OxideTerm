@@ -624,6 +624,78 @@ impl ForwardingManager {
         info!("All forwards stopped for session {}", self.session_id);
     }
 
+    /// Stop all forwards and save their rules for recovery after reconnection
+    /// Returns the list of rules that were saved
+    pub async fn stop_all_and_save_rules(&self) -> Vec<ForwardRule> {
+        info!(
+            "Stopping all forwards and saving rules for session {}",
+            self.session_id
+        );
+        let mut saved_rules = Vec::new();
+
+        // Stop local forwards and save rules
+        let local_ids: Vec<String> = self.local_forwards.read().await.keys().cloned().collect();
+        for id in local_ids {
+            if let Some(entry) = self.local_forwards.write().await.remove(&id) {
+                entry.handle.stop().await;
+                let mut rule = entry.rule.clone();
+                rule.status = ForwardStatus::Stopped;
+                saved_rules.push(rule.clone());
+                self.stopped_forwards
+                    .write()
+                    .await
+                    .insert(id, rule);
+            }
+        }
+
+        // Stop remote forwards and save rules
+        let remote_ids: Vec<String> = self.remote_forwards.read().await.keys().cloned().collect();
+        for id in remote_ids {
+            if let Some(entry) = self.remote_forwards.write().await.remove(&id) {
+                entry.handle.stop().await;
+                let mut rule = entry.rule.clone();
+                rule.status = ForwardStatus::Stopped;
+                saved_rules.push(rule.clone());
+                self.stopped_forwards
+                    .write()
+                    .await
+                    .insert(id, rule);
+            }
+        }
+
+        // Stop dynamic forwards and save rules
+        let dynamic_ids: Vec<String> = self.dynamic_forwards.read().await.keys().cloned().collect();
+        for id in dynamic_ids {
+            if let Some(entry) = self.dynamic_forwards.write().await.remove(&id) {
+                entry.handle.stop().await;
+                let mut rule = entry.rule.clone();
+                rule.status = ForwardStatus::Stopped;
+                saved_rules.push(rule.clone());
+                self.stopped_forwards
+                    .write()
+                    .await
+                    .insert(id, rule);
+            }
+        }
+
+        info!(
+            "Saved {} forward rules for session {}",
+            saved_rules.len(),
+            self.session_id
+        );
+        saved_rules
+    }
+
+    /// Get all stopped forward rules (for recovery after reconnect)
+    pub async fn list_stopped_forwards(&self) -> Vec<ForwardRule> {
+        self.stopped_forwards
+            .read()
+            .await
+            .values()
+            .cloned()
+            .collect()
+    }
+
     /// Count active forwards
     pub async fn count(&self) -> usize {
         self.local_forwards.read().await.len()

@@ -118,8 +118,8 @@ pub fn run() {
     // Create shared session registry with state store
     let registry = Arc::new(SessionRegistry::new(state_store.clone()));
 
-    // Create forwarding registry with state store
-    let forwarding_registry = commands::ForwardingRegistry::new_with_state(state_store.clone());
+    // Create forwarding registry with state store (Arc for sharing with reconnect service)
+    let forwarding_registry = Arc::new(commands::ForwardingRegistry::new_with_state(state_store.clone()));
 
     // Create health registry
     let health_registry = HealthRegistry::new();
@@ -138,7 +138,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(BridgeManager::new())
         .manage(registry.clone())
-        .manage(forwarding_registry)
+        .manage(forwarding_registry.clone())
         .manage(health_registry)
         .manage(sftp_registry)
         .manage(transfer_manager)
@@ -164,6 +164,7 @@ pub fn run() {
             // Initialize auto reconnect service
             let reconnect_service = Arc::new(AutoReconnectService::new(
                 registry.clone(),
+                forwarding_registry.clone(),
                 app.handle().clone(),
             ));
             app.manage(reconnect_service);

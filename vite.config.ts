@@ -16,6 +16,38 @@ export default defineConfig(async () => {
     },
   },
 
+  // Build optimization - code splitting
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Terminal rendering (largest dependency)
+          'xterm': [
+            '@xterm/xterm',
+            '@xterm/addon-webgl',
+            '@xterm/addon-fit',
+            '@xterm/addon-search',
+            '@xterm/addon-web-links',
+          ],
+          // React core
+          'vendor': ['react', 'react-dom', 'zustand'],
+          // UI components
+          'radix-ui': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-select',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-toast',
+            '@radix-ui/react-checkbox',
+            '@radix-ui/react-radio-group',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-switch',
+          ],
+        },
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

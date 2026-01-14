@@ -19,12 +19,16 @@ use super::events::{
 use super::reconnect::{ReconnectConfig, ReconnectError};
 use super::registry::SessionRegistry;
 use super::types::SessionConfig;
+use crate::commands::forwarding::ForwardingRegistry;
+use crate::forwarding::ForwardingManager;
 use crate::ssh::{AuthMethod as SshAuthMethod, SshClient, SshConfig};
 
 /// Auto reconnect service that manages reconnection for all sessions
 pub struct AutoReconnectService {
     /// Session registry
     registry: Arc<SessionRegistry>,
+    /// Forwarding registry for restoring port forwards after reconnection
+    forwarding_registry: Arc<ForwardingRegistry>,
     /// Tauri app handle for emitting events
     app_handle: AppHandle,
     /// Active reconnection tasks (session_id -> cancel flag)
@@ -37,9 +41,14 @@ pub struct AutoReconnectService {
 
 impl AutoReconnectService {
     /// Create a new auto reconnect service
-    pub fn new(registry: Arc<SessionRegistry>, app_handle: AppHandle) -> Self {
+    pub fn new(
+        registry: Arc<SessionRegistry>,
+        forwarding_registry: Arc<ForwardingRegistry>,
+        app_handle: AppHandle,
+    ) -> Self {
         Self {
             registry,
+            forwarding_registry,
             app_handle,
             active_reconnects: RwLock::new(HashMap::new()),
             network_online: AtomicBool::new(true),
@@ -297,12 +306,88 @@ impl AutoReconnectService {
         // Get command sender
         let cmd_tx = handle_controller.cmd_tx_clone();
 
-        // Update registry
+        // Clone handle_controller for forwarding manager
+        let forwarding_controller = handle_controller.clone();
+
+        // Update registry with new connection details
         self.registry
             .connect_success(session_id, ws_port, cmd_tx, handle_controller)
             .map_err(|e| format!("Registry update failed: {}", e))?;
 
+        // Update ws_token in registry
+        if let Err(e) = self.registry.update_ws_token(session_id, ws_token) {
+            warn!("Failed to update ws_token: {}", e);
+        }
+
+        // Restore port forwards
+        self.restore_port_forwards(session_id, forwarding_controller)
+            .await;
+
         Ok(())
+    }
+
+    /// Restore port forwards after successful reconnection
+    async fn restore_port_forwards(
+        &self,
+        session_id: &str,
+        handle_controller: crate::ssh::HandleController,
+    ) {
+        // Get the old forwarding manager to retrieve saved rules
+        if let Some(old_manager) = self.forwarding_registry.get(session_id).await {
+            let stopped_rules = old_manager.list_stopped_forwards().await;
+
+            if stopped_rules.is_empty() {
+                info!("No port forwards to restore for session {}", session_id);
+                return;
+            }
+
+            info!(
+                "Restoring {} port forwards for session {}",
+                stopped_rules.len(),
+                session_id
+            );
+
+            // Create new forwarding manager with the new handle_controller
+            let new_manager =
+                ForwardingManager::new(handle_controller, session_id.to_string());
+
+            // Restore each forward rule
+            let mut restored_count = 0;
+            let mut failed_count = 0;
+
+            for rule in stopped_rules {
+                info!(
+                    "Restoring forward: {} ({}:{} -> {}:{})",
+                    rule.id, rule.bind_address, rule.bind_port, rule.target_host, rule.target_port
+                );
+
+                match new_manager.create_forward(rule.clone()).await {
+                    Ok(_) => {
+                        restored_count += 1;
+                        info!("Successfully restored forward: {}", rule.id);
+                    }
+                    Err(e) => {
+                        failed_count += 1;
+                        warn!("Failed to restore forward {}: {}", rule.id, e);
+                    }
+                }
+            }
+
+            info!(
+                "Port forward restoration complete for session {}: {} restored, {} failed",
+                session_id, restored_count, failed_count
+            );
+
+            // Replace the old manager with the new one
+            self.forwarding_registry
+                .register(session_id.to_string(), new_manager)
+                .await;
+        } else {
+            info!(
+                "No forwarding manager found for session {}, skipping port forward restoration",
+                session_id
+            );
+        }
     }
 
     /// Cancel reconnection for a session

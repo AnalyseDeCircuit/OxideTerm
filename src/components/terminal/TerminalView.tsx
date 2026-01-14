@@ -64,6 +64,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const pendingDataRef = useRef<Uint8Array[]>([]);
   const rafIdRef = useRef<number | null>(null);
   
+  // Track last connected ws_url for reconnection detection
+  const lastWsUrlRef = useRef<string | null>(null);
+  
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
 
@@ -113,6 +116,125 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       return () => clearTimeout(focusTimeout);
     }
   }, [isActive]);
+
+  // WebSocket reconnection effect - triggers when ws_url changes (after auto-reconnect)
+  useEffect(() => {
+    // Skip if terminal not initialized or no ws_url
+    if (!terminalRef.current || !session?.ws_url) return;
+    
+    // Skip if this is the same URL we're already connected to
+    if (session.ws_url === lastWsUrlRef.current) return;
+    
+    // Skip if WebSocket is already open/connecting to same URL
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) {
+      // If old connection exists but URL changed, close it
+      if (lastWsUrlRef.current !== null && session.ws_url !== lastWsUrlRef.current) {
+        console.log('[Terminal] Session reconnected, closing old WebSocket and reconnecting...');
+        wsRef.current.close();
+      } else {
+        return; // Same URL, already connected
+      }
+    }
+    
+    const term = terminalRef.current;
+    const wsUrl = session.ws_url;
+    const wsToken = session.ws_token;
+    
+    term.writeln(`\r\n\x1b[33mReconnecting to ${session.username}@${session.host}...\x1b[0m`);
+    
+    try {
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+      lastWsUrlRef.current = wsUrl;
+
+      ws.onopen = () => {
+        if (!isMountedRef.current) {
+          ws.close();
+          return;
+        }
+        
+        // Send authentication token
+        if (wsToken) {
+          ws.send(wsToken);
+        }
+        
+        term.writeln(`\x1b[32mReconnected successfully!\x1b[0m\r\n`);
+        
+        // Re-send current terminal size
+        if (fitAddonRef.current) {
+          const dims = fitAddonRef.current.proposeDimensions();
+          if (dims) {
+            const frame = encodeResizeFrame(dims.cols, dims.rows);
+            ws.send(frame);
+          }
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
+        
+        const data = new Uint8Array(event.data);
+        if (data.length < HEADER_SIZE) return;
+        
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        const msgType = view.getUint8(0);
+        const length = view.getUint32(1, false);
+        
+        if (data.length < HEADER_SIZE + length) return;
+        
+        const payload = data.slice(HEADER_SIZE, HEADER_SIZE + length);
+        
+        switch (msgType) {
+          case MSG_TYPE_DATA:
+            pendingDataRef.current.push(payload);
+            if (rafIdRef.current === null) {
+              rafIdRef.current = requestAnimationFrame(() => {
+                if (pendingDataRef.current.length > 0 && terminalRef.current) {
+                  const combined = new Uint8Array(
+                    pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
+                  );
+                  let offset = 0;
+                  for (const chunk of pendingDataRef.current) {
+                    combined.set(chunk, offset);
+                    offset += chunk.length;
+                  }
+                  pendingDataRef.current = [];
+                  terminalRef.current.write(combined);
+                }
+                rafIdRef.current = null;
+              });
+            }
+            break;
+          case MSG_TYPE_HEARTBEAT:
+            if (payload.length >= 4) {
+              const seq = view.getUint32(HEADER_SIZE, false);
+              ws.send(encodeHeartbeatFrame(seq));
+            }
+            break;
+          case MSG_TYPE_ERROR:
+            const errorMsg = new TextDecoder().decode(payload);
+            term.writeln(`\r\n\x1b[31mServer error: ${errorMsg}\x1b[0m`);
+            break;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket reconnection error:', error);
+        term.writeln(`\r\n\x1b[31mWebSocket reconnection error\x1b[0m`);
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket closed after reconnect:', event.code, event.reason);
+        if (isMountedRef.current && event.code !== 1000) {
+          term.writeln(`\r\n\x1b[33mConnection closed (code: ${event.code})\x1b[0m`);
+        }
+      };
+    } catch (e) {
+      console.error('Failed to reconnect WebSocket:', e);
+      term.writeln(`\r\n\x1b[31mFailed to reconnect: ${e}\x1b[0m`);
+    }
+  }, [session?.ws_url, session?.ws_token, session?.username, session?.host]);
 
   const getFontFamily = (val: string) => {
       switch(val) {
@@ -184,6 +306,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                 const ws = new WebSocket(wsUrl);
                 ws.binaryType = 'arraybuffer';
                 wsRef.current = ws;
+                lastWsUrlRef.current = wsUrl; // Track initial ws_url
 
                 ws.onopen = () => {
                     if (!isMountedRef.current) {

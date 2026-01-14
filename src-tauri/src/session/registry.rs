@@ -164,6 +164,18 @@ impl SessionRegistry {
         Ok(())
     }
 
+    /// Update WebSocket token for a session (used after reconnection)
+    pub fn update_ws_token(&self, session_id: &str, ws_token: String) -> Result<(), RegistryError> {
+        let mut entry = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
+
+        entry.ws_token = Some(ws_token);
+        debug!("Session {} ws_token updated", session_id);
+        Ok(())
+    }
+
     /// Mark session as failed
     pub fn connect_failed(&self, session_id: &str, error: String) -> Result<(), RegistryError> {
         let mut entry = self

@@ -242,23 +242,50 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 
-  _handleSessionReconnected: (payload: SessionReconnectedPayload) => {
+  _handleSessionReconnected: async (payload: SessionReconnectedPayload) => {
     console.log('Session reconnected:', payload);
-    set((s) => {
-      const session = s.sessions.get(payload.session_id);
-      if (!session) return {};
+    
+    // Fetch updated session info to get new ws_url and ws_token
+    try {
+      const updatedSession = await api.getSession(payload.session_id);
+      console.log('Fetched updated session info after reconnect:', updatedSession);
       
-      const newSessions = new Map(s.sessions);
-      newSessions.set(payload.session_id, {
-        ...session,
-        state: 'connected',
-        error: undefined,
-        reconnectAttempt: undefined,
-        reconnectMaxAttempts: undefined,
-        reconnectNextRetry: undefined,
+      set((s) => {
+        const session = s.sessions.get(payload.session_id);
+        if (!session) return {};
+        
+        const newSessions = new Map(s.sessions);
+        newSessions.set(payload.session_id, {
+          ...session,
+          state: 'connected',
+          ws_url: updatedSession.ws_url,
+          ws_token: updatedSession.ws_token,
+          error: undefined,
+          reconnectAttempt: undefined,
+          reconnectMaxAttempts: undefined,
+          reconnectNextRetry: undefined,
+        });
+        return { sessions: newSessions };
       });
-      return { sessions: newSessions };
-    });
+    } catch (error) {
+      console.error('Failed to fetch updated session after reconnect:', error);
+      // Still update the state even if we couldn't fetch new info
+      set((s) => {
+        const session = s.sessions.get(payload.session_id);
+        if (!session) return {};
+        
+        const newSessions = new Map(s.sessions);
+        newSessions.set(payload.session_id, {
+          ...session,
+          state: 'connected',
+          error: undefined,
+          reconnectAttempt: undefined,
+          reconnectMaxAttempts: undefined,
+          reconnectNextRetry: undefined,
+        });
+        return { sessions: newSessions };
+      });
+    }
   },
 
   _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => {
