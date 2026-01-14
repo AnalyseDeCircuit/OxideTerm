@@ -25,6 +25,8 @@ pub struct SessionRegistry {
     order_counter: AtomicUsize,
     /// Maximum allowed concurrent sessions
     max_sessions: AtomicUsize,
+    /// Active session count (connecting + connected) - O(1) instead of O(n)
+    active_count: AtomicUsize,
     /// State persistence
     persistence: Option<SessionPersistence>,
     /// Lock for create_session to prevent TOCTOU race
@@ -45,6 +47,7 @@ impl SessionRegistry {
             sessions: DashMap::new(),
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
+            active_count: AtomicUsize::new(0),
             persistence: Some(persistence),
             create_lock: std::sync::Mutex::new(()),
         }
@@ -56,6 +59,7 @@ impl SessionRegistry {
             sessions: DashMap::new(),
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
+            active_count: AtomicUsize::new(0),
             persistence: None,
             create_lock: std::sync::Mutex::new(()),
         }
@@ -67,6 +71,7 @@ impl SessionRegistry {
             sessions: DashMap::new(),
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(max),
+            active_count: AtomicUsize::new(0),
             persistence: None,
             create_lock: std::sync::Mutex::new(()),
         }
@@ -126,6 +131,9 @@ impl SessionRegistry {
             .start_connecting()
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
+        // Increment active count when entering active state
+        self.increment_active();
+
         debug!("Session {} state -> Connecting", session_id);
         Ok(())
     }
@@ -163,10 +171,18 @@ impl SessionRegistry {
             .get_mut(session_id)
             .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
+        // Check if was active before transition
+        let was_active = entry.state_machine.is_active();
+
         entry
             .state_machine
             .connect_failed(error.clone())
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
+
+        // Decrement active count when leaving active state
+        if was_active {
+            self.decrement_active();
+        }
 
         warn!("Session {} connection failed: {}", session_id, error);
         Ok(())
@@ -192,6 +208,10 @@ impl SessionRegistry {
     pub fn disconnect_complete(&self, session_id: &str, remove: bool) -> Result<(), RegistryError> {
         if remove {
             if let Some((_, mut entry)) = self.sessions.remove(session_id) {
+                // Decrement active count if was active
+                if entry.state_machine.is_active() {
+                    self.decrement_active();
+                }
                 let _ = entry.state_machine.disconnect_complete();
                 info!("Session {} disconnected and removed", session_id);
             }
@@ -201,10 +221,19 @@ impl SessionRegistry {
                 .get_mut(session_id)
                 .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
 
+            // Check if was active before transition
+            let was_active = entry.state_machine.is_active();
+
             entry
                 .state_machine
                 .disconnect_complete()
                 .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
+
+            // Decrement active count when leaving active state
+            if was_active {
+                self.decrement_active();
+            }
+
             entry.ws_port = None;
             entry.cmd_tx = None;
             entry.handle_controller = None;
@@ -217,13 +246,23 @@ impl SessionRegistry {
     /// Set session error state
     pub fn set_error(&self, session_id: &str, error: String) {
         if let Some(mut entry) = self.sessions.get_mut(session_id) {
+            // Check if was active before transition
+            let was_active = entry.state_machine.is_active();
             entry.state_machine.set_error(error);
+            // Decrement active count when entering error state
+            if was_active {
+                self.decrement_active();
+            }
         }
     }
 
     /// Remove a session
     pub fn remove(&self, session_id: &str) -> Option<SessionEntry> {
         self.sessions.remove(session_id).map(|(_, entry)| {
+            // Decrement active count if the removed session was active
+            if entry.state_machine.is_active() {
+                self.decrement_active();
+            }
             info!("Session {} removed from registry", session_id);
             entry
         })
@@ -285,12 +324,27 @@ impl SessionRegistry {
         self.sessions.len()
     }
 
-    /// Get count of active sessions (connecting or connected)
+    /// Get count of active sessions (connecting or connected) - O(1)
     pub fn active_count(&self) -> usize {
-        self.sessions
-            .iter()
-            .filter(|entry| entry.state_machine.is_active())
-            .count()
+        self.active_count.load(Ordering::SeqCst)
+    }
+
+    /// Increment active session count
+    fn increment_active(&self) {
+        self.active_count.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Decrement active session count
+    fn decrement_active(&self) {
+        // Use saturating_sub behavior to prevent underflow
+        let prev = self.active_count.fetch_update(
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+            |x| Some(x.saturating_sub(1))
+        );
+        if let Ok(0) = prev {
+            warn!("Active count was already 0, possible accounting error");
+        }
     }
 
     /// Get session statistics
@@ -492,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_create_session() {
-        let registry = SessionRegistry::new();
+        let registry = SessionRegistry::new_without_persistence();
         let config = SessionConfig::with_password("example.com", 22, "user", "pass");
 
         let id = registry.create_session(config).unwrap();
@@ -524,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_state_transitions() {
-        let registry = SessionRegistry::new();
+        let registry = SessionRegistry::new_without_persistence();
         let config = SessionConfig::with_password("example.com", 22, "user", "pass");
 
         let id = registry.create_session(config).unwrap();
@@ -537,5 +591,36 @@ mod tests {
         registry.start_connecting(&id).unwrap();
         let info = registry.get(&id).unwrap();
         assert_eq!(info.state, SessionState::Connecting);
+    }
+
+    #[test]
+    fn test_active_count_tracking() {
+        let registry = SessionRegistry::with_max_sessions(10);
+
+        // Initial count should be 0
+        assert_eq!(registry.active_count(), 0);
+
+        let config1 = SessionConfig::with_password("server1.com", 22, "user", "pass");
+        let config2 = SessionConfig::with_password("server2.com", 22, "user", "pass");
+
+        // Create sessions (disconnected state - not active)
+        let id1 = registry.create_session(config1).unwrap();
+        let id2 = registry.create_session(config2).unwrap();
+        assert_eq!(registry.active_count(), 0);
+
+        // Start connecting (active state)
+        registry.start_connecting(&id1).unwrap();
+        assert_eq!(registry.active_count(), 1);
+
+        registry.start_connecting(&id2).unwrap();
+        assert_eq!(registry.active_count(), 2);
+
+        // Remove one session
+        registry.remove(&id1);
+        assert_eq!(registry.active_count(), 1);
+
+        // Connection fails
+        registry.connect_failed(&id2, "test error".to_string()).unwrap();
+        assert_eq!(registry.active_count(), 0);
     }
 }

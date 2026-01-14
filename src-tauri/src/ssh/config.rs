@@ -33,6 +33,12 @@ pub struct SshConfig {
     /// Optional proxy chain for jump hosts (ProxyJump)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_chain: Option<Vec<ProxyHopConfig>>,
+
+    /// Strict host key checking (default: false for user-friendly behavior)
+    /// - true: reject connections to unknown hosts
+    /// - false: auto-accept unknown hosts, still reject changed keys
+    #[serde(default)]
+    pub strict_host_key_checking: bool,
 }
 
 /// Configuration for a single proxy hop
@@ -98,6 +104,7 @@ impl Default for SshConfig {
             cols: 80,
             rows: 24,
             proxy_chain: None,
+            strict_host_key_checking: false,
         }
     }
 }

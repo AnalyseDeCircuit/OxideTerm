@@ -76,3 +76,4 @@ config.json
 keychain.json
 .cursorignore
 AGENTS.md
+docs/ISSUES.md

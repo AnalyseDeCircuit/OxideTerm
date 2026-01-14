@@ -186,7 +186,8 @@ async fn direct_connect(
         ..Default::default()
     };
 
-    let handler = ClientHandler;
+    // Use non-strict mode for jump hosts (auto-accept unknown)
+    let handler = ClientHandler::new(hop.host.clone(), hop.port, false);
 
     // Connect with timeout
     let mut handle = tokio::time::timeout(
@@ -273,7 +274,8 @@ async fn connect_via_stream(
         ..Default::default()
     };
 
-    let handler = ClientHandler;
+    // Use non-strict mode for tunnel hosts (auto-accept unknown)
+    let handler = ClientHandler::new(hop.host.clone(), hop.port, false);
     let config = Arc::new(ssh_config);
 
     // Use russh::connect_stream() to connect over our custom stream!

@@ -228,8 +228,14 @@ pub async fn connect_v2(
         let (session_handle, handle_controller) =
             timeout(Duration::from_secs(AUTH_TIMEOUT_SECS), shell_future)
                 .await
-                .map_err(|_| format!("Authentication timeout after {}s", AUTH_TIMEOUT_SECS))?
-                .map_err(|e| format!("Shell request failed: {}", e))?;
+                .map_err(|_| {
+                    registry.remove(&sid);
+                    format!("Authentication timeout after {}s", AUTH_TIMEOUT_SECS)
+                })?
+                .map_err(|e| {
+                    registry.remove(&sid);
+                    format!("Shell request failed: {}", e)
+                })?;
 
         info!("Multi-hop proxy handles stored for session: {}", sid);
 
@@ -239,7 +245,10 @@ pub async fn connect_v2(
         // Start WebSocket bridge
         let (_, port, token) = WsBridge::start_extended(session_handle)
             .await
-            .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
+            .map_err(|e| {
+                registry.remove(&sid);
+                format!("Failed to start WebSocket bridge: {}", e)
+            })?;
 
         // Clone the handle controller for the forwarding manager
         let forwarding_controller = handle_controller.clone();
@@ -247,7 +256,10 @@ pub async fn connect_v2(
         // Update registry with success
         registry
             .connect_success(&sid, port, cmd_tx, handle_controller)
-            .map_err(|e| format!("Failed to update session state: {}", e))?;
+            .map_err(|e| {
+                registry.remove(&sid);
+                format!("Failed to update session state: {}", e)
+            })?;
 
         // Register ForwardingManager for port forwarding support
         let forwarding_manager = ForwardingManager::new(forwarding_controller, sid.to_string());
@@ -332,6 +344,7 @@ pub async fn connect_v2(
             cols: config.cols,
             rows: config.rows,
             proxy_chain: None,
+            strict_host_key_checking: false, // Auto-accept unknown hosts
         };
 
         // Connect with handshake timeout
