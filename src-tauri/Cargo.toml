@@ -78,6 +78,6 @@ rand = "0.8"
 # 1. 链接时优化 (LTO)
 # 消除跨 crate 的冗余代码，能显著减小体积并提升性能
 lto = "fat"
-strip = true
+strip = false
 panic = "abort"
 opt-level = 3

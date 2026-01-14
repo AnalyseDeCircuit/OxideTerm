@@ -42,6 +42,10 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          # 为不同的编译目标使用不同的缓存
+          key: ${{ matrix.platform }}-${{ matrix.target }}
+          # 编译失败时不保存损坏的缓存
+          cache-on-failure: false
 
       - name: Install Node.js
         uses: actions/setup-node@v4
