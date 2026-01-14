@@ -22,6 +22,7 @@ pub struct SftpSession {
     /// russh SFTP session
     sftp: RusshSftpSession,
     /// Session ID this SFTP is associated with
+    #[allow(dead_code)]
     session_id: String,
     /// Current working directory
     cwd: String,
@@ -175,7 +176,7 @@ impl SftpSession {
     }
 
     /// Sort file entries
-    fn sort_entries(&self, entries: &mut Vec<FileInfo>, order: SortOrder) {
+    fn sort_entries(&self, entries: &mut [FileInfo], order: SortOrder) {
         // Directories always first
         entries.sort_by(|a, b| {
             let a_is_dir = a.file_type == FileType::Directory;
@@ -578,7 +579,7 @@ impl SftpSession {
             ])
             .output()
             .await
-            .map_err(|e| SftpError::IoError(e))?;
+            .map_err(SftpError::IoError)?;
 
         // Clean up input file
         let _ = tokio::fs::remove_file(&temp_input).await;
@@ -646,15 +647,12 @@ impl SftpSession {
         if offset > 0 {
             file.seek(std::io::SeekFrom::Start(offset))
                 .await
-                .map_err(|e| SftpError::IoError(e))?;
+                .map_err(SftpError::IoError)?;
         }
 
         // Read chunk
         let mut buffer = vec![0u8; bytes_to_read];
-        let bytes_read = file
-            .read(&mut buffer)
-            .await
-            .map_err(|e| SftpError::IoError(e))?;
+        let bytes_read = file.read(&mut buffer).await.map_err(SftpError::IoError)?;
         buffer.truncate(bytes_read);
 
         // Generate hex dump

@@ -2,6 +2,9 @@
 //!
 //! Handles serialization and deserialization of session metadata for recovery.
 
+// Allow large error types from StateError (contains redb::TransactionError ~160 bytes)
+#![allow(clippy::result_large_err)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -123,9 +126,7 @@ impl SessionPersistence {
 
     /// Save a session (synchronous)
     pub fn save(&self, session: &PersistedSession) -> Result<(), StateError> {
-        let data = session
-            .to_bytes()
-            .map_err(|e| StateError::Serialization(e))?;
+        let data = session.to_bytes().map_err(StateError::Serialization)?;
 
         self.store.save_session(&session.id, &data)?;
 
@@ -134,9 +135,7 @@ impl SessionPersistence {
 
     /// Save a session (async, non-blocking)
     pub async fn save_async(&self, session: PersistedSession) -> Result<(), StateError> {
-        let data = session
-            .to_bytes()
-            .map_err(|e| StateError::Serialization(e))?;
+        let data = session.to_bytes().map_err(StateError::Serialization)?;
 
         self.store.save_session_async(session.id, data).await?;
 
@@ -147,7 +146,7 @@ impl SessionPersistence {
     pub fn load(&self, id: &str) -> Result<PersistedSession, StateError> {
         let data = self.store.load_session(id)?;
 
-        PersistedSession::from_bytes(&data).map_err(|e| StateError::Serialization(e))
+        PersistedSession::from_bytes(&data).map_err(StateError::Serialization)
     }
 
     /// Delete a session (synchronous)

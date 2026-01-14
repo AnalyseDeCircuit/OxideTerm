@@ -183,9 +183,10 @@ pub struct BatchResult {
 }
 
 /// Sort order for directory listing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SortOrder {
+    #[default]
     Name,
     NameDesc,
     Size,
@@ -194,12 +195,6 @@ pub enum SortOrder {
     ModifiedDesc,
     Type,
     TypeDesc,
-}
-
-impl Default for SortOrder {
-    fn default() -> Self {
-        SortOrder::Name
-    }
 }
 
 /// Filter for directory listing

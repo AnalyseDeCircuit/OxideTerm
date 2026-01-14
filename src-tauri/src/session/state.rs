@@ -28,10 +28,11 @@ use std::fmt;
 use std::time::Instant;
 
 /// Session states
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionState {
     /// Initial state, not connected
+    #[default]
     Disconnected,
     /// Attempting to establish connection (SSH handshake + auth)
     Connecting,
@@ -41,12 +42,6 @@ pub enum SessionState {
     Disconnecting,
     /// Connection failed with an error
     Error,
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self::Disconnected
-    }
 }
 
 impl fmt::Display for SessionState {

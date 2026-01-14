@@ -89,14 +89,14 @@ impl KnownHostsStore {
             return Ok(());
         }
 
-        let file = fs::File::open(&self.path).map_err(|e| SshError::IoError(e))?;
+        let file = fs::File::open(&self.path).map_err(SshError::IoError)?;
 
         let reader = BufReader::new(file);
         let mut hosts = self.hosts.write();
         let mut entry_count = 0;
 
         for line in reader.lines() {
-            let line = line.map_err(|e| SshError::IoError(e))?;
+            let line = line.map_err(SshError::IoError)?;
             let line = line.trim();
 
             // Skip empty lines and comments
@@ -126,10 +126,7 @@ impl KnownHostsStore {
 
                 // Normalize: remove [port] suffix if present
                 let normalized = Self::normalize_hostname(hostname);
-                hosts
-                    .entry(normalized)
-                    .or_insert_with(Vec::new)
-                    .push(entry.clone());
+                hosts.entry(normalized).or_default().push(entry.clone());
                 entry_count += 1;
             }
         }
@@ -266,10 +263,7 @@ impl KnownHostsStore {
                 key_type: key_type.clone(),
                 key_data: key_b64.clone(),
             };
-            hosts
-                .entry(lookup_key.clone())
-                .or_insert_with(Vec::new)
-                .push(entry);
+            hosts.entry(lookup_key.clone()).or_default().push(entry);
         }
 
         // Append to file
@@ -298,16 +292,16 @@ impl KnownHostsStore {
     fn append_to_file(&self, host: &str, key_type: &str, key_b64: &str) -> Result<(), SshError> {
         // Ensure .ssh directory exists
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|e| SshError::IoError(e))?;
+            fs::create_dir_all(parent).map_err(SshError::IoError)?;
         }
 
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|e| SshError::IoError(e))?;
+            .map_err(SshError::IoError)?;
 
-        writeln!(file, "{} {} {}", host, key_type, key_b64).map_err(|e| SshError::IoError(e))?;
+        writeln!(file, "{} {} {}", host, key_type, key_b64).map_err(SshError::IoError)?;
 
         Ok(())
     }
@@ -335,7 +329,7 @@ impl KnownHostsStore {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&self.path).map_err(|e| SshError::IoError(e))?;
+        let content = fs::read_to_string(&self.path).map_err(SshError::IoError)?;
 
         let filtered: Vec<&str> = content
             .lines()
@@ -351,7 +345,7 @@ impl KnownHostsStore {
             })
             .collect();
 
-        fs::write(&self.path, filtered.join("\n") + "\n").map_err(|e| SshError::IoError(e))?;
+        fs::write(&self.path, filtered.join("\n") + "\n").map_err(SshError::IoError)?;
 
         Ok(())
     }

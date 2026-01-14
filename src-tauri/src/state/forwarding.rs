@@ -2,6 +2,9 @@
 //!
 //! Handles serialization and deserialization of forward rules for recovery.
 
+// Allow large error types from StateError (contains redb::TransactionError ~160 bytes)
+#![allow(clippy::result_large_err)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -88,9 +91,7 @@ impl ForwardPersistence {
 
     /// Save a forward rule (synchronous)
     pub fn save(&self, forward: &PersistedForward) -> Result<(), StateError> {
-        let data = forward
-            .to_bytes()
-            .map_err(|e| StateError::Serialization(e))?;
+        let data = forward.to_bytes().map_err(StateError::Serialization)?;
 
         self.store.save_forward(&forward.id, &data)?;
 
@@ -99,9 +100,7 @@ impl ForwardPersistence {
 
     /// Save a forward rule (async, non-blocking)
     pub async fn save_async(&self, forward: PersistedForward) -> Result<(), StateError> {
-        let data = forward
-            .to_bytes()
-            .map_err(|e| StateError::Serialization(e))?;
+        let data = forward.to_bytes().map_err(StateError::Serialization)?;
 
         self.store.save_forward_async(forward.id, data).await?;
 
@@ -112,7 +111,7 @@ impl ForwardPersistence {
     pub fn load(&self, id: &str) -> Result<PersistedForward, StateError> {
         let data = self.store.load_forward(id)?;
 
-        PersistedForward::from_bytes(&data).map_err(|e| StateError::Serialization(e))
+        PersistedForward::from_bytes(&data).map_err(StateError::Serialization)
     }
 
     /// Delete a forward rule (synchronous)

@@ -2,6 +2,10 @@
 //!
 //! Provides high-performance embedded database for session and forward state persistence.
 
+// Allow large error types - redb::TransactionError is large (160 bytes) but we accept this
+// to avoid the overhead of boxing error types in common error paths
+#![allow(clippy::result_large_err)]
+
 use redb::{Database, ReadableTable, TableDefinition};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,7 +21,11 @@ const FORWARDS_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("forwa
 const METADATA_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
 
 /// State persistence errors
+///
+/// Note: This error type is intentionally large due to containing redb::TransactionError.
+/// Boxing would add allocation overhead for a rare error path, so we accept the larger size.
 #[derive(Debug, Error)]
+#[allow(clippy::result_large_err)]
 pub enum StateError {
     #[error("Database error: {0}")]
     Database(#[from] redb::DatabaseError),
@@ -225,12 +233,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         // Handle panic result
         match result {
@@ -244,10 +247,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database save_session operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -281,12 +284,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -299,10 +297,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database load_session operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -338,12 +336,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -356,10 +349,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database delete_session operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -397,12 +390,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -415,10 +403,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database list_sessions operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -442,12 +430,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -463,10 +446,10 @@ impl StateStore {
                     "Database load_all_sessions operation panicked: {}",
                     panic_msg
                 );
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -502,12 +485,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -520,10 +498,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database save_forward operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -557,12 +535,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -575,10 +548,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database load_forward operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -614,12 +587,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -632,10 +600,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database delete_forward operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -673,12 +641,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -691,10 +654,10 @@ impl StateStore {
                     "Unknown panic".to_string()
                 };
                 error!("Database list_forwards operation panicked: {}", panic_msg);
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }
@@ -718,12 +681,7 @@ impl StateStore {
             }))
         })
         .await
-        .map_err(|e| {
-            StateError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Task join error: {}", e),
-            ))
-        })?;
+        .map_err(|e| StateError::Io(std::io::Error::other(format!("Task join error: {}", e))))?;
 
         match result {
             Ok(inner_result) => inner_result,
@@ -739,10 +697,10 @@ impl StateStore {
                     "Database load_all_forwards operation panicked: {}",
                     panic_msg
                 );
-                Err(StateError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database panic: {}", panic_msg),
-                )))
+                Err(StateError::Io(std::io::Error::other(format!(
+                    "Database panic: {}",
+                    panic_msg
+                ))))
             }
         }
     }

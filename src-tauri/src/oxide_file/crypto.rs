@@ -51,7 +51,7 @@ pub fn encrypt_oxide_file(
     let key = derive_key(password, &salt)?;
 
     // 3. Serialize payload with bincode (use standard config for compatibility)
-    let plaintext = bincode::serialize(payload).map_err(|e| OxideFileError::Serialization(e))?;
+    let plaintext = bincode::serialize(payload).map_err(OxideFileError::Serialization)?;
 
     // 4. Encrypt with ChaCha20-Poly1305
     let cipher =
@@ -109,7 +109,7 @@ pub fn decrypt_oxide_file(
 
     // 5. Deserialize payload (use standard config for compatibility)
     let payload: EncryptedPayload =
-        bincode::deserialize(&plaintext).map_err(|e| OxideFileError::Serialization(e))?;
+        bincode::deserialize(&plaintext).map_err(OxideFileError::Serialization)?;
 
     // 6. Verify internal checksum
     verify_checksum(&payload)?;
@@ -122,7 +122,7 @@ pub fn compute_checksum(connections: &[EncryptedConnection]) -> Result<String, O
     let mut hasher = Sha256::new();
 
     for conn in connections {
-        let conn_bytes = bincode::serialize(conn).map_err(|e| OxideFileError::Serialization(e))?;
+        let conn_bytes = bincode::serialize(conn).map_err(OxideFileError::Serialization)?;
         hasher.update(&conn_bytes);
     }
 

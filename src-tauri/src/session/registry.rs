@@ -650,6 +650,7 @@ pub enum RegistryError {
 }
 
 /// Create a shared session registry without persistence (for testing)
+#[allow(dead_code)]
 pub fn create_shared_registry() -> Arc<SessionRegistry> {
     Arc::new(SessionRegistry::new_without_persistence())
 }

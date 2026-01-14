@@ -219,11 +219,11 @@ impl SshSession {
                             }
                             ChannelMsg::ExtendedData { data, ext } => {
                                 // Extended data (usually stderr)
-                                if ext == 1 {
-                                    if stdout_tx.send(data.to_vec()).await.is_err() {
-                                        debug!("stdout receiver dropped, closing channel");
-                                        break;
-                                    }
+                                if ext == 1
+                                    && stdout_tx.send(data.to_vec()).await.is_err()
+                                {
+                                    debug!("stdout receiver dropped, closing channel");
+                                    break;
                                 }
                             }
                             ChannelMsg::Eof => {

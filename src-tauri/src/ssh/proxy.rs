@@ -143,12 +143,10 @@ impl ProxyConnection {
     pub fn into_target_handle(self) -> Handle<ClientHandler> {
         use std::mem::ManuallyDrop;
 
-        let mut this = ManuallyDrop::new(self);
+        let this = ManuallyDrop::new(self);
         // Safety: We're taking ownership of target_handle and will not use it again
         // The jump_handles will be properly dropped when `this` is dropped
-        let target_handle = unsafe { std::ptr::read(&this.target_handle) };
-
-        target_handle
+        unsafe { std::ptr::read(&this.target_handle) }
     }
 }
 

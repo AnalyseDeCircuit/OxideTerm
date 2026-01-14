@@ -221,7 +221,7 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
     let mut hosts = Vec::new();
     let mut current_host: Option<SshConfigHost> = None;
 
-    for (_line_num, line) in content.lines().enumerate() {
+    for line in content.lines() {
         let line = line.trim();
 
         // Skip empty lines and comments
@@ -272,9 +272,9 @@ pub fn parse_ssh_config_content(content: &str) -> Result<Vec<SshConfigHost>, Ssh
                 }
                 "identityfile" => {
                     // Expand ~ to home directory
-                    let expanded = if value.starts_with("~/") {
+                    let expanded = if let Some(stripped) = value.strip_prefix("~/") {
                         if let Some(home) = dirs::home_dir() {
-                            home.join(&value[2..]).to_string_lossy().into_owned()
+                            home.join(stripped).to_string_lossy().into_owned()
                         } else {
                             value.to_string()
                         }

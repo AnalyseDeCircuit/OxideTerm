@@ -28,6 +28,7 @@ pub struct ForwardStats {
 }
 
 /// SOCKS5 protocol constants
+#[allow(dead_code)]
 mod socks5 {
     pub const VERSION: u8 = 0x05;
     pub const AUTH_NONE: u8 = 0x00;

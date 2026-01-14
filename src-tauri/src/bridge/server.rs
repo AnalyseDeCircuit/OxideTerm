@@ -408,7 +408,7 @@ impl WsBridge {
             .await
             .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let (ws_sender, mut ws_receiver) = ws_stream.split();
 
         // Authenticate: expect first message to contain token
         let auth_result = tokio::time::timeout(Duration::from_secs(5), ws_receiver.next()).await;
@@ -807,7 +807,7 @@ impl WsBridge {
             .await
             .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let (ws_sender, mut ws_receiver) = ws_stream.split();
 
         // Authenticate: expect first message to contain token
         let auth_result = tokio::time::timeout(Duration::from_secs(5), ws_receiver.next()).await;
@@ -815,7 +815,7 @@ impl WsBridge {
         match auth_result {
             Ok(Some(Ok(Message::Text(token)))) => {
                 if token.trim() == expected_token {
-                    debug!("WebSocket token authentication successful (v2)");
+                    debug!("WebSocket token authentication successful (v2))");
                 } else {
                     error!("WebSocket token authentication failed (v2): invalid token");
                     return Err("Authentication failed: invalid token".to_string());
@@ -880,7 +880,7 @@ impl WsBridge {
                 // Use timeout to detect dead clients (prevents deadlock)
                 match tokio::time::timeout(
                     Duration::from_secs(5),
-                    ws_sender.send(Message::Binary(frame.to_vec().into())),
+                    ws_sender.send(Message::Binary(frame.to_vec())),
                 )
                 .await
                 {
@@ -1077,7 +1077,7 @@ impl WsBridge {
             .await
             .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        let (ws_sender, mut ws_receiver) = ws_stream.split();
 
         // Authenticate: expect first message to contain token
         let auth_result = tokio::time::timeout(Duration::from_secs(5), ws_receiver.next()).await;
@@ -1148,7 +1148,7 @@ impl WsBridge {
             while let Some(frame) = frame_rx.recv().await {
                 match tokio::time::timeout(
                     Duration::from_secs(5),
-                    ws_sender.send(Message::Binary(frame.to_vec().into())),
+                    ws_sender.send(Message::Binary(frame.to_vec())),
                 )
                 .await
                 {
@@ -1256,14 +1256,13 @@ impl WsBridge {
                         }
 
                         if codec.is_overflow() {
-                            if start.elapsed() < Duration::from_secs(5) {
-                                if cmd_tx_clone
+                            if start.elapsed() < Duration::from_secs(5)
+                                && cmd_tx_clone
                                     .send(SessionCommand::Data(data.to_vec()))
                                     .await
                                     .is_err()
-                                {
-                                    return "ssh_closed";
-                                }
+                            {
+                                return "ssh_closed";
                             }
                             codec.clear();
                             break;

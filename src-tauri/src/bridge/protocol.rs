@@ -17,6 +17,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::io::{self, ErrorKind};
 
 /// Protocol version
+#[allow(dead_code)]
 pub const PROTOCOL_VERSION: u8 = 1;
 
 /// Header size: 1 byte type + 4 bytes length

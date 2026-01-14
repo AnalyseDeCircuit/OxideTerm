@@ -597,7 +597,7 @@ pub async fn import_ssh_host(
         SavedAuth::Agent
     };
 
-    let username = host.user.clone().unwrap_or_else(|| whoami::username());
+    let username = host.user.clone().unwrap_or_else(whoami::username);
 
     let conn = SavedConnection {
         id: uuid::Uuid::new_v4().to_string(),

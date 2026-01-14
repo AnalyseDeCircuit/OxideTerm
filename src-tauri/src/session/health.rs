@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 /// Connection health status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HealthStatus {
     /// Connection is healthy with good response times
@@ -23,13 +23,8 @@ pub enum HealthStatus {
     /// Connection is disconnected
     Disconnected,
     /// Health status unknown (not enough data)
+    #[default]
     Unknown,
-}
-
-impl Default for HealthStatus {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Health metrics for a connection
