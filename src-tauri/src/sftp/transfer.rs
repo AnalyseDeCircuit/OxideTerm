@@ -3,11 +3,10 @@
 //! Provides concurrent transfer control with pause/cancel support.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use tokio::sync::Semaphore;
+use tokio::sync::{watch, Semaphore};
 use tracing::{debug, info, warn};
 
 use super::types::constants;
@@ -15,38 +14,54 @@ use super::types::constants;
 /// Transfer control signals
 #[derive(Debug)]
 pub struct TransferControl {
-    /// Cancelled flag
-    cancelled: AtomicBool,
-    /// Pause signal
-    paused: AtomicBool,
+    /// Cancellation signal via watch channel
+    cancel_tx: watch::Sender<bool>,
+    cancel_rx: watch::Receiver<bool>,
+    /// Pause signal via watch channel (independent from cancellation)
+    pause_tx: watch::Sender<bool>,
+    pause_rx: watch::Receiver<bool>,
 }
 
 impl TransferControl {
     pub fn new() -> Self {
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        let (pause_tx, pause_rx) = watch::channel(false);
         Self {
-            cancelled: AtomicBool::new(false),
-            paused: AtomicBool::new(false),
+            cancel_tx,
+            cancel_rx,
+            pause_tx,
+            pause_rx,
         }
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::SeqCst)
+        *self.cancel_rx.borrow()
     }
 
     pub fn is_paused(&self) -> bool {
-        self.paused.load(Ordering::SeqCst)
+        *self.pause_rx.borrow()
     }
 
     pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::SeqCst);
+        let _ = self.cancel_tx.send(true);
+    }
+
+    /// Get a receiver for waiting on cancellation
+    pub fn subscribe_cancellation(&self) -> watch::Receiver<bool> {
+        self.cancel_rx.clone()
+    }
+
+    /// Get a receiver for waiting on pause state changes
+    pub fn subscribe_pause(&self) -> watch::Receiver<bool> {
+        self.pause_rx.clone()
     }
 
     pub fn pause(&self) {
-        self.paused.store(true, Ordering::SeqCst);
+        let _ = self.pause_tx.send(true);
     }
 
     pub fn resume(&self) {
-        self.paused.store(false, Ordering::SeqCst);
+        let _ = self.pause_tx.send(false);
     }
 }
 
@@ -134,13 +149,11 @@ impl TransferManager {
         }
     }
 
-    /// Pause a specific transfer (simplified: pause = cancel, resume = restart)
+    /// Pause a specific transfer (keeps temp files, can be resumed)
     pub fn pause(&self, transfer_id: &str) -> bool {
         if let Some(control) = self.controls.read().get(transfer_id) {
-            // Simplified approach: pause is same as cancel
-            // User must restart transfer to resume
-            control.cancel();
-            info!("Paused (cancelled) transfer: {}", transfer_id);
+            control.pause();
+            info!("Paused transfer: {}", transfer_id);
             true
         } else {
             warn!("Transfer not found for pause: {}", transfer_id);
@@ -148,15 +161,16 @@ impl TransferManager {
         }
     }
 
-    /// Resume a specific transfer (simplified: not supported, must restart transfer)
+    /// Resume a paused transfer
     pub fn resume(&self, transfer_id: &str) -> bool {
-        // Simplified: resume not supported in v0.1.0
-        // User must re-initiate the transfer
-        warn!(
-            "Resume not supported - transfer was cancelled: {}",
-            transfer_id
-        );
-        false
+        if let Some(control) = self.controls.read().get(transfer_id) {
+            control.resume();
+            info!("Resumed transfer: {}", transfer_id);
+            true
+        } else {
+            warn!("Transfer not found for resume: {}", transfer_id);
+            false
+        }
     }
 
     /// Cancel all active transfers

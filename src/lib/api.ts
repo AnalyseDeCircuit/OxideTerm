@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  SessionInfo, 
-  ConnectRequest, 
-  ConnectionInfo, 
-  SaveConnectionRequest, 
+import {
+  SessionInfo,
+  ConnectRequest,
+  ConnectionInfo,
+  SaveConnectionRequest,
   HealthMetrics,
   FileInfo,
   PreviewContent,
@@ -20,7 +20,8 @@ import {
   SearchResult,
   ListFilter,
   SessionStats,
-  QuickHealthCheck
+  QuickHealthCheck,
+  IncompleteTransferInfo
 } from '../types';
 
 // Toggle this for development without a backend
@@ -250,14 +251,14 @@ export const api = {
     return invoke('sftp_preview_hex', { sessionId, path, offset });
   },
 
-  sftpDownload: async (sessionId: string, remotePath: string, localPath: string): Promise<void> => {
+  sftpDownload: async (sessionId: string, remotePath: string, localPath: string, transferId?: string): Promise<void> => {
     if (USE_MOCK) return;
-    return invoke('sftp_download', { sessionId, remotePath, localPath });
+    return invoke('sftp_download', { sessionId, remotePath, localPath, transferId });
   },
 
-  sftpUpload: async (sessionId: string, localPath: string, remotePath: string): Promise<void> => {
+  sftpUpload: async (sessionId: string, localPath: string, remotePath: string, transferId?: string): Promise<void> => {
     if (USE_MOCK) return;
-    return invoke('sftp_upload', { sessionId, localPath, remotePath });
+    return invoke('sftp_upload', { sessionId, localPath, remotePath, transferId });
   },
 
   sftpDelete: async (sessionId: string, path: string): Promise<void> => {
@@ -325,7 +326,19 @@ export const api = {
     if (USE_MOCK) return { active: 0, queued: 0, completed: 0 };
     return invoke('sftp_transfer_stats');
   },
-  
+
+  // SFTP Resume Transfer - List incomplete transfers
+  sftpListIncompleteTransfers: async (sessionId: string): Promise<IncompleteTransferInfo[]> => {
+    if (USE_MOCK) return [];
+    return invoke('sftp_list_incomplete_transfers', { sessionId });
+  },
+
+  // SFTP Resume Transfer - Resume a specific transfer with retry support
+  sftpResumeTransferWithRetry: async (sessionId: string, transferId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('sftp_resume_transfer_with_retry', { sessionId, transferId });
+  },
+
   // ============ Port Forwarding ============
   listPortForwards: async (sessionId: string): Promise<ForwardRule[]> => {
     if (USE_MOCK) return [];

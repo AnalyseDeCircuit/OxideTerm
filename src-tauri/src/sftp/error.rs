@@ -43,6 +43,15 @@ pub enum SftpError {
 
     #[error("SFTP session not initialized for: {0}")]
     NotInitialized(String),
+
+    #[error("Storage error: {0}")]
+    StorageError(String),
+
+    #[error("Transfer error: {0}")]
+    TransferError(String),
+
+    #[error("Resume not supported for: {0}")]
+    ResumeNotSupported(String),
 }
 
 impl serde::Serialize for SftpError {

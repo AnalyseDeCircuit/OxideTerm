@@ -10,12 +10,27 @@ use base64::Engine;
 use parking_lot::RwLock;
 use russh_sftp::client::error::Error as SftpErrorInner;
 use russh_sftp::client::SftpSession as RusshSftpSession;
+use russh_sftp::protocol::OpenFlags;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::error::SftpError;
+use super::progress::{ProgressStore, StoredTransferProgress, TransferType};
+use super::retry::{transfer_with_retry, RetryConfig};
 use super::types::*;
+use super::transfer::TransferManager;
 use crate::ssh::HandleController;
+
+/// Resume context for partial transfers
+#[derive(Debug, Clone)]
+pub struct ResumeContext {
+    /// Starting byte offset for resume
+    pub offset: u64,
+    /// Transfer ID for tracking
+    pub transfer_id: String,
+    /// Whether this is a resume (vs fresh transfer)
+    pub is_resume: bool,
+}
 
 /// SFTP Session wrapper
 pub struct SftpSession {
@@ -1387,6 +1402,501 @@ impl SftpSession {
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
 
         Ok(())
+    }
+
+    /// Download file with resume support
+    ///
+    /// This method checks for incomplete transfers and resumes from the last position.
+    ///
+    /// # Arguments
+    /// * `remote_path` - Remote file path
+    /// * `local_path` - Local file path
+    /// * `progress_store` - Progress store for tracking
+    /// * `progress_tx` - Optional mpsc sender for UI updates
+    /// * `transfer_manager` - Optional transfer manager for control signals
+    /// * `transfer_id` - Optional transfer ID (if not provided, generates UUID)
+    pub async fn download_with_resume(
+        &self,
+        remote_path: &str,
+        local_path: &str,
+        progress_store: std::sync::Arc<dyn ProgressStore>,
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+        transfer_manager: Option<std::sync::Arc<TransferManager>>,
+        transfer_id: Option<String>,
+    ) -> Result<u64, SftpError> {
+        let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let canonical_path = self.resolve_path(remote_path).await?;
+
+        // Register transfer control if manager provided
+        let control: Option<std::sync::Arc<super::transfer::TransferControl>> = transfer_manager.as_ref().map(|tm| tm.register(&transfer_id));
+
+        // Check if this is a resume (local file exists)
+        let resume_context = if Path::new(local_path).exists() {
+            let metadata = tokio::fs::metadata(local_path).await
+                .map_err(SftpError::IoError)?;
+            let offset = metadata.len();
+
+            info!("Resuming download from offset: {}", offset);
+
+            ResumeContext {
+                offset,
+                transfer_id: transfer_id.clone(),
+                is_resume: true,
+            }
+        } else {
+            ResumeContext {
+                offset: 0,
+                transfer_id: transfer_id.clone(),
+                is_resume: false,
+            }
+        };
+
+        // Get remote file size
+        let info = self.stat(&canonical_path).await?;
+        let total_bytes = info.size;
+
+        // Create stored progress
+        let mut stored_progress = StoredTransferProgress::new(
+            transfer_id.clone(),
+            TransferType::Download,
+            canonical_path.clone().into(),
+            local_path.into(),
+            total_bytes,
+            self.session_id.clone(),
+        );
+
+        if resume_context.is_resume {
+            stored_progress.transferred_bytes = resume_context.offset;
+        }
+
+        // Execute transfer with retry
+        let transferred = transfer_with_retry(
+            || self.download_inner(
+                &canonical_path,
+                local_path,
+                &resume_context,
+                total_bytes, // Pass total_bytes for progress updates
+                progress_tx.clone(),
+                control.clone(),
+            ),
+            RetryConfig::default(),
+            progress_store.clone(),
+            stored_progress.clone(),
+            control.clone(),
+        ).await?;
+
+        info!(
+            "Download complete: {} ({} bytes)",
+            canonical_path, transferred
+        );
+
+        Ok(transferred)
+    }
+
+    /// Internal download implementation with resume support
+    async fn download_inner(
+        &self,
+        remote_path: &str,
+        local_path: &str,
+        ctx: &ResumeContext,
+        total_bytes: u64, // Total bytes for progress display
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+        control: Option<std::sync::Arc<super::transfer::TransferControl>>,
+    ) -> Result<u64, SftpError> {
+        use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+
+        // Open remote file
+        let mut remote_file = self
+            .sftp
+            .open(remote_path)
+            .await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        // Seek to offset if resuming
+        if ctx.offset > 0 {
+            remote_file
+                .seek(std::io::SeekFrom::Start(ctx.offset))
+                .await
+                .map_err(SftpError::IoError)?;
+
+            info!("Seeked remote file to offset: {}", ctx.offset);
+        }
+
+        // Open local file (append if resume)
+        let mut local_file = if ctx.is_resume {
+            tokio::fs::OpenOptions::new()
+                .write(true)
+                .open(local_path)
+                .await
+                .map_err(SftpError::IoError)?
+        } else {
+            tokio::fs::File::create(local_path)
+                .await
+                .map_err(SftpError::IoError)?
+        };
+
+        // Seek local file to end if resume
+        if ctx.is_resume {
+            local_file
+                .seek(std::io::SeekFrom::End(0))
+                .await
+                .map_err(SftpError::IoError)?;
+        }
+
+        // Transfer loop with cooperative cancellation
+        let chunk_size = 65536; // 64 KB chunks
+        let mut buffer = vec![0u8; chunk_size];
+        let mut transferred = ctx.offset;
+
+        loop {
+            // Check for cancellation before each read/write cycle
+            if let Some(ref ctrl) = control {
+                if ctrl.is_cancelled() {
+                    info!("Download cancelled during transfer at {} bytes", transferred);
+                    return Err(SftpError::TransferCancelled);
+                }
+                
+                // Wait while paused, checking for cancellation
+                while ctrl.is_paused() {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if ctrl.is_cancelled() {
+                        info!("Download cancelled while paused at {} bytes", transferred);
+                        return Err(SftpError::TransferCancelled);
+                    }
+                }
+            }
+
+            let bytes_read = remote_file
+                .read(&mut buffer)
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+            if bytes_read == 0 {
+                break; // EOF
+            }
+
+            // Write to local file
+            local_file
+                .write_all(&buffer[..bytes_read])
+                .await
+                .map_err(SftpError::IoError)?;
+
+            transferred += bytes_read as u64;
+
+            // Send progress update
+            if let Some(ref tx) = progress_tx {
+                let _ = tx.send(TransferProgress {
+                    id: ctx.transfer_id.clone(),
+                    remote_path: remote_path.to_string(),
+                    local_path: local_path.to_string(),
+                    direction: TransferDirection::Download,
+                    state: TransferState::InProgress,
+                    total_bytes, // Use actual total_bytes
+                    transferred_bytes: transferred,
+                    speed: 0,
+                    eta_seconds: None,
+                    error: None,
+                }).await;
+            }
+        }
+
+        local_file.flush().await.map_err(SftpError::IoError)?;
+
+        Ok(transferred)
+    }
+
+    /// Upload file with resume support
+    ///
+    /// This method uses a .oxide-part temporary file to ensure data integrity.
+    ///
+    /// # Arguments
+    /// * `local_path` - Local file path
+    /// * `remote_path` - Remote file path (final destination)
+    /// * `progress_store` - Progress store for tracking
+    /// * `progress_tx` - Optional mpsc sender for UI updates
+    /// * `transfer_manager` - Optional transfer manager for control signals
+    /// * `transfer_id` - Optional transfer ID (if not provided, generates UUID)
+    ///
+    /// # Process
+    /// 1. Upload to `remote_path.oxide-part` (protects original file)
+    /// 2. If interrupted, resume from last byte in .oxide-part using APPEND mode
+    /// 3. Once complete, rename .oxide-part to final filename
+    /// 4. If cancelled, clean up .oxide-part file automatically
+    pub async fn upload_with_resume(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        progress_store: std::sync::Arc<dyn ProgressStore>,
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+        transfer_manager: Option<std::sync::Arc<TransferManager>>,
+        transfer_id: Option<String>,
+    ) -> Result<u64, SftpError> {
+        let transfer_id = transfer_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let canonical_path = self.resolve_path(remote_path).await
+            .unwrap_or_else(|_| remote_path.to_string());
+
+        // Use .oxide-part as temporary file
+        let temp_path = format!("{}.oxide-part", canonical_path);
+
+        // Register transfer control if manager provided
+        let control: Option<std::sync::Arc<super::transfer::TransferControl>> = transfer_manager.as_ref().map(|tm| tm.register(&transfer_id));
+
+        // Get local file size
+        let metadata = tokio::fs::metadata(local_path).await
+            .map_err(SftpError::IoError)?;
+        let total_bytes = metadata.len();
+
+        // Check if this is a resume (temp file exists)
+        let resume_context = match self.stat(&temp_path).await {
+            Ok(remote_info) => {
+                let remote_size = remote_info.size;
+
+                if remote_size < total_bytes {
+                    // Resume from temp file size
+                    info!(
+                        "Resuming upload from offset: {} (temp file has {} bytes)",
+                        remote_size, remote_size
+                    );
+
+                    ResumeContext {
+                        offset: remote_size,
+                        transfer_id: transfer_id.clone(),
+                        is_resume: true,
+                    }
+                } else {
+                    // Temp file already complete, rename to final
+                    info!("Temp file already complete ({} bytes), renaming", remote_size);
+
+                    // Rename temp file to final
+                    self.rename(&temp_path, &canonical_path).await?;
+
+                    return Ok(total_bytes);
+                }
+            }
+            Err(_) => {
+                // Temp file doesn't exist, fresh upload
+                ResumeContext {
+                    offset: 0,
+                    transfer_id: transfer_id.clone(),
+                    is_resume: false,
+                }
+            }
+        };
+
+        // Create stored progress (store final path, not temp path)
+        let mut stored_progress = StoredTransferProgress::new(
+            transfer_id.clone(),
+            TransferType::Upload,
+            local_path.into(),
+            canonical_path.clone().into(),
+            total_bytes,
+            self.session_id.clone(),
+        );
+
+        if resume_context.is_resume {
+            stored_progress.transferred_bytes = resume_context.offset;
+        }
+
+        // Execute transfer with retry (upload to temp file)
+        let result = transfer_with_retry(
+            || self.upload_inner(
+                local_path,
+                &temp_path, // Upload to temp file
+                &resume_context,
+                total_bytes,
+                progress_tx.clone(),
+                control.clone(),
+            ),
+            RetryConfig::default(),
+            progress_store.clone(),
+            stored_progress.clone(),
+            control.clone(),
+        ).await;
+
+        // Handle result
+        match result {
+            Ok(transferred) => {
+                // Final cancellation check before rename (race condition mitigation)
+                if let Some(ref ctrl) = control {
+                    if ctrl.is_cancelled() {
+                        info!("Upload cancelled after completion but before rename, cleaning up {}", temp_path);
+                        
+                        // Delete temp file
+                        if let Err(e) = self.delete(&temp_path).await {
+                            warn!("Failed to delete temp file {}: {}", temp_path, e);
+                        }
+                        
+                        // Remove from progress store
+                        if let Err(e) = progress_store.delete(&transfer_id).await {
+                            warn!("Failed to delete progress for {}: {}", transfer_id, e);
+                        }
+                        
+                        // Unregister from transfer manager
+                        if let Some(tm) = transfer_manager {
+                            tm.unregister(&transfer_id);
+                        }
+                        
+                        return Err(SftpError::TransferCancelled);
+                    }
+                }
+                
+                // Transfer complete, rename temp file to final
+                info!(
+                    "Upload complete, renaming {} to {}",
+                    temp_path, canonical_path
+                );
+
+                self.rename(&temp_path, &canonical_path).await?;
+
+                info!(
+                    "Upload complete: {} -> {} ({} bytes)",
+                    local_path, canonical_path, transferred
+                );
+
+                Ok(transferred)
+            }
+            Err(SftpError::TransferCancelled) => {
+                // User cancelled - clean up .oxide-part file
+                info!("Upload cancelled, cleaning up {}", temp_path);
+
+                // Delete temp file
+                if let Err(e) = self.delete(&temp_path).await {
+                    warn!("Failed to delete temp file {}: {}", temp_path, e);
+                }
+
+                // Remove from progress store
+                if let Err(e) = progress_store.delete(&transfer_id).await {
+                    warn!("Failed to delete progress for {}: {}", transfer_id, e);
+                }
+
+                // Unregister from transfer manager
+                if let Some(tm) = transfer_manager {
+                    tm.unregister(&transfer_id);
+                }
+
+                Err(SftpError::TransferCancelled)
+            }
+            Err(e) => {
+                // Other error - don't clean up, allow resume
+                warn!("Upload failed with error (file preserved for resume): {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    /// Internal upload implementation with resume support
+    ///
+    /// Uses OpenFlags::APPEND for resuming transfers to .oxide-part files
+    async fn upload_inner(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        ctx: &ResumeContext,
+        total_bytes: u64,
+        progress_tx: Option<mpsc::Sender<TransferProgress>>,
+        control: Option<std::sync::Arc<super::transfer::TransferControl>>,
+    ) -> Result<u64, SftpError> {
+        use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+
+        // Open local file
+        let mut local_file = tokio::fs::File::open(local_path).await
+            .map_err(SftpError::IoError)?;
+
+        // Seek to offset if resuming
+        if ctx.offset > 0 {
+            local_file
+                .seek(std::io::SeekFrom::Start(ctx.offset))
+                .await
+                .map_err(SftpError::IoError)?;
+
+            info!("Seeked local file to offset: {}", ctx.offset);
+        }
+
+        // Open remote file with appropriate flags
+        let mut remote_file = if ctx.is_resume {
+            // RESUME: Open existing file with APPEND mode
+            // This allows us to continue writing from the end of the file
+            info!("Opening remote file with APPEND mode for resume");
+            self.sftp
+                .open_with_flags(
+                    remote_path,
+                    OpenFlags::WRITE | OpenFlags::APPEND
+                )
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?
+        } else {
+            // FRESH UPLOAD: Create new file
+            info!("Creating new remote file");
+            self.sftp
+                .create(remote_path)
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?
+        };
+
+        // Transfer loop with cooperative cancellation
+        let chunk_size = 65536; // 64 KB chunks
+        let mut buffer = vec![0u8; chunk_size];
+        let mut transferred = ctx.offset;
+
+        loop {
+            // Check for cancellation before each read/write cycle
+            if let Some(ref ctrl) = control {
+                if ctrl.is_cancelled() {
+                    info!("Upload cancelled during transfer at {} bytes", transferred);
+                    return Err(SftpError::TransferCancelled);
+                }
+                
+                // Wait while paused, checking for cancellation
+                while ctrl.is_paused() {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if ctrl.is_cancelled() {
+                        info!("Upload cancelled while paused at {} bytes", transferred);
+                        return Err(SftpError::TransferCancelled);
+                    }
+                }
+            }
+
+            let bytes_read = local_file
+                .read(&mut buffer)
+                .await
+                .map_err(SftpError::IoError)?;
+
+            if bytes_read == 0 {
+                break; // EOF
+            }
+
+            // Write to remote file
+            AsyncWriteExt::write_all(&mut remote_file, &buffer[..bytes_read])
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+            transferred += bytes_read as u64;
+
+            // Send progress update
+            if let Some(ref tx) = progress_tx {
+                let _ = tx.send(TransferProgress {
+                    id: ctx.transfer_id.clone(),
+                    remote_path: remote_path.to_string(),
+                    local_path: local_path.to_string(),
+                    direction: TransferDirection::Upload,
+                    state: TransferState::InProgress,
+                    total_bytes,
+                    transferred_bytes: transferred,
+                    speed: 0,
+                    eta_seconds: None,
+                    error: None,
+                }).await;
+            }
+        }
+
+        // Flush remote file
+        AsyncWriteExt::flush(&mut remote_file)
+            .await
+            .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+
+        info!("Upload inner complete: {} bytes transferred", transferred);
+
+        Ok(transferred)
     }
 
     /// Resolve relative path to absolute

@@ -1,15 +1,41 @@
-import { X, Pause, Play, Check, AlertCircle } from 'lucide-react';
+import { X, Check, AlertCircle, RotateCcw, History, RefreshCw, Pause, Play } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
 import { useTransferStore, formatBytes, formatSpeed, calculateSpeed, TransferItem } from '../../store/transferStore';
 import { api } from '../../lib/api';
+import { IncompleteTransferInfo } from '../../types';
 
-export const TransferQueue = () => {
-  const { getAllTransfers, clearCompleted, cancelTransfer, removeTransfer, pauseTransfer, resumeTransfer, pauseAll } = useTransferStore();
+export const TransferQueue = ({ sessionId }: { sessionId: string }) => {
+  const { getAllTransfers, clearCompleted, cancelTransfer, removeTransfer, addTransfer, pauseTransfer, resumeTransfer } = useTransferStore();
+
   const items = getAllTransfers();
+  const [incompleteTransfers, setIncompleteTransfers] = useState<IncompleteTransferInfo[]>([]);
+  const [showIncomplete, setShowIncomplete] = useState(false);
+  const [loadingIncomplete, setLoadingIncomplete] = useState(false);
 
   const activeCount = items.filter(i => i.state === 'active' || i.state === 'pending').length;
   const hasCompleted = items.some(i => i.state === 'completed');
+  const hasIncomplete = incompleteTransfers.length > 0;
+
+  // Load incomplete transfers on mount and when session changes
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const loadIncomplete = async () => {
+      setLoadingIncomplete(true);
+      try {
+        const transfers = await api.sftpListIncompleteTransfers(sessionId);
+        setIncompleteTransfers(transfers);
+      } catch (e) {
+        console.error('Failed to load incomplete transfers:', e);
+      } finally {
+        setLoadingIncomplete(false);
+      }
+    };
+
+    loadIncomplete();
+  }, [sessionId]);
 
   const getProgress = (item: TransferItem): number => {
     if (item.size === 0) return 0;
@@ -22,24 +48,51 @@ export const TransferQueue = () => {
       case 'active': return formatSpeed(calculateSpeed(item));
       case 'paused': return 'Paused';
       case 'completed': return 'Done';
+      case 'cancelled': return 'Cancelled';
       case 'error': return item.error || 'Error';
       default: return '';
     }
   };
 
-  const handlePauseAll = async () => {
-    // Pause all active transfers in backend
-    for (const item of items) {
-      if (item.state === 'active' || item.state === 'pending') {
-        try {
-          await api.sftpPauseTransfer(item.id);
-        } catch (e) {
-          console.error('Failed to pause transfer:', item.id, e);
-        }
-      }
+  const handleResumeIncomplete = async (transfer: IncompleteTransferInfo) => {
+    if (!transfer.can_resume) return;
+
+    try {
+      await api.sftpResumeTransferWithRetry(sessionId, transfer.transfer_id);
+
+      // Add to active transfer queue
+      const fileName = transfer.source_path.split('/').pop() || transfer.source_path;
+      addTransfer({
+        id: transfer.transfer_id,
+        sessionId: transfer.session_id,
+        name: fileName,
+        localPath: transfer.transfer_type === 'Download' ? transfer.destination_path : transfer.source_path,
+        remotePath: transfer.transfer_type === 'Upload' ? transfer.destination_path : transfer.source_path,
+        direction: transfer.transfer_type.toLowerCase() as 'upload' | 'download',
+        size: transfer.total_bytes,
+      });
+
+      // Remove from incomplete list
+      setIncompleteTransfers(prev => prev.filter(t => t.transfer_id !== transfer.transfer_id));
+    } catch (e) {
+      console.error('Failed to resume incomplete transfer:', e);
     }
-    // Update frontend state
-    pauseAll();
+  };
+
+  const handleCancel = async (item: TransferItem) => {
+    // If already cancelled/completed/error, just remove from UI
+    if (item.state === 'cancelled' || item.state === 'completed' || item.state === 'error') {
+      removeTransfer(item.id);
+      return;
+    }
+    
+    // Otherwise, cancel the active transfer
+    try {
+      await api.sftpCancelTransfer(item.id);
+      cancelTransfer(item.id);
+    } catch (e) {
+      console.error('Failed to cancel transfer:', e);
+    }
   };
 
   const handlePause = async (item: TransferItem) => {
@@ -60,35 +113,28 @@ export const TransferQueue = () => {
     }
   };
 
-  const handleCancel = async (item: TransferItem) => {
-    try {
-      await api.sftpCancelTransfer(item.id);
-      cancelTransfer(item.id);
-    } catch (e) {
-      console.error('Failed to cancel transfer:', e);
-    }
-  };
-
   return (
     <div className="h-48 bg-theme-bg border-t border-theme-border flex flex-col">
       <div className="flex items-center justify-between px-2 py-1 bg-theme-bg-panel border-b border-theme-border">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
-          Transfer Queue {activeCount > 0 ? `(${activeCount} active)` : ''}
-        </span>
         <div className="flex items-center gap-2">
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="h-6 text-xs px-2" 
-              disabled={activeCount === 0}
-              onClick={handlePauseAll}
+          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
+            Transfer Queue {activeCount > 0 ? `(${activeCount} active)` : ''}
+          </span>
+          {hasIncomplete && (
+            <button
+              onClick={() => setShowIncomplete(!showIncomplete)}
+              className="text-xs text-oxide-accent hover:underline flex items-center gap-1"
             >
-              Pause All
-            </Button>
+              <History className="h-3 w-3" />
+              {incompleteTransfers.length} incomplete
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
             {hasCompleted && (
-              <Button 
-                size="sm" 
-                variant="ghost" 
+              <Button
+                size="sm"
+                variant="ghost"
                 className="h-6 text-xs px-2"
                 onClick={clearCompleted}
               >
@@ -97,7 +143,66 @@ export const TransferQueue = () => {
             )}
         </div>
       </div>
-      
+
+      {/* Incomplete Transfers Section */}
+      {showIncomplete && hasIncomplete && (
+        <div className="border-b border-theme-border bg-zinc-900/30">
+          <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase tracking-wide">
+            Incomplete Transfers (Resumable)
+          </div>
+          <div className="max-h-32 overflow-y-auto p-2 space-y-1">
+            {incompleteTransfers.map(transfer => (
+              <div
+                key={transfer.transfer_id}
+                className="flex items-center gap-2 text-xs p-2 bg-zinc-900/50 rounded-sm border border-yellow-500/30 hover:border-yellow-500/50"
+              >
+                <div className="w-4 text-center text-yellow-500 font-bold">
+                  {transfer.transfer_type === 'Upload' ? '↑' : '↓'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-zinc-300" title={transfer.source_path}>
+                    {transfer.source_path.split('/').pop()}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                    <span>{transfer.transfer_type}</span>
+                    <span>•</span>
+                    <span>{Math.round(transfer.progress_percent)}%</span>
+                    <span>•</span>
+                    <span>{formatBytes(transfer.transferred_bytes)} / {formatBytes(transfer.total_bytes)}</span>
+                  </div>
+                  {transfer.error && (
+                    <div className="text-[10px] text-red-400 truncate" title={transfer.error}>
+                      {transfer.error}
+                    </div>
+                  )}
+                </div>
+                <div className="text-right text-[10px] text-zinc-500">
+                  {transfer.status === 'Paused' && 'Paused'}
+                  {transfer.status === 'Failed' && 'Failed'}
+                </div>
+                {transfer.can_resume && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+                    onClick={() => handleResumeIncomplete(transfer)}
+                    title="Resume transfer"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            {loadingIncomplete && (
+              <div className="flex items-center justify-center py-2 text-xs text-zinc-500">
+                <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                Loading...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
          {items.length === 0 ? (
            <div className="flex items-center justify-center h-full text-sm text-zinc-500">
@@ -108,7 +213,9 @@ export const TransferQueue = () => {
              <div 
                key={item.id} 
                className={`flex items-center gap-3 text-sm p-2 bg-zinc-900/50 rounded-sm border ${
-                 item.state === 'error' ? 'border-red-500/50' : 'border-transparent hover:border-theme-border'
+                 item.state === 'error' ? 'border-red-500/50' : 
+                 item.state === 'cancelled' ? 'border-yellow-500/30' :
+                 'border-transparent hover:border-theme-border'
                }`}
              >
                  <div className="w-4 text-center text-zinc-500 font-bold">
@@ -125,47 +232,66 @@ export const TransferQueue = () => {
                      </div>
                  </div>
                  <div className={`w-24 text-right text-xs font-mono ${
-                   item.state === 'error' ? 'text-red-400' : 'text-zinc-500'
+                   item.state === 'error' ? 'text-red-400' : 
+                   item.state === 'cancelled' ? 'text-yellow-500' :
+                   'text-zinc-500'
                  }`}>
                      {getStatusText(item)}
                  </div>
                  <div className="flex items-center gap-1">
-                     {item.state === 'active' && (
-                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handlePause(item)}>
-                           <Pause className="h-3 w-3" />
-                         </Button>
-                     )}
-                     {item.state === 'paused' && (
-                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleResume(item)}>
-                           <Play className="h-3 w-3" />
-                         </Button>
-                     )}
                      {item.state === 'completed' && (
                          <Check className="h-4 w-4 text-green-500" />
+                     )}
+                     {item.state === 'cancelled' && (
+                         <AlertCircle className="h-4 w-4 text-yellow-500" />
                      )}
                      {item.state === 'error' && (
                          <AlertCircle className="h-4 w-4 text-red-400" />
                      )}
-                     {(item.state === 'active' || item.state === 'pending' || item.state === 'paused') && (
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-6 w-6 hover:text-red-400"
-                          onClick={() => handleCancel(item)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
+                     
+                     {/* Pause/Resume button for active transfers */}
+                     {(item.state === 'active' || item.state === 'pending') && (
+                       <Button 
+                         size="icon" 
+                         variant="ghost" 
+                         className="h-6 w-6 hover:text-yellow-500"
+                         onClick={() => handlePause(item)}
+                         title="Pause transfer"
+                       >
+                         <Pause className="h-3 w-3" />
+                       </Button>
                      )}
-                     {(item.state === 'completed' || item.state === 'error') && (
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-6 w-6"
-                          onClick={() => removeTransfer(item.id)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
+                     
+                     {item.state === 'paused' && (
+                       <Button 
+                         size="icon" 
+                         variant="ghost" 
+                         className="h-6 w-6 hover:text-green-500"
+                         onClick={() => handleResume(item)}
+                         title="Resume transfer"
+                       >
+                         <Play className="h-3 w-3" />
+                       </Button>
                      )}
+                     
+                     {/* Cancel button (X): cancel during transfer, remove when finished */}
+                     <Button 
+                       size="icon" 
+                       variant="ghost" 
+                       className={`h-6 w-6 ${
+                         (item.state === 'active' || item.state === 'pending' || item.state === 'paused') 
+                         ? 'hover:text-red-400' 
+                         : ''
+                       }`}
+                       onClick={() => handleCancel(item)}
+                       title={
+                         (item.state === 'active' || item.state === 'pending' || item.state === 'paused')
+                         ? 'Cancel transfer'
+                         : 'Remove from list'
+                       }
+                     >
+                       <X className="h-3 w-3" />
+                     </Button>
                  </div>
              </div>
          ))

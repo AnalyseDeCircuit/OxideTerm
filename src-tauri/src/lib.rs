@@ -17,7 +17,7 @@ use commands::config::ConfigState;
 use commands::HealthRegistry;
 use session::{AutoReconnectService, SessionRegistry};
 use sftp::session::SftpRegistry;
-use sftp::TransferManager;
+use sftp::{ProgressStore, RedbProgressStore, TransferManager};
 use state::StateStore;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -129,6 +129,25 @@ pub fn run() {
     // Create SFTP registry
     let sftp_registry = Arc::new(SftpRegistry::new());
 
+    // Create progress store for transfer resume
+    let progress_store = match RedbProgressStore::default_path() {
+        Ok(path) => {
+            match RedbProgressStore::new(&path) {
+                Ok(store) => Arc::new(store),
+                Err(e) => {
+                    tracing::warn!("Failed to create progress store at {:?}: {}. Resume disabled.", path, e);
+                    // Create a no-op store that doesn't persist
+                    Arc::new(crate::sftp::progress::DummyProgressStore) as Arc<dyn ProgressStore>
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to get progress store path: {}. Resume disabled.", e);
+            // Create a no-op store
+            Arc::new(crate::sftp::progress::DummyProgressStore) as Arc<dyn ProgressStore>
+        }
+    };
+
     // Create transfer manager for concurrent transfer control
     let transfer_manager = Arc::new(TransferManager::new());
 
@@ -144,6 +163,7 @@ pub fn run() {
         .manage(health_registry)
         .manage(sftp_registry)
         .manage(transfer_manager)
+        .manage(progress_store)
         .setup(move |app| {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
@@ -260,6 +280,9 @@ pub fn run() {
             commands::sftp_pause_transfer,
             commands::sftp_resume_transfer,
             commands::sftp_transfer_stats,
+            // Resume transfer commands
+            commands::sftp_list_incomplete_transfers,
+            commands::sftp_resume_transfer_with_retry,
             // Network and reconnect commands
             commands::network_status_changed,
             commands::cancel_reconnect,

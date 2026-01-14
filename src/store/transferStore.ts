@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type TransferState = 'pending' | 'active' | 'paused' | 'completed' | 'error';
+export type TransferState = 'pending' | 'active' | 'paused' | 'completed' | 'cancelled' | 'error';
 export type TransferDirection = 'upload' | 'download';
 
 export interface TransferItem {
@@ -68,12 +68,23 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
       if (!transfer) return state;
       
       const newTransfers = new Map(state.transfers);
+      
+      // Determine new state: preserve 'paused' state, otherwise set to completed/active
+      let newState: TransferState;
+      if (transfer.state === 'paused') {
+        newState = 'paused'; // Keep paused state
+      } else if (transferred >= total) {
+        newState = 'completed';
+      } else {
+        newState = 'active';
+      }
+      
       newTransfers.set(id, {
         ...transfer,
         transferred,
         size: total,
-        state: transferred >= total ? 'completed' : 'active',
-        endTime: transferred >= total ? Date.now() : undefined,
+        state: newState,
+        endTime: newState === 'completed' ? Date.now() : undefined,
       });
       return { transfers: newTransfers };
     });
@@ -107,7 +118,7 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     set((state) => {
       const newTransfers = new Map(state.transfers);
       for (const [id, transfer] of newTransfers) {
-        if (transfer.state === 'completed') {
+        if (transfer.state === 'completed' || transfer.state === 'cancelled') {
           newTransfers.delete(id);
         }
       }
@@ -162,8 +173,18 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
   },
   
   cancelTransfer: (id) => {
-    // Mark as error/cancelled, actual cancellation needs backend support
-    get().setTransferState(id, 'error', 'Cancelled by user');
+    set((state) => {
+      const transfer = state.transfers.get(id);
+      if (!transfer) return state;
+      
+      const newTransfers = new Map(state.transfers);
+      newTransfers.set(id, { 
+        ...transfer, 
+        state: 'cancelled',
+        endTime: Date.now(),
+      });
+      return { transfers: newTransfers };
+    });
   },
   
   getTransfersBySession: (sessionId) => {

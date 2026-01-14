@@ -395,3 +395,41 @@ export interface SearchResult {
   total_matches: number;
   duration_ms: number;
 }
+
+// SFTP Resume Transfer Types
+export type TransferStatusType = 'Active' | 'Paused' | 'Failed' | 'Completed' | 'Cancelled';
+export type TransferType = 'Upload' | 'Download';
+
+/**
+ * Stored transfer progress from persistent storage
+ * Corresponds to backend StoredTransferProgress
+ */
+export interface StoredTransferProgress {
+  transfer_id: string;
+  transfer_type: TransferType;
+  source_path: string;
+  destination_path: string;
+  transferred_bytes: number;
+  total_bytes: number;
+  status: TransferStatusType;
+  last_updated: string; // ISO datetime
+  session_id: string;
+  error?: string;
+}
+
+/**
+ * Incomplete transfer info for UI display
+ */
+export interface IncompleteTransferInfo {
+  transfer_id: string;
+  transfer_type: TransferType;
+  source_path: string;
+  destination_path: string;
+  transferred_bytes: number;
+  total_bytes: number;
+  status: TransferStatusType;
+  session_id: string;
+  error?: string;
+  progress_percent: number;
+  can_resume: boolean;
+}

@@ -116,8 +116,11 @@ pub async fn sftp_download(
     session_id: String,
     remote_path: String,
     local_path: String,
+    transfer_id: Option<String>,
     app: AppHandle,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
+    progress_store: State<'_, Arc<dyn crate::sftp::ProgressStore>>,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
 ) -> Result<(), SftpError> {
     let sftp = sftp_registry
         .get(&session_id)
@@ -136,7 +139,18 @@ pub async fn sftp_download(
     });
 
     let sftp = sftp.lock().await;
-    sftp.download(&remote_path, &local_path, Some(tx)).await
+
+    // Use download_with_resume for full features (pause/cancel, retry)
+    sftp.download_with_resume(
+        &remote_path,
+        &local_path,
+        (*progress_store).clone(),
+        Some(tx),
+        Some((*transfer_manager).clone()),
+        transfer_id,
+    ).await?;
+
+    Ok(())
 }
 
 /// Upload file
@@ -145,8 +159,11 @@ pub async fn sftp_upload(
     session_id: String,
     local_path: String,
     remote_path: String,
+    transfer_id: Option<String>,
     app: AppHandle,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
+    progress_store: State<'_, Arc<dyn crate::sftp::ProgressStore>>,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
 ) -> Result<(), SftpError> {
     let sftp = sftp_registry
         .get(&session_id)
@@ -165,7 +182,18 @@ pub async fn sftp_upload(
     });
 
     let sftp = sftp.lock().await;
-    sftp.upload(&local_path, &remote_path, Some(tx)).await
+
+    // Use upload_with_resume for full features (pause/cancel, retry, .oxide-part)
+    sftp.upload_with_resume(
+        &local_path,
+        &remote_path,
+        (*progress_store).clone(),
+        Some(tx),
+        Some((*transfer_manager).clone()),
+        transfer_id,
+    ).await?;
+
+    Ok(())
 }
 
 /// Delete file or directory
@@ -383,3 +411,146 @@ pub async fn sftp_transfer_stats(
         transfer_manager.max_concurrent(),
     ))
 }
+
+// ============ Resume Transfer Commands ============
+
+/// List incomplete transfers for a session
+#[tauri::command]
+pub async fn sftp_list_incomplete_transfers(
+    session_id: String,
+    progress_store: State<'_, Arc<dyn crate::sftp::ProgressStore>>,
+) -> Result<Vec<IncompleteTransferInfo>, SftpError> {
+    use crate::sftp::progress::TransferType;
+    use crate::sftp::progress::TransferStatus;
+
+    let transfers = progress_store.list_incomplete(&session_id).await?;
+
+    // Convert to frontend format
+    let result: Vec<IncompleteTransferInfo> = transfers
+        .into_iter()
+        .map(|t| {
+            let progress_percent = if t.total_bytes > 0 {
+                (t.transferred_bytes as f64 / t.total_bytes as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            // Can resume if paused or failed
+            let can_resume = matches!(t.status, TransferStatus::Paused | TransferStatus::Failed);
+
+            IncompleteTransferInfo {
+                transfer_id: t.transfer_id,
+                transfer_type: match t.transfer_type {
+                    TransferType::Upload => "Upload",
+                    TransferType::Download => "Download",
+                },
+                source_path: t.source_path.to_string_lossy().to_string(),
+                destination_path: t.destination_path.to_string_lossy().to_string(),
+                transferred_bytes: t.transferred_bytes,
+                total_bytes: t.total_bytes,
+                status: match t.status {
+                    TransferStatus::Active => "Active",
+                    TransferStatus::Paused => "Paused",
+                    TransferStatus::Failed => "Failed",
+                    TransferStatus::Completed => "Completed",
+                    TransferStatus::Cancelled => "Cancelled",
+                },
+                session_id: t.session_id,
+                error: t.error,
+                progress_percent,
+                can_resume,
+            }
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// Resume a specific transfer with retry support
+#[tauri::command]
+pub async fn sftp_resume_transfer_with_retry(
+    session_id: String,
+    transfer_id: String,
+    app: AppHandle,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+    progress_store: State<'_, Arc<dyn crate::sftp::ProgressStore>>,
+    transfer_manager: State<'_, Arc<crate::sftp::TransferManager>>,
+) -> Result<(), SftpError> {
+    use crate::sftp::progress::TransferType;
+
+    // Load the stored progress
+    let stored_progress = progress_store
+        .load(&transfer_id)
+        .await?
+        .ok_or_else(|| SftpError::TransferError("Transfer not found in progress store".to_string()))?;
+
+    // Get SFTP session
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    // Create progress channel
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<TransferProgress>(100);
+
+    // Spawn progress event emitter
+    let app_clone = app.clone();
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(progress) = rx.recv().await {
+            let _ = app_clone.emit(&format!("sftp:progress:{}", session_id_clone), &progress);
+        }
+    });
+
+    let sftp = sftp.lock().await;
+
+    // Get Arc clones
+    let progress_store_arc = (*progress_store).clone();
+    let transfer_manager_arc = (*transfer_manager).clone();
+
+    // Call appropriate resume method based on transfer type
+    match stored_progress.transfer_type {
+        TransferType::Download => {
+            sftp
+                .download_with_resume(
+                    &stored_progress.source_path.to_string_lossy(),
+                    &stored_progress.destination_path.to_string_lossy(),
+                    progress_store_arc,
+                    Some(tx),
+                    Some(transfer_manager_arc),
+                    Some(transfer_id.clone()),
+                )
+                .await?;
+        }
+        TransferType::Upload => {
+            sftp
+                .upload_with_resume(
+                    &stored_progress.source_path.to_string_lossy(),
+                    &stored_progress.destination_path.to_string_lossy(),
+                    progress_store_arc,
+                    Some(tx),
+                    Some(transfer_manager_arc),
+                    Some(transfer_id.clone()),
+                )
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Frontend type for incomplete transfer info
+#[derive(serde::Serialize)]
+pub struct IncompleteTransferInfo {
+    transfer_id: String,
+    transfer_type: &'static str,
+    source_path: String,
+    destination_path: String,
+    transferred_bytes: u64,
+    total_bytes: u64,
+    status: &'static str,
+    session_id: String,
+    error: Option<String>,
+    progress_percent: f64,
+    can_resume: bool,
+}
+

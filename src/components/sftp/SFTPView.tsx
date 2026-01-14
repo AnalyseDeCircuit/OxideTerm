@@ -782,13 +782,13 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           if (isDirectory) {
             await api.sftpUploadDir(sessionId, localFilePath, remoteFilePath);
           } else {
-            await api.sftpUpload(sessionId, localFilePath, remoteFilePath);
+            await api.sftpUpload(sessionId, localFilePath, remoteFilePath, transferId);
           }
         } else {
           if (isDirectory) {
             await api.sftpDownloadDir(sessionId, remoteFilePath, localFilePath);
           } else {
-            await api.sftpDownload(sessionId, remoteFilePath, localFilePath);
+            await api.sftpDownload(sessionId, remoteFilePath, localFilePath, transferId);
           }
         }
         // If no events fired, mark as completed
@@ -1124,7 +1124,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
       </div>
       
       {/* Transfer Queue Panel */}
-      <TransferQueue />
+      <TransferQueue sessionId={sessionId} />
 
       {/* Preview Dialog */}
       <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
