@@ -361,11 +361,11 @@ mod tests {
             host: "test".to_string(),
             port: 22,
             username: "user".to_string(),
-            auth_method: "password".to_string(),
-            key_path: None,
+            auth: crate::session::types::AuthMethod::password("test123"),
+            name: None,
+            color: None,
             cols: 80,
             rows: 24,
-            connection_id: None,
         };
 
         let reconnector = SessionReconnector::new(
@@ -390,11 +390,11 @@ mod tests {
             host: "test".to_string(),
             port: 22,
             username: "user".to_string(),
-            auth_method: "password".to_string(),
-            key_path: None,
+            auth: crate::session::types::AuthMethod::password("test123"),
+            name: None,
+            color: None,
             cols: 80,
             rows: 24,
-            connection_id: None,
         };
 
         let reconnector = SessionReconnector::new(

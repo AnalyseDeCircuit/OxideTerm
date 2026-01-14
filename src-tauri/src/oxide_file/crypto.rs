@@ -50,7 +50,7 @@ pub fn encrypt_oxide_file(
     // 2. Derive encryption key from password
     let key = derive_key(password, &salt)?;
 
-    // 3. Serialize payload with bincode
+    // 3. Serialize payload with bincode (use standard config for compatibility)
     let plaintext = bincode::serialize(payload).map_err(|e| OxideFileError::Serialization(e))?;
 
     // 4. Encrypt with ChaCha20-Poly1305
@@ -107,7 +107,7 @@ pub fn decrypt_oxide_file(
         .decrypt(nonce_obj, ciphertext_with_tag.as_ref())
         .map_err(|_| OxideFileError::DecryptionFailed)?;
 
-    // 5. Deserialize payload
+    // 5. Deserialize payload (use standard config for compatibility)
     let payload: EncryptedPayload =
         bincode::deserialize(&plaintext).map_err(|e| OxideFileError::Serialization(e))?;
 
@@ -160,6 +160,8 @@ mod tests {
             color: None,
             tags: vec![],
             options: ConnectionOptions::default(),
+            proxy_chain: vec![],
+            session_buffer: None,
         }
     }
 

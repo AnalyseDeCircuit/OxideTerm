@@ -17,7 +17,7 @@ pub const SALT_LEN: usize = 32;
 pub const NONCE_LEN: usize = 12;
 pub const TAG_LEN: usize = 16;
 
-/// File header structure (20 bytes fixed)
+/// File header structure (21 bytes fixed)
 #[derive(Debug)]
 pub struct FileHeader {
     pub magic: [u8; 5],
@@ -39,7 +39,7 @@ impl FileHeader {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(20);
+        let mut bytes = Vec::with_capacity(21);
         bytes.extend_from_slice(&self.magic);
         bytes.extend_from_slice(&self.version.to_le_bytes());
         bytes.extend_from_slice(&self.flags.to_le_bytes());
@@ -49,7 +49,7 @@ impl FileHeader {
     }
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, OxideFileError> {
-        if data.len() < 20 {
+        if data.len() < 21 {
             return Err(OxideFileError::InvalidFormat(
                 "Header too short".to_string(),
             ));
@@ -114,6 +114,10 @@ pub struct EncryptedConnection {
     /// Proxy chain for multi-hop connections (intermediate jump hosts)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proxy_chain: Vec<EncryptedProxyHop>,
+    /// Terminal buffer snapshot (base64-encoded bincode)
+    /// This can be quite large, so it's optional
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_buffer: Option<String>,
 }
 
 /// Encrypted proxy hop for multi-hop connections
@@ -163,7 +167,7 @@ impl OxideFile {
 
         // Combine all parts
         let total_len =
-            20 + SALT_LEN + NONCE_LEN + metadata_json.len() + self.encrypted_data.len() + TAG_LEN;
+            21 + SALT_LEN + NONCE_LEN + metadata_json.len() + self.encrypted_data.len() + TAG_LEN;
         let mut bytes = Vec::with_capacity(total_len);
 
         bytes.extend_from_slice(&header_bytes);
@@ -180,8 +184,8 @@ impl OxideFile {
     pub fn from_bytes(data: &[u8]) -> Result<Self, OxideFileError> {
         let mut cursor = Cursor::new(data);
 
-        // Read header (20 bytes)
-        let mut header_bytes = [0u8; 20];
+        // Read header (21 bytes)
+        let mut header_bytes = [0u8; 21];
         cursor
             .read_exact(&mut header_bytes)
             .map_err(|_| OxideFileError::InvalidFormat("Failed to read header".to_string()))?;

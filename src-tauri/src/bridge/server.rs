@@ -12,6 +12,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
 use super::protocol::{data_frame, error_frame, heartbeat_frame, Frame, FrameCodec};
+use crate::session::{parse_terminal_output, ScrollBuffer};
 use crate::ssh::{
     ExtendedSessionHandle as SshExtendedSessionHandle, SessionCommand, SessionHandle,
 };
@@ -118,7 +119,10 @@ pub struct WsBridge;
 impl WsBridge {
     /// Start a new WebSocket bridge for an SSH session
     /// Returns the port number the WS server is listening on
-    pub async fn start(session_handle: SessionHandle) -> Result<(String, u16, String), String> {
+    pub async fn start(
+        session_handle: SessionHandle,
+        scroll_buffer: Arc<ScrollBuffer>,
+    ) -> Result<(String, u16, String), String> {
         // Generate one-time authentication token to prevent local process hijacking
         let token = uuid::Uuid::new_v4().to_string();
 
@@ -150,6 +154,7 @@ impl WsBridge {
             session_handle,
             ready_tx,
             token_clone,
+            scroll_buffer,
         ));
 
         // Wait for server to be ready (with timeout)
@@ -161,6 +166,7 @@ impl WsBridge {
     /// Start with resize channel support
     pub async fn start_with_resize(
         session_handle: SessionHandle,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String, ResizeRx), String> {
         // Generate one-time authentication token to prevent local process hijacking
         let token = uuid::Uuid::new_v4().to_string();
@@ -196,6 +202,7 @@ impl WsBridge {
             extended,
             ready_tx,
             token_clone,
+            scroll_buffer,
         ));
 
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
@@ -207,6 +214,7 @@ impl WsBridge {
     /// This is the v2 API that works with SessionRegistry
     pub async fn start_extended(
         session_handle: SshExtendedSessionHandle,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String), String> {
         // Generate one-time authentication token to prevent local process hijacking
         let token = uuid::Uuid::new_v4().to_string();
@@ -235,6 +243,7 @@ impl WsBridge {
             session_handle,
             ready_tx,
             token_clone,
+            scroll_buffer,
         ));
 
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
@@ -248,6 +257,7 @@ impl WsBridge {
     /// The disconnect_rx will receive the reason when the WebSocket connection ends
     pub async fn start_extended_with_disconnect(
         session_handle: SshExtendedSessionHandle,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String, oneshot::Receiver<DisconnectReason>), String> {
         // Generate one-time authentication token to prevent local process hijacking
         let token = uuid::Uuid::new_v4().to_string();
@@ -278,6 +288,7 @@ impl WsBridge {
             ready_tx,
             token_clone,
             disconnect_tx,
+            scroll_buffer,
         ));
 
         let _ = tokio::time::timeout(Duration::from_millis(500), ready_rx).await;
@@ -291,6 +302,7 @@ impl WsBridge {
         session_handle: SessionHandle,
         ready_tx: oneshot::Sender<()>,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) {
         let session_id = session_handle.id.clone();
 
@@ -311,7 +323,7 @@ impl WsBridge {
                     addr, session_id
                 );
                 if let Err(e) =
-                    Self::handle_connection_v1(stream, session_handle, None, expected_token).await
+                    Self::handle_connection_v1(stream, session_handle, None, expected_token, scroll_buffer).await
                 {
                     error!("WebSocket connection error: {}", e);
                 }
@@ -333,6 +345,7 @@ impl WsBridge {
         extended: ExtendedSessionHandle,
         ready_tx: oneshot::Sender<()>,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) {
         let session_id = extended.handle.id.clone();
 
@@ -355,6 +368,7 @@ impl WsBridge {
                     extended.handle,
                     Some(extended.resize_tx),
                     expected_token,
+                    scroll_buffer,
                 )
                 .await
                 {
@@ -381,6 +395,7 @@ impl WsBridge {
         session_handle: SessionHandle,
         resize_tx: Option<ResizeTx>,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(), String> {
         // Perform WebSocket handshake (no auth yet)
         let ws_stream = accept_async(stream)
@@ -480,8 +495,16 @@ impl WsBridge {
         });
 
         // Task: Forward SSH output to WebSocket as Data frames
+        let buffer_clone = scroll_buffer.clone();
         let ssh_out_task = tokio::spawn(async move {
             while let Some(data) = stdout_rx.recv().await {
+                // Parse terminal output and append to scroll buffer
+                let lines = parse_terminal_output(&data);
+                if !lines.is_empty() {
+                    buffer_clone.append_batch(lines).await;
+                }
+                
+                // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data));
                 if frame_tx_ssh.send(frame.encode()).await.is_err() {
                     debug!("Frame channel closed");
@@ -663,6 +686,7 @@ impl WsBridge {
         session_handle: SshExtendedSessionHandle,
         ready_tx: oneshot::Sender<()>,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) {
         let session_id = session_handle.id.clone();
 
@@ -681,7 +705,7 @@ impl WsBridge {
                     addr, session_id
                 );
                 if let Err(e) =
-                    Self::handle_connection_v2(stream, session_handle, expected_token).await
+                    Self::handle_connection_v2(stream, session_handle, expected_token, scroll_buffer).await
                 {
                     error!("WebSocket connection error: {}", e);
                 }
@@ -704,6 +728,7 @@ impl WsBridge {
         ready_tx: oneshot::Sender<()>,
         expected_token: String,
         disconnect_tx: oneshot::Sender<DisconnectReason>,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) {
         let session_id = session_handle.id.clone();
 
@@ -721,7 +746,7 @@ impl WsBridge {
                     "WebSocket connection (v2+disconnect) from {} for session {}",
                     addr, session_id
                 );
-                match Self::handle_connection_v2_with_disconnect(stream, session_handle, expected_token).await {
+                match Self::handle_connection_v2_with_disconnect(stream, session_handle, expected_token, scroll_buffer).await {
                     Ok(reason) => reason,
                     Err(e) => {
                         error!("WebSocket connection error: {}", e);
@@ -757,6 +782,7 @@ impl WsBridge {
         stream: TcpStream,
         session_handle: SshExtendedSessionHandle,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(), String> {
         // Perform WebSocket handshake (no auth yet)
         let ws_stream = accept_async(stream)
@@ -859,9 +885,18 @@ impl WsBridge {
         });
 
         // Task: SSH stdout -> WebSocket
+        let buffer_clone = scroll_buffer.clone();
         let ssh_out_task = tokio::spawn(async move {
             while let Some(data) = stdout_rx.recv().await {
                 state_out.touch();
+                
+                // Parse terminal output and append to scroll buffer
+                let lines = parse_terminal_output(&data);
+                if !lines.is_empty() {
+                    buffer_clone.append_batch(lines).await;
+                }
+                
+                // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data)).encode();
                 if frame_tx_ssh.send(frame).await.is_err() {
                     break;
@@ -1017,6 +1052,7 @@ impl WsBridge {
         stream: TcpStream,
         session_handle: SshExtendedSessionHandle,
         expected_token: String,
+        scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<DisconnectReason, String> {
         // Perform WebSocket handshake (no auth yet)
         let ws_stream = accept_async(stream)
@@ -1113,9 +1149,18 @@ impl WsBridge {
         });
 
         // Task: SSH stdout -> WebSocket
+        let buffer_clone = scroll_buffer.clone();
         let ssh_out_task = tokio::spawn(async move {
             while let Some(data) = stdout_rx.recv().await {
                 state_out.touch();
+                
+                // Parse terminal output and append to scroll buffer
+                let lines = parse_terminal_output(&data);
+                if !lines.is_empty() {
+                    buffer_clone.append_batch(lines).await;
+                }
+                
+                // Forward to WebSocket
                 let frame = data_frame(Bytes::from(data)).encode();
                 if frame_tx_ssh.send(frame).await.is_err() {
                     return "channel_closed";

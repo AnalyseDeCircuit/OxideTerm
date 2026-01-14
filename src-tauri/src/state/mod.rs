@@ -6,5 +6,5 @@ pub mod session;
 pub mod store;
 
 pub use forwarding::PersistedForward;
-pub use session::PersistedSession;
+pub use session::{BufferConfig, PersistedSession, SessionPersistence};
 pub use store::{StateError, StateStore};

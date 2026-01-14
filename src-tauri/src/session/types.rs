@@ -1,9 +1,11 @@
 //! Session Types and Data Structures
 
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
+use super::scroll_buffer::ScrollBuffer;
 use super::state::{SessionState, SessionStateMachine};
 use crate::ssh::{HandleController, SessionCommand};
 
@@ -173,6 +175,8 @@ pub struct SessionEntry {
     /// Handle controller for opening additional channels (e.g., SFTP, forwarding)
     /// This is a Clone-able wrapper that communicates with the Handle Owner Task
     pub handle_controller: Option<HandleController>,
+    /// Terminal scroll buffer for backend storage and search
+    pub scroll_buffer: Arc<ScrollBuffer>,
     /// Creation timestamp
     pub created_at: Instant,
     /// Tab order (for UI sorting)
@@ -190,6 +194,23 @@ impl SessionEntry {
             ws_token: None,
             cmd_tx: None,
             handle_controller: None,
+            scroll_buffer: Arc::new(ScrollBuffer::new()), // Default 100k lines
+            created_at: Instant::now(),
+            order,
+        }
+    }
+
+    /// Create a new session entry with custom buffer size
+    pub fn with_buffer_config(id: String, config: SessionConfig, order: usize, max_lines: usize) -> Self {
+        Self {
+            id,
+            config,
+            state_machine: SessionStateMachine::new(),
+            ws_port: None,
+            ws_token: None,
+            cmd_tx: None,
+            handle_controller: None,
+            scroll_buffer: Arc::new(ScrollBuffer::with_capacity(max_lines)),
             created_at: Instant::now(),
             order,
         }

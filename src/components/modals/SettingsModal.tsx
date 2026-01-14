@@ -58,7 +58,11 @@ const usePersistedSettings = () => {
             lineHeight: 1.2,
             cursorStyle: 'block',
             cursorBlink: true,
-            scrollback: 10000,
+            scrollback: 1000,
+            
+            // Buffer
+            bufferMaxLines: 100000,
+            bufferSaveOnDisconnect: true,
             
             // Appearance
             sidebarCollapsedDefault: false,
@@ -281,7 +285,7 @@ export const SettingsModal = () => {
                                     </Select>
                                 </div>
                                 <div className="grid gap-2">
-                                    <Label>Scrollback Lines</Label>
+                                    <Label>Scrollback Lines (Frontend)</Label>
                                     <Select 
                                         value={settings.scrollback.toString()}
                                         onValueChange={(v) => updateSetting('scrollback', parseInt(v))}
@@ -290,7 +294,7 @@ export const SettingsModal = () => {
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {['1000', '5000', '10000', '50000'].map(l => (
+                                            {['1000', '5000', '10000'].map(l => (
                                                 <SelectItem key={l} value={l}>{l}</SelectItem>
                                             ))}
                                         </SelectContent>
@@ -336,6 +340,51 @@ export const SettingsModal = () => {
                                 />
                                 <Label htmlFor="blink">Cursor Blink</Label>
                             </div>
+                        </div>
+
+                        {/* Buffer Settings */}
+                        <div>
+                            <h3 className="text-lg font-medium text-zinc-100 mb-1">Buffer Management</h3>
+                            <p className="text-sm text-zinc-500">Configure backend scroll buffer for search and persistence.</p>
+                        </div>
+                        <Separator />
+                        
+                        <div className="grid gap-4">
+                            <div className="grid gap-2">
+                                <Label>Maximum Buffer Lines</Label>
+                                <Select 
+                                    value={settings.bufferMaxLines.toString()}
+                                    onValueChange={(v) => updateSetting('bufferMaxLines', parseInt(v))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="10000">10,000 lines (~1 MB)</SelectItem>
+                                        <SelectItem value="50000">50,000 lines (~5 MB)</SelectItem>
+                                        <SelectItem value="100000">100,000 lines (~10 MB)</SelectItem>
+                                        <SelectItem value="500000">500,000 lines (~50 MB)</SelectItem>
+                                        <SelectItem value="1000000">1,000,000 lines (~100 MB)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-zinc-500">
+                                    Older lines will be automatically discarded when limit is reached.
+                                </p>
+                            </div>
+                            
+                            <div className="flex items-center space-x-2">
+                                <Checkbox 
+                                    id="buffer-save" 
+                                    checked={settings.bufferSaveOnDisconnect}
+                                    onCheckedChange={(c) => updateSetting('bufferSaveOnDisconnect', !!c)}
+                                />
+                                <Label htmlFor="buffer-save" className="cursor-pointer">
+                                    Save buffer content on disconnect
+                                </Label>
+                            </div>
+                            <p className="text-xs text-zinc-500 -mt-2 ml-6">
+                                Buffer content will be persisted and restored when reconnecting to the session.
+                            </p>
                         </div>
                     </div>
                 )}

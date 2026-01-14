@@ -30,6 +30,11 @@ export interface ProxyHopConfig {
   passphrase?: string;
 }
 
+export interface BufferConfig {
+  max_lines: number;
+  save_on_disconnect: boolean;
+}
+
 export interface ConnectRequest {
   host: string;
   port: number;
@@ -43,6 +48,7 @@ export interface ConnectRequest {
   name?: string;
   group?: string;
   proxy_chain?: ProxyHopConfig[];
+  buffer_config?: BufferConfig;
 }
 
 // Persisted Session Types
@@ -260,4 +266,39 @@ export interface SshKeyInfo {
   path: string;
   key_type: string;
   has_passphrase: boolean;
+}
+
+// Scroll Buffer Types
+export interface TerminalLine {
+  text: string;
+  timestamp: number;
+}
+
+export interface BufferStats {
+  current_lines: number;
+  total_lines: number;
+  max_lines: number;
+  memory_usage_mb: number;
+}
+
+// Search Types
+export interface SearchOptions {
+  query: string;
+  case_sensitive: boolean;
+  regex: boolean;
+  whole_word: boolean;
+}
+
+export interface SearchMatch {
+  line_number: number;
+  column_start: number;
+  column_end: number;
+  matched_text: string;
+  line_content: string;
+}
+
+export interface SearchResult {
+  matches: SearchMatch[];
+  total_matches: number;
+  duration_ms: number;
 }

@@ -219,12 +219,12 @@ mod tests {
     fn create_test_forward_rule() -> ForwardRule {
         ForwardRule {
             id: "forward-1".to_string(),
-            forward_type: ManagerForwardType::Local,
+            forward_type: crate::forwarding::manager::ForwardType::Local,
             bind_address: "127.0.0.1".to_string(),
             bind_port: 8080,
             target_host: "localhost".to_string(),
             target_port: 80,
-            status: ForwardStatus::Active,
+            status: crate::forwarding::manager::ForwardStatus::Active,
             description: None,
         }
     }

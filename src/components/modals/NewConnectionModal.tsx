@@ -105,6 +105,13 @@ export const NewConnectionModal = () => {
 
     setLoading(true);
     try {
+      // Get buffer configuration from settings
+      const settings = JSON.parse(localStorage.getItem('oxide-settings') || '{}');
+      const bufferConfig = {
+        max_lines: settings.bufferMaxLines || 100000,
+        save_on_disconnect: settings.bufferSaveOnDisconnect !== false,
+      };
+
       const request: ConnectRequest = {
         name: name || undefined,
         host,
@@ -114,13 +121,14 @@ export const NewConnectionModal = () => {
         password: authType === 'password' ? password : undefined,
         key_path: authType === 'key' ? keyPath : undefined,
         group: saveConnection ? (group || undefined) : undefined,
-        proxy_chain: proxyServers.length > 0 ? proxyServers : undefined
+        proxy_chain: proxyServers.length > 0 ? proxyServers : undefined,
+        buffer_config: bufferConfig,
       };
 
       await connect(request);
       toggleModal('newConnection', false);
 
-      // Reset sensitive fields if not saved (TODO: Implement saving logic separately)
+      // Reset sensitive fields if not saved
       setPassword('');
     } catch (e) {
       console.error(e);

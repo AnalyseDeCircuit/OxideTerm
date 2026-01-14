@@ -27,17 +27,75 @@ pub struct PersistedSession {
     /// Version for migration support
     #[serde(default)]
     pub version: u32,
+
+    /// Terminal buffer content (optional, can be large)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_buffer: Option<Vec<u8>>,
+
+    /// Buffer configuration
+    #[serde(default)]
+    pub buffer_config: BufferConfig,
+}
+
+/// Terminal buffer configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BufferConfig {
+    /// Maximum lines to keep in buffer
+    #[serde(default = "default_max_lines")]
+    pub max_lines: usize,
+
+    /// Whether to save buffer on disconnect
+    #[serde(default = "default_save_on_disconnect")]
+    pub save_on_disconnect: bool,
+}
+
+fn default_max_lines() -> usize {
+    100_000
+}
+
+fn default_save_on_disconnect() -> bool {
+    true
+}
+
+impl Default for BufferConfig {
+    fn default() -> Self {
+        Self {
+            max_lines: default_max_lines(),
+            save_on_disconnect: default_save_on_disconnect(),
+        }
+    }
 }
 
 impl PersistedSession {
     /// Create a new persisted session
     pub fn new(id: String, config: SessionConfig, order: usize) -> Self {
+            Self {
+            id,
+            config,
+            created_at: Utc::now(),
+            order,
+            version: 2, // Incremented for buffer support
+            terminal_buffer: None,
+            buffer_config: BufferConfig::default(),
+        }
+    }
+
+    /// Create with terminal buffer
+    pub fn with_buffer(
+        id: String,
+        config: SessionConfig,
+        order: usize,
+        terminal_buffer: Vec<u8>,
+        buffer_config: BufferConfig,
+    ) -> Self {
         Self {
             id,
             config,
             created_at: Utc::now(),
             order,
-            version: 1,
+            version: 2,
+            terminal_buffer: Some(terminal_buffer),
+            buffer_config,
         }
     }
 

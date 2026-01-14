@@ -12,7 +12,11 @@ import {
   SshHostInfo,
   SshKeyInfo,
   PersistedSessionInfo,
-  PersistedForwardInfo
+  PersistedForwardInfo,
+  TerminalLine,
+  BufferStats,
+  SearchOptions,
+  SearchResult
 } from '../types';
 
 // Toggle this for development without a backend
@@ -402,6 +406,40 @@ export const api = {
   isReconnecting: async (sessionId: string): Promise<boolean> => {
     if (USE_MOCK) return false;
     return invoke('is_reconnecting', { sessionId });
+  },
+
+  // --- Scroll Buffer APIs ---
+  
+  getScrollBuffer: async (sessionId: string, startLine: number, count: number): Promise<TerminalLine[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_scroll_buffer', { sessionId, startLine, count });
+  },
+
+  getBufferStats: async (sessionId: string): Promise<BufferStats> => {
+    if (USE_MOCK) return { current_lines: 0, total_lines: 0, max_lines: 100000, memory_usage_mb: 0 };
+    return invoke('get_buffer_stats', { sessionId });
+  },
+
+  clearBuffer: async (sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('clear_buffer', { sessionId });
+  },
+
+  getAllBufferLines: async (sessionId: string): Promise<TerminalLine[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_all_buffer_lines', { sessionId });
+  },
+
+  // --- Search APIs ---
+  
+  searchTerminal: async (sessionId: string, options: SearchOptions): Promise<SearchResult> => {
+    if (USE_MOCK) return { matches: [], total_matches: 0, duration_ms: 0 };
+    return invoke('search_terminal', { sessionId, options });
+  },
+
+  scrollToLine: async (sessionId: string, lineNumber: number, contextLines: number): Promise<TerminalLine[]> => {
+    if (USE_MOCK) return [];
+    return invoke('scroll_to_line', { sessionId, lineNumber, contextLines });
   }
 };
 

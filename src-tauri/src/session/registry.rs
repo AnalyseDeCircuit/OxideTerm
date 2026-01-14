@@ -119,6 +119,37 @@ impl SessionRegistry {
         Ok(session_id)
     }
 
+    /// Create session with custom buffer configuration
+    pub fn create_session_with_buffer(&self, config: SessionConfig, max_lines: usize) -> Result<String, RegistryError> {
+        // Hold lock to prevent TOCTOU race between count check and insert
+        let _guard = self.create_lock.lock().unwrap();
+
+        // Check connection limit (now atomic with insert)
+        let active_count = self.active_count();
+        let max = self.max_sessions();
+
+        if active_count >= max {
+            return Err(RegistryError::ConnectionLimitReached {
+                current: active_count,
+                max,
+            });
+        }
+
+        // Generate session ID
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let order = self.order_counter.fetch_add(1, Ordering::SeqCst);
+
+        info!(
+            "Creating session {}: {}@{}:{} (order: {}, buffer: {} lines)",
+            session_id, config.username, config.host, config.port, order, max_lines
+        );
+
+        let entry = SessionEntry::with_buffer_config(session_id.clone(), config, order, max_lines);
+        self.sessions.insert(session_id.clone(), entry);
+
+        Ok(session_id)
+    }
+
     /// Start connecting a session
     pub fn start_connecting(&self, session_id: &str) -> Result<(), RegistryError> {
         let mut entry = self
@@ -285,6 +316,15 @@ impl SessionRegistry {
         self.sessions
             .get(session_id)
             .map(|entry| SessionInfo::from(entry.value()))
+    }
+
+    /// Execute a function with access to a session entry
+    /// This provides safe read-only access to the SessionEntry
+    pub fn with_session<F, R>(&self, session_id: &str, f: F) -> Option<R>
+    where
+        F: FnOnce(&SessionEntry) -> R,
+    {
+        self.sessions.get(session_id).map(|entry| f(entry.value()))
     }
 
     /// Get session config by ID (for reconnection)
@@ -462,6 +502,58 @@ impl SessionRegistry {
                 .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
 
             debug!("Persisted session metadata: {}", session_id);
+        }
+        Ok(())
+    }
+
+    /// Persist a session with terminal buffer (async)
+    pub async fn persist_session_with_buffer(&self, session_id: &str) -> Result<(), RegistryError> {
+        if let Some(persistence) = &self.persistence {
+            let (id, config, order, buffer_data, buffer_config) = {
+                let entry = self
+                    .sessions
+                    .get(session_id)
+                    .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
+
+                // Get buffer config from entry (or use default)
+                let buffer_config = crate::state::BufferConfig::default();
+
+                // Only save buffer if enabled in config
+                let buffer_data = if buffer_config.save_on_disconnect {
+                    // Serialize buffer
+                    match entry.scroll_buffer.save_to_bytes().await {
+                        Ok(data) => Some(data),
+                        Err(e) => {
+                            tracing::warn!("Failed to serialize buffer for {}: {}", session_id, e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                (
+                    entry.id.clone(),
+                    entry.config.clone(),
+                    entry.order,
+                    buffer_data,
+                    buffer_config,
+                )
+            };
+
+            let persisted = if let Some(buffer_data) = buffer_data {
+                crate::state::PersistedSession::with_buffer(id, config, order, buffer_data, buffer_config)
+            } else {
+                crate::state::PersistedSession::new(id, config, order)
+            };
+
+            // Save asynchronously
+            persistence
+                .save_async(persisted)
+                .await
+                .map_err(|e| RegistryError::PersistenceError(e.to_string()))?;
+
+            debug!("Persisted session with buffer: {}", session_id);
         }
         Ok(())
     }

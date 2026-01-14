@@ -60,6 +60,13 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
     setError('');
 
     try {
+      // Get buffer configuration from settings
+      const settings = JSON.parse(localStorage.getItem('oxide-settings') || '{}');
+      const bufferConfig = {
+        max_lines: settings.bufferMaxLines || 100000,
+        save_on_disconnect: settings.bufferSaveOnDisconnect !== false,
+      };
+
       const { connect } = useAppStore.getState();
       await connect({
         host: connection.host,
@@ -71,6 +78,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
         passphrase: authType === 'key' && passphrase ? passphrase : undefined,
         name: connection.name,
         group: group || undefined,
+        buffer_config: bufferConfig,
       });
 
       // Mark as used

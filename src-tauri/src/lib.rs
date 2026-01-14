@@ -186,6 +186,14 @@ pub fn run() {
             commands::restore_sessions,
             commands::list_persisted_sessions,
             commands::delete_persisted_session,
+            // Scroll buffer commands
+            commands::get_scroll_buffer,
+            commands::get_buffer_stats,
+            commands::clear_buffer,
+            commands::get_all_buffer_lines,
+            // Search commands
+            commands::search_terminal,
+            commands::scroll_to_line,
             // Config commands
             commands::config::get_connections,
             commands::config::get_recent_connections,

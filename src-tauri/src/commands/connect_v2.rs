@@ -56,6 +56,14 @@ pub struct ConnectRequest {
     pub rows: u32,
     pub name: Option<String>,
     pub proxy_chain: Option<Vec<ProxyChainRequest>>,
+    #[serde(default)]
+    pub buffer_config: Option<BufferConfigRequest>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct BufferConfigRequest {
+    pub max_lines: usize,
+    pub save_on_disconnect: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -205,9 +213,15 @@ pub async fn connect_v2(
         };
 
         // Create session in registry (checks connection limit)
-        let sid = registry
-            .create_session(config)
-            .map_err(|e| format!("Failed to create session: {}", e))?;
+        let sid = if let Some(buf_cfg) = &request.buffer_config {
+            registry
+                .create_session_with_buffer(config, buf_cfg.max_lines)
+                .map_err(|e| format!("Failed to create session: {}", e))?
+        } else {
+            registry
+                .create_session(config)
+                .map_err(|e| format!("Failed to create session: {}", e))?
+        };
 
         // Start connecting
         if let Err(e) = registry.start_connecting(&sid) {
@@ -244,8 +258,13 @@ pub async fn connect_v2(
         // Get command sender for resize support
         let cmd_tx = session_handle.cmd_tx.clone();
 
+        // Get scroll buffer for this session
+        let scroll_buffer = registry
+            .with_session(&sid, |entry| entry.scroll_buffer.clone())
+            .ok_or_else(|| "Session not found in registry".to_string())?;
+
         // Start WebSocket bridge with disconnect tracking
-        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle)
+        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
             .await
             .map_err(|e| {
                 registry.remove(&sid);
@@ -334,9 +353,15 @@ pub async fn connect_v2(
         };
 
         // Create session in registry (checks connection limit)
-        let sid = registry
-            .create_session(config.clone())
-            .map_err(|e| format!("Failed to create session: {}", e))?;
+        let sid = if let Some(buf_cfg) = &request.buffer_config {
+            registry
+                .create_session_with_buffer(config.clone(), buf_cfg.max_lines)
+                .map_err(|e| format!("Failed to create session: {}", e))?
+        } else {
+            registry
+                .create_session(config.clone())
+                .map_err(|e| format!("Failed to create session: {}", e))?
+        };
 
         // Start connecting
         if let Err(e) = registry.start_connecting(&sid) {
@@ -406,8 +431,13 @@ pub async fn connect_v2(
         // Get command sender for resize support
         let cmd_tx = session_handle.cmd_tx.clone();
 
+        // Get scroll buffer for this session
+        let scroll_buffer = registry
+            .with_session(&sid, |entry| entry.scroll_buffer.clone())
+            .ok_or_else(|| "Session not found in registry".to_string())?;
+
         // Start WebSocket bridge with disconnect tracking
-        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle)
+        let (_, port, token, disconnect_rx) = WsBridge::start_extended_with_disconnect(session_handle, scroll_buffer)
             .await
             .map_err(|e| {
                 registry.remove(&sid);
@@ -485,6 +515,12 @@ pub async fn disconnect_v2(
     forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
 ) -> Result<bool, String> {
     info!("Disconnecting session: {}", session_id);
+
+    // Save terminal buffer before disconnecting
+    if let Err(e) = registry.persist_session_with_buffer(&session_id).await {
+        tracing::warn!("Failed to persist session buffer: {}", e);
+        // Don't fail the disconnect if persistence fails
+    }
 
     // Stop and remove all port forwards for this session
     forwarding_registry.remove(&session_id).await;

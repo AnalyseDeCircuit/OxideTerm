@@ -12,8 +12,11 @@ pub mod auth;
 pub mod auto_reconnect;
 pub mod events;
 mod health;
+pub mod parser;
 mod reconnect;
 mod registry;
+pub mod scroll_buffer;
+pub mod search;
 mod state;
 pub mod types;
 
@@ -24,9 +27,12 @@ pub use events::{
     SessionReconnectFailedPayload, SessionReconnectingPayload,
 };
 pub use health::{HealthMetrics, HealthStatus, HealthThresholds, HealthTracker, QuickHealthCheck};
+pub use parser::{parse_terminal_output, parse_terminal_output_simple, BatchParser};
 pub use reconnect::{
     ReconnectConfig, ReconnectError, ReconnectEvent, ReconnectState, SessionReconnector,
 };
 pub use registry::{RegistryError, SessionRegistry};
+pub use scroll_buffer::{BufferStats, ScrollBuffer, SerializedBuffer, TerminalLine};
+pub use search::{search_lines, SearchMatch, SearchOptions, SearchResult};
 pub use state::{SessionState, SessionStateMachine};
 pub use types::{AuthMethod, SessionConfig, SessionEntry, SessionInfo, SessionStats};

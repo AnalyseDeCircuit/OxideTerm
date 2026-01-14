@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
-import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
+import { SearchBar } from './SearchBar';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -59,6 +59,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true); // Track mount state for StrictMode
+  const [searchOpen, setSearchOpen] = useState(false);
   
   // P3: Backpressure handling - batch terminal writes with RAF
   const pendingDataRef = useRef<Uint8Array[]>([]);
@@ -262,11 +263,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     });
 
     const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
     const webLinksAddon = new WebLinksAddon();
     
     term.loadAddon(fitAddon);
-    term.loadAddon(searchAddon);
     term.loadAddon(webLinksAddon);
 
     // Try WebGL, fallback to canvas/dom if needed
@@ -469,10 +468,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   };
 
   const currentTheme = themes[settings.theme] || themes.default;
+
+  // Handle search keyboard shortcut (Ctrl/Cmd + F)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Handle jump to line from search
+  const handleJumpToLine = (lineNumber: number) => {
+    // TODO: Implement virtual scrolling to jump to specific line
+    // For now, this is a placeholder
+    console.log('Jump to line:', lineNumber);
+  };
   
   return (
     <div 
-      className="terminal-container h-full w-full overflow-hidden" 
+      className="terminal-container h-full w-full overflow-hidden relative" 
       style={{ 
         padding: '4px',
         backgroundColor: currentTheme.background 
@@ -486,6 +505,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
            contain: 'strict',
            isolation: 'isolate'
          }}
+       />
+       
+       {/* Search Bar */}
+       <SearchBar 
+         sessionId={sessionId}
+         isOpen={searchOpen}
+         onClose={() => setSearchOpen(false)}
+         onJumpToLine={handleJumpToLine}
        />
     </div>
   );

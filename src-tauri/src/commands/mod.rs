@@ -9,10 +9,12 @@ pub mod health;
 pub mod network;
 pub mod oxide_export;
 pub mod oxide_import;
+pub mod scroll;
 pub mod sftp;
 
 pub use connect_v2::*;
 pub use forwarding::*;
 pub use health::*;
 pub use network::*;
+pub use scroll::*;
 pub use sftp::*;

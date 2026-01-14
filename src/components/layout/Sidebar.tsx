@@ -239,7 +239,7 @@ export const Sidebar = () => {
                         onClick={() => setShowImportModal(true)}
                         title="Import from .oxide file"
                     >
-                        <Upload className="h-3 w-3" />
+                        <Download className="h-3 w-3" />
                     </Button>
                     <Button 
                         variant="ghost"
@@ -248,7 +248,7 @@ export const Sidebar = () => {
                         onClick={() => setShowExportModal(true)}
                         title="Export to .oxide file"
                     >
-                        <Download className="h-3 w-3" />
+                        <Upload className="h-3 w-3" />
                     </Button>
                     {isManageMode && selectedConnections.size > 0 && (
                         <Button

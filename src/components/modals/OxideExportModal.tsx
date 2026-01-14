@@ -16,8 +16,10 @@ interface OxideExportModalProps {
 }
 
 export function OxideExportModal({ isOpen, onClose }: OxideExportModalProps) {
-  const { savedConnections, loadSavedConnections } = useAppStore();
+  const { savedConnections, loadSavedConnections, sessions } = useAppStore();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const [includeBuffers, setIncludeBuffers] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [description, setDescription] = useState('');
@@ -29,6 +31,8 @@ export function OxideExportModal({ isOpen, onClose }: OxideExportModalProps) {
     if (isOpen) {
       loadSavedConnections();
       setSelectedIds([]);
+      setSelectedSessionIds([]);
+      setIncludeBuffers(false);
       setPassword('');
       setConfirmPassword('');
       setDescription('');
@@ -49,6 +53,23 @@ export function OxideExportModal({ isOpen, onClose }: OxideExportModalProps) {
       setSelectedIds(selectedIds.filter(cid => cid !== id));
     } else {
       setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleSelectAllSessions = () => {
+    const sessionList = Array.from(sessions.values());
+    if (selectedSessionIds.length === sessionList.length) {
+      setSelectedSessionIds([]);
+    } else {
+      setSelectedSessionIds(sessionList.map(s => s.id));
+    }
+  };
+
+  const handleToggleSession = (id: string) => {
+    if (selectedSessionIds.includes(id)) {
+      setSelectedSessionIds(selectedSessionIds.filter(sid => sid !== id));
+    } else {
+      setSelectedSessionIds([...selectedSessionIds, id]);
     }
   };
 
@@ -164,6 +185,54 @@ export function OxideExportModal({ isOpen, onClose }: OxideExportModalProps) {
                 ))
               )}
             </div>
+          </div>
+
+          {/* Active Sessions Selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-theme-text">Active Sessions (Optional) ({selectedSessionIds.length}/{Array.from(sessions.values()).length})</Label>
+              <Button size="sm" variant="outline" onClick={handleSelectAllSessions} className="h-7 text-xs border-theme-border text-theme-text hover:bg-theme-bg-hover">
+                {selectedSessionIds.length === Array.from(sessions.values()).length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </div>
+
+            <div className="max-h-40 overflow-y-auto border border-theme-border rounded-md p-2 space-y-1 bg-theme-bg">
+              {Array.from(sessions.values()).length === 0 ? (
+                <p className="text-sm text-theme-text-muted py-2 text-center">
+                  No active sessions
+                </p>
+              ) : (
+                Array.from(sessions.values()).map(session => (
+                  <div key={session.id} className="flex items-center space-x-2 p-2 hover:bg-theme-bg-hover rounded cursor-pointer" onClick={() => handleToggleSession(session.id)}>
+                    <Checkbox
+                      checked={selectedSessionIds.includes(session.id)}
+                      onCheckedChange={() => handleToggleSession(session.id)}
+                      className="border-theme-text-muted data-[state=checked]:bg-theme-accent data-[state=checked]:border-theme-accent"
+                    />
+                    <Label className="flex-1 cursor-pointer text-theme-text">
+                      <div className="font-medium">{session.name || `${session.username}@${session.host}`}</div>
+                      <div className="text-xs text-theme-text-muted">
+                        {session.host}:{session.port} • {session.state}
+                      </div>
+                    </Label>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {selectedSessionIds.length > 0 && (
+              <div className="flex items-center space-x-2 mt-2 p-2 bg-zinc-900 rounded">
+                <Checkbox
+                  id="include-buffers"
+                  checked={includeBuffers}
+                  onCheckedChange={(checked: boolean) => setIncludeBuffers(checked === true)}
+                  className="border-theme-text-muted data-[state=checked]:bg-theme-accent data-[state=checked]:border-theme-accent"
+                />
+                <Label htmlFor="include-buffers" className="cursor-pointer text-theme-text text-sm">
+                  Include terminal buffer content (may increase file size significantly)
+                </Label>
+              </div>
+            )}
           </div>
 
           {/* Description */}

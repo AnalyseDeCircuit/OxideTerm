@@ -298,8 +298,14 @@ impl AutoReconnectService {
             .await
             .map_err(|e| format!("Shell request failed: {}", e))?;
 
+        // Get scroll buffer for this session
+        let scroll_buffer = self
+            .registry
+            .with_session(session_id, |entry| entry.scroll_buffer.clone())
+            .ok_or_else(|| "Session not found in registry".to_string())?;
+
         // Start WebSocket bridge
-        let (_, ws_port, ws_token) = crate::bridge::WsBridge::start_extended(session_handle)
+        let (_, ws_port, ws_token) = crate::bridge::WsBridge::start_extended(session_handle, scroll_buffer)
             .await
             .map_err(|e| format!("WebSocket bridge failed: {}", e))?;
 
