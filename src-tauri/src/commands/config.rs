@@ -73,6 +73,16 @@ impl ConfigState {
     }
 }
 
+/// Proxy hop info for frontend (without sensitive credentials)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyHopInfo {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_type: String, // "password", "key", "agent"
+    pub key_path: Option<String>,
+}
+
 /// Connection info for frontend (without sensitive data)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionInfo {
@@ -88,15 +98,38 @@ pub struct ConnectionInfo {
     pub last_used_at: Option<String>,
     pub color: Option<String>,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proxy_chain: Vec<ProxyHopInfo>,
+}
+
+/// Helper to convert SavedAuth to (auth_type, key_path) tuple
+fn auth_to_info(auth: &SavedAuth) -> (String, Option<String>) {
+    match auth {
+        SavedAuth::Password { .. } => ("password".to_string(), None),
+        SavedAuth::Key { key_path, .. } => ("key".to_string(), Some(key_path.clone())),
+        SavedAuth::Agent => ("agent".to_string(), None),
+    }
 }
 
 impl From<&SavedConnection> for ConnectionInfo {
     fn from(conn: &SavedConnection) -> Self {
-        let (auth_type, key_path) = match &conn.auth {
-            SavedAuth::Password { .. } => ("password".to_string(), None),
-            SavedAuth::Key { key_path, .. } => ("key".to_string(), Some(key_path.clone())),
-            SavedAuth::Agent => ("agent".to_string(), None),
-        };
+        let (auth_type, key_path) = auth_to_info(&conn.auth);
+
+        // Convert proxy_chain to ProxyHopInfo (without sensitive data)
+        let proxy_chain: Vec<ProxyHopInfo> = conn
+            .proxy_chain
+            .iter()
+            .map(|hop| {
+                let (hop_auth_type, hop_key_path) = auth_to_info(&hop.auth);
+                ProxyHopInfo {
+                    host: hop.host.clone(),
+                    port: hop.port,
+                    username: hop.username.clone(),
+                    auth_type: hop_auth_type,
+                    key_path: hop_key_path,
+                }
+            })
+            .collect();
 
         Self {
             id: conn.id.clone(),
@@ -111,6 +144,7 @@ impl From<&SavedConnection> for ConnectionInfo {
             last_used_at: conn.last_used_at.map(|t| t.to_rfc3339()),
             color: conn.color.clone(),
             tags: conn.tags.clone(),
+            proxy_chain,
         }
     }
 }
@@ -667,4 +701,111 @@ pub async fn delete_group(state: State<'_, Arc<ConfigState>>, name: String) -> R
     }
     state.save().await?;
     Ok(())
+}
+
+/// Response from get_saved_connection_for_connect
+/// Contains all info needed to connect (including credentials from keychain)
+#[derive(Debug, Serialize)]
+pub struct SavedConnectionForConnect {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_type: String,
+    pub password: Option<String>,
+    pub key_path: Option<String>,
+    pub passphrase: Option<String>,
+    pub name: String,
+    pub proxy_chain: Vec<ProxyHopForConnect>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProxyHopForConnect {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth_type: String,
+    pub password: Option<String>,
+    pub key_path: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+/// Get saved connection with credentials for connecting
+/// This retrieves passwords from keychain so frontend can call connect_v2
+#[tauri::command]
+pub async fn get_saved_connection_for_connect(
+    state: State<'_, Arc<ConfigState>>,
+    id: String,
+) -> Result<SavedConnectionForConnect, String> {
+    let config = state.config.read();
+    let conn = config.get_connection(&id).ok_or("Connection not found")?;
+
+    // Convert main auth
+    let (auth_type, password, key_path, passphrase) = match &conn.auth {
+        SavedAuth::Password { keychain_id } => {
+            let pwd = state.keychain.get(keychain_id).map_err(|e| e.to_string())?;
+            ("password".to_string(), Some(pwd), None, None)
+        }
+        SavedAuth::Key {
+            key_path,
+            has_passphrase,
+            passphrase_keychain_id,
+        } => {
+            let passphrase = if *has_passphrase {
+                passphrase_keychain_id
+                    .as_ref()
+                    .and_then(|kc_id| state.keychain.get(kc_id).ok())
+            } else {
+                None
+            };
+            ("key".to_string(), None, Some(key_path.clone()), passphrase)
+        }
+        SavedAuth::Agent => ("agent".to_string(), None, None, None),
+    };
+
+    // Convert proxy_chain
+    let proxy_chain: Vec<ProxyHopForConnect> = conn
+        .proxy_chain
+        .iter()
+        .map(|hop| {
+            let (hop_auth_type, hop_password, hop_key_path, hop_passphrase) = match &hop.auth {
+                SavedAuth::Password { keychain_id } => {
+                    let pwd = state.keychain.get(keychain_id).ok();
+                    ("password".to_string(), pwd, None, None)
+                }
+                SavedAuth::Key {
+                    key_path,
+                    passphrase_keychain_id,
+                    ..
+                } => {
+                    let passphrase = passphrase_keychain_id
+                        .as_ref()
+                        .and_then(|kc_id| state.keychain.get(kc_id).ok());
+                    ("key".to_string(), None, Some(key_path.clone()), passphrase)
+                }
+                SavedAuth::Agent => ("agent".to_string(), None, None, None),
+            };
+
+            ProxyHopForConnect {
+                host: hop.host.clone(),
+                port: hop.port,
+                username: hop.username.clone(),
+                auth_type: hop_auth_type,
+                password: hop_password,
+                key_path: hop_key_path,
+                passphrase: hop_passphrase,
+            }
+        })
+        .collect();
+
+    Ok(SavedConnectionForConnect {
+        host: conn.host.clone(),
+        port: conn.port,
+        username: conn.username.clone(),
+        auth_type,
+        password,
+        key_path,
+        passphrase,
+        name: conn.name.clone(),
+        proxy_chain,
+    })
 }

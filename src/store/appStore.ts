@@ -494,41 +494,41 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   connectToSaved: async (connectionId) => {
     try {
-      const connection = get().savedConnections.find(c => c.id === connectionId);
-      if (!connection) {
-        throw new Error('Connection not found');
-      }
+      // Get full connection info with credentials from backend
+      const savedConn = await api.getSavedConnectionForConnect(connectionId);
 
-      // Try to get password from keychain if needed
-      let password: string | undefined;
-      if (connection.auth_type === 'password') {
-        try {
-          password = await api.getConnectionPassword(connectionId);
-        } catch (e) {
-          // Password not found, open editor dialog
-          console.log('Password not found in keychain, opening editor');
-          get().openConnectionEditor(connectionId);
-          return;
-        }
-      }
+      // Map auth_type for ConnectRequest
+      const mapAuthType = (authType: string): 'password' | 'key' | 'default_key' | 'agent' => {
+        if (authType === 'agent') return 'agent';
+        if (authType === 'key') return 'key';
+        if (authType === 'password') return 'password';
+        return 'default_key';
+      };
 
-      // If key auth but no key path, open editor
-      if (connection.auth_type === 'key' && !connection.key_path) {
-        get().openConnectionEditor(connectionId);
-        return;
-      }
+      // Build proxy_chain for ConnectRequest
+      const proxyChain: ConnectRequest['proxy_chain'] = savedConn.proxy_chain.length > 0
+        ? savedConn.proxy_chain.map((hop, index) => ({
+            id: `hop-${index}`,
+            host: hop.host,
+            port: hop.port,
+            username: hop.username,
+            auth_type: mapAuthType(hop.auth_type),
+            password: hop.password,
+            key_path: hop.key_path,
+            passphrase: hop.passphrase,
+          }))
+        : undefined;
 
-      // Map auth_type: 'agent' -> 'default_key', others stay the same
-      const authType = connection.auth_type === 'agent' ? 'default_key' : connection.auth_type;
-      
       const request: ConnectRequest = {
-        host: connection.host,
-        port: connection.port,
-        username: connection.username,
-        auth_type: authType,
-        password,
-        key_path: connection.auth_type === 'key' ? (connection.key_path || undefined) : undefined,
-        name: connection.name,
+        host: savedConn.host,
+        port: savedConn.port,
+        username: savedConn.username,
+        auth_type: mapAuthType(savedConn.auth_type),
+        password: savedConn.password,
+        key_path: savedConn.key_path,
+        passphrase: savedConn.passphrase,
+        name: savedConn.name,
+        proxy_chain: proxyChain,
       };
 
       await get().connect(request);

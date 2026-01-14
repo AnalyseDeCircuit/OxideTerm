@@ -108,6 +108,19 @@ export interface Tab {
 }
 
 // Connection Config Types
+
+/**
+ * Proxy hop info for display (without sensitive credentials)
+ * Corresponds to backend ProxyHopInfo
+ */
+export interface ProxyHopInfo {
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'agent';
+  key_path?: string;
+}
+
 export interface ConnectionInfo {
   id: string;
   name: string;
@@ -121,6 +134,7 @@ export interface ConnectionInfo {
   last_used_at: string | null;
   color: string | null;
   tags: string[];
+  proxy_chain?: ProxyHopInfo[];
 }
 
 export interface OxideMetadata {

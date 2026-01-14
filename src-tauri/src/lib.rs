@@ -206,6 +206,7 @@ pub fn run() {
             commands::config::delete_connection,
             commands::config::mark_connection_used,
             commands::config::get_connection_password,
+            commands::config::get_saved_connection_for_connect,
             commands::config::list_ssh_config_hosts,
             commands::config::import_ssh_host,
             commands::config::get_ssh_config_path,
@@ -264,6 +265,45 @@ pub fn run() {
             commands::cancel_reconnect,
             commands::is_reconnecting,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Handle app lifecycle events
+            if let tauri::RunEvent::Exit = event {
+                tracing::info!("App exit requested, cleaning up resources...");
+                
+                // Clean up BridgeManager (WebSocket servers)
+                if let Some(bridge_manager) = app_handle.try_state::<BridgeManager>() {
+                    tracing::info!("Closing all WebSocket bridges...");
+                    tauri::async_runtime::block_on(bridge_manager.close_all());
+                }
+                
+                // Clean up ForwardingRegistry (port forwards)
+                if let Some(fwd_registry) = app_handle.try_state::<Arc<commands::ForwardingRegistry>>() {
+                    tracing::info!("Stopping all port forwards...");
+                    // Stop all forwards for all sessions
+                    tauri::async_runtime::block_on(async {
+                        fwd_registry.stop_all_forwards().await;
+                    });
+                }
+                
+                // Clean up SessionRegistry (SSH sessions)
+                if let Some(registry) = app_handle.try_state::<Arc<SessionRegistry>>() {
+                    tracing::info!("Disconnecting all SSH sessions...");
+                    tauri::async_runtime::block_on(async {
+                        registry.disconnect_all().await;
+                    });
+                }
+                
+                // Clean up SFTP sessions
+                if let Some(sftp_registry) = app_handle.try_state::<Arc<SftpRegistry>>() {
+                    tracing::info!("Closing all SFTP sessions...");
+                    tauri::async_runtime::block_on(async {
+                        sftp_registry.close_all().await;
+                    });
+                }
+                
+                tracing::info!("All resources cleaned up, exiting...");
+            }
+        });
 }

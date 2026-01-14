@@ -490,6 +490,28 @@ impl SessionRegistry {
         }
     }
 
+    /// Disconnect all sessions (for app shutdown)
+    /// This drops all SSH handles and clears the registry
+    pub async fn disconnect_all(&self) {
+        let session_ids: Vec<String> = self
+            .sessions
+            .iter()
+            .map(|entry| entry.id.clone())
+            .collect();
+
+        info!("Disconnecting {} sessions on shutdown", session_ids.len());
+
+        for session_id in session_ids {
+            // Drop the handle controller to close SSH connection
+            if let Some(mut entry) = self.sessions.get_mut(&session_id) {
+                entry.handle_controller = None;
+                entry.cmd_tx = None;
+            }
+            // Remove the session
+            self.remove(&session_id);
+        }
+    }
+
     /// Persist a session's metadata
     pub fn persist_session(&self, session_id: &str) -> Result<(), RegistryError> {
         if let Some(persistence) = &self.persistence {

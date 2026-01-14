@@ -68,6 +68,25 @@ impl ForwardingRegistry {
         }
     }
 
+    /// Stop all forwards across all sessions (for app shutdown)
+    pub async fn stop_all_forwards(&self) {
+        let managers: Vec<Arc<ForwardingManager>> = {
+            self.managers.read().await.values().cloned().collect()
+        };
+
+        info!(
+            "Stopping all port forwards across {} sessions on shutdown",
+            managers.len()
+        );
+
+        for manager in managers {
+            manager.stop_all().await;
+        }
+
+        // Clear all managers
+        self.managers.write().await.clear();
+    }
+
     /// Persist a forward rule
     pub async fn persist_forward(&self, forward: PersistedForward) -> Result<(), String> {
         if let Some(persistence) = &self.persistence {

@@ -1469,6 +1469,23 @@ impl SftpRegistry {
         let sessions = self.sessions.read();
         sessions.contains_key(session_id)
     }
+
+    /// Close all SFTP sessions (for app shutdown)
+    pub async fn close_all(&self) {
+        let session_ids: Vec<String> = {
+            let sessions = self.sessions.read();
+            sessions.keys().cloned().collect()
+        };
+
+        tracing::info!("Closing {} SFTP sessions on shutdown", session_ids.len());
+
+        for session_id in session_ids {
+            if let Some(session) = self.remove(&session_id) {
+                // Lock and drop to ensure cleanup
+                let _ = session.lock().await;
+            }
+        }
+    }
 }
 
 impl Default for SftpRegistry {

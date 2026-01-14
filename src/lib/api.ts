@@ -129,6 +129,43 @@ export const api = {
     if (USE_MOCK) return 'mock-password';
     return invoke('get_connection_password', { id });
   },
+
+  /**
+   * Get saved connection with credentials for connecting
+   * Returns full connection info including passwords from keychain
+   */
+  getSavedConnectionForConnect: async (id: string): Promise<{
+    host: string;
+    port: number;
+    username: string;
+    auth_type: string;
+    password?: string;
+    key_path?: string;
+    passphrase?: string;
+    name: string;
+    proxy_chain: Array<{
+      host: string;
+      port: number;
+      username: string;
+      auth_type: string;
+      password?: string;
+      key_path?: string;
+      passphrase?: string;
+    }>;
+  }> => {
+    if (USE_MOCK) {
+      return {
+        host: 'mock.example.com',
+        port: 22,
+        username: 'mockuser',
+        auth_type: 'password',
+        password: 'mock-password',
+        name: 'Mock Connection',
+        proxy_chain: [],
+      };
+    }
+    return invoke('get_saved_connection_for_connect', { id });
+  },
   
   // ============ Groups ============
   getGroups: async (): Promise<string[]> => {
