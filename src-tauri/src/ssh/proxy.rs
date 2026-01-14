@@ -139,6 +139,7 @@ pub struct ProxyConnection {
 impl ProxyConnection {
     /// Extract the target handle, leaving only jump handles.
     /// This is needed because ProxyConnection implements Drop.
+    #[must_use = "into_target_handle transfers ownership - ignoring the result will leak the SSH connection"]
     pub fn into_target_handle(self) -> Handle<ClientHandler> {
         use std::mem::ManuallyDrop;
 

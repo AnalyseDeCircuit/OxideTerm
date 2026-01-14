@@ -27,6 +27,8 @@ pub struct SessionRegistry {
     max_sessions: AtomicUsize,
     /// State persistence
     persistence: Option<SessionPersistence>,
+    /// Lock for create_session to prevent TOCTOU race
+    create_lock: std::sync::Mutex<()>,
 }
 
 impl Default for SessionRegistry {
@@ -44,6 +46,7 @@ impl SessionRegistry {
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
             persistence: Some(persistence),
+            create_lock: std::sync::Mutex::new(()),
         }
     }
 
@@ -54,6 +57,7 @@ impl SessionRegistry {
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(DEFAULT_MAX_SESSIONS),
             persistence: None,
+            create_lock: std::sync::Mutex::new(()),
         }
     }
 
@@ -64,6 +68,7 @@ impl SessionRegistry {
             order_counter: AtomicUsize::new(0),
             max_sessions: AtomicUsize::new(max),
             persistence: None,
+            create_lock: std::sync::Mutex::new(()),
         }
     }
 
@@ -80,7 +85,10 @@ impl SessionRegistry {
     /// Create a new session (in Disconnected state)
     /// Returns session ID or error if limit reached
     pub fn create_session(&self, config: SessionConfig) -> Result<String, RegistryError> {
-        // Check connection limit
+        // Hold lock to prevent TOCTOU race between count check and insert
+        let _guard = self.create_lock.lock().unwrap();
+
+        // Check connection limit (now atomic with insert)
         let active_count = self.active_count();
         let max = self.max_sessions();
 
@@ -362,7 +370,12 @@ impl SessionRegistry {
             .map(|entry| entry.id.clone())
             .collect();
 
+        if !stale_ids.is_empty() {
+            info!("Cleaning up {} stale sessions", stale_ids.len());
+        }
+
         for id in stale_ids {
+            info!("Removing stale session: {}", id);
             self.remove(&id);
         }
     }

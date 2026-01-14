@@ -7,8 +7,15 @@ import { initializeTheme } from './lib/themeManager'
 // Initialize theme before rendering
 initializeTheme()
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = ReactDOM.createRoot(document.getElementById('root')!)
+
+root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 )
+
+// Cleanup on window close to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+  root.unmount()
+})

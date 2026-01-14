@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::ssh::SessionCommand;
 
@@ -91,8 +91,11 @@ impl BridgeManager {
             info!("Bridge unregistered: session={}", session_id);
             // If we have a command channel, send close command
             if let Some(cmd_tx) = h.cmd_tx {
+                let sid = session_id.to_string();
                 tokio::spawn(async move {
-                    let _ = cmd_tx.send(SessionCommand::Close).await;
+                    if let Err(e) = cmd_tx.send(SessionCommand::Close).await {
+                        warn!("Failed to send Close command for session {}: {}", sid, e);
+                    }
                 });
             }
             Some(h.info)

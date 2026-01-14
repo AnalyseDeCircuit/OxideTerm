@@ -60,6 +60,7 @@ impl Drop for ExtendedSessionHandle {
 // Allow taking ownership of handle contents despite Drop implementation
 impl SessionHandle {
     /// Consumes the handle and returns its parts
+    #[must_use = "into_parts transfers ownership - ignoring the result will leak resources"]
     pub fn into_parts(self) -> (String, mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) {
         // Use ManuallyDrop to prevent Drop from running
         let handle = std::mem::ManuallyDrop::new(self);
@@ -75,6 +76,7 @@ impl SessionHandle {
 
 impl ExtendedSessionHandle {
     /// Consumes the handle and returns its parts
+    #[must_use = "into_parts transfers ownership - ignoring the result will leak resources"]
     pub fn into_parts(
         self,
     ) -> (
