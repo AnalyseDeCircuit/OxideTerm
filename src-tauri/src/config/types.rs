@@ -9,23 +9,31 @@ use uuid::Uuid;
 /// Current configuration version
 pub const CONFIG_VERSION: u32 = 1;
 
+/// Proxy hop configuration for multi-hop connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyHopConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth: SavedAuth,
+}
+
 /// Authentication method for saved connections
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SavedAuth {
     /// Password stored in system keychain
     Password {
-        /// Keychain entry ID (not the actual password)
+        /// Keychain entry ID
         keychain_id: String,
     },
     /// SSH key file
     Key {
         /// Path to private key file
         key_path: String,
-        /// Whether key requires passphrase (passphrase stored in keychain)
+        /// Whether key requires passphrase
         has_passphrase: bool,
-        /// Keychain entry ID for passphrase (if has_passphrase is true)
-        #[serde(skip_serializing_if = "Option::is_none")]
+        /// Keychain entry ID for passphrase (if any)
         passphrase_keychain_id: Option<String>,
     },
     /// Use SSH agent
@@ -43,7 +51,7 @@ pub struct ConnectionOptions {
     #[serde(default)]
     pub compression: bool,
 
-    /// Jump host for ProxyJump (future feature)
+    /// Jump host for ProxyJump (legacy - for backwards compatibility)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jump_host: Option<String>,
 
@@ -58,7 +66,7 @@ pub struct SavedConnection {
     /// Unique identifier
     pub id: String,
 
-    /// Configuration version for migrations
+    /// Configuration version
     pub version: u32,
 
     /// Display name
@@ -75,7 +83,7 @@ pub struct SavedConnection {
     #[serde(default = "default_port")]
     pub port: u16,
 
-    /// Username
+    /// SSH username
     pub username: String,
 
     /// Authentication method
@@ -99,6 +107,11 @@ pub struct SavedConnection {
     /// Tags for filtering
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+
+    /// Proxy chain for multi-hop connections (intermediate jump hosts only)
+    /// Target server info is always in host/port/username fields
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proxy_chain: Vec<ProxyHopConfig>,
 }
 
 fn default_port() -> u16 {
@@ -130,6 +143,7 @@ impl SavedConnection {
             last_used_at: None,
             color: None,
             tags: Vec::new(),
+            proxy_chain: Vec::new(),
         }
     }
 
@@ -159,6 +173,7 @@ impl SavedConnection {
             last_used_at: None,
             color: None,
             tags: Vec::new(),
+            proxy_chain: Vec::new(),
         }
     }
 

@@ -111,6 +111,18 @@ pub struct EncryptedConnection {
     pub color: Option<String>,
     pub tags: Vec<String>,
     pub options: ConnectionOptions,
+    /// Proxy chain for multi-hop connections (intermediate jump hosts)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proxy_chain: Vec<EncryptedProxyHop>,
+}
+
+/// Encrypted proxy hop for multi-hop connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptedProxyHop {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub auth: EncryptedAuth,
 }
 
 /// Authentication data (stored encrypted)

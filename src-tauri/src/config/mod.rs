@@ -11,4 +11,6 @@ pub mod types;
 pub use keychain::{Keychain, KeychainError};
 pub use ssh_config::{default_ssh_config_path, parse_ssh_config, SshConfigError, SshConfigHost};
 pub use storage::{config_dir, connections_file, ConfigStorage, StorageError};
-pub use types::{ConfigFile, ConnectionOptions, SavedAuth, SavedConnection, CONFIG_VERSION};
+pub use types::{
+    ConfigFile, ConnectionOptions, ProxyHopConfig, SavedAuth, SavedConnection, CONFIG_VERSION,
+};

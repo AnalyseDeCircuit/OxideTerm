@@ -7,6 +7,7 @@ mod connect_v2;
 pub mod forwarding;
 pub mod health;
 pub mod oxide_export;
+pub mod oxide_import;
 pub mod sftp;
 
 pub use connect_v2::*;

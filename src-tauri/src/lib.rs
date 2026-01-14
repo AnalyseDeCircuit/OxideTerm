@@ -194,8 +194,8 @@ pub fn run() {
             commands::config::delete_group,
             // Oxide file export/import commands
             commands::oxide_export::export_to_oxide,
-            commands::oxide_export::validate_oxide_file,
-            commands::oxide_export::import_from_oxide,
+            commands::oxide_import::validate_oxide_file,
+            commands::oxide_import::import_from_oxide,
             // Port forwarding commands
             commands::create_port_forward,
             commands::stop_port_forward,

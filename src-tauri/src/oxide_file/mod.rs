@@ -13,4 +13,4 @@ pub mod format;
 // Re-export main types
 pub use crypto::{compute_checksum, decrypt_oxide_file, encrypt_oxide_file};
 pub use error::OxideFileError;
-pub use format::{EncryptedAuth, EncryptedConnection, EncryptedPayload, OxideFile, OxideMetadata};
+pub use format::{EncryptedAuth, EncryptedConnection, EncryptedPayload, EncryptedProxyHop, OxideFile, OxideMetadata};
