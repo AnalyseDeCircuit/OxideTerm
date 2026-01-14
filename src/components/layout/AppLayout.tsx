@@ -51,7 +51,8 @@ export const AppLayout = () => {
                    key={tab.id} 
                    className={`absolute inset-0 ${tab.id === activeTabId ? 'z-10 block' : 'z-0 hidden'}`}
                  >
-                   {tab.type === 'terminal' && <TerminalView sessionId={tab.sessionId} isActive={tab.id === activeTabId} />}
+                   {/* key={sessionId} forces remount when session changes (e.g., after reconnect) */}
+                   {tab.type === 'terminal' && <TerminalView key={tab.sessionId} sessionId={tab.sessionId} isActive={tab.id === activeTabId} />}
                    {tab.type === 'sftp' && (
                      <Suspense fallback={<ViewLoader />}>
                        <SFTPView sessionId={tab.sessionId} />

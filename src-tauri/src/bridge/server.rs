@@ -21,6 +21,53 @@ use crate::ssh::{
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 /// Heartbeat timeout - consider connection dead if no response (seconds)
 const HEARTBEAT_TIMEOUT_SECS: u64 = 90;
+/// Token validity window (seconds) - tokens older than this are rejected
+const TOKEN_VALIDITY_SECS: u64 = 60;
+
+/// Get current unix timestamp in seconds
+fn unix_timestamp_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Generate a time-bound authentication token
+/// Format: uuid:timestamp (e.g., "550e8400-e29b-41d4-a716-446655440000:1705000000")
+fn generate_token() -> String {
+    let uuid = uuid::Uuid::new_v4();
+    let timestamp = unix_timestamp_secs();
+    format!("{}:{}", uuid, timestamp)
+}
+
+/// Validate token with expiration check
+/// Returns true if token matches and has not expired
+fn validate_token(received: &str, expected: &str) -> bool {
+    // First check exact match
+    if received.trim() != expected {
+        return false;
+    }
+
+    // Parse timestamp from expected token (format: uuid:timestamp)
+    if let Some(timestamp_str) = expected.rsplit(':').next() {
+        if let Ok(created_at) = timestamp_str.parse::<u64>() {
+            let now = unix_timestamp_secs();
+            let age = now.saturating_sub(created_at);
+            if age > TOKEN_VALIDITY_SECS {
+                warn!(
+                    "Token expired: age {} seconds exceeds limit {} seconds",
+                    age, TOKEN_VALIDITY_SECS
+                );
+                return false;
+            }
+            return true;
+        }
+    }
+
+    // If we can't parse timestamp, reject (malformed token)
+    warn!("Malformed token: could not parse timestamp");
+    false
+}
 
 /// Reason for WebSocket disconnection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,8 +170,8 @@ impl WsBridge {
         session_handle: SessionHandle,
         scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String), String> {
-        // Generate one-time authentication token to prevent local process hijacking
-        let token = uuid::Uuid::new_v4().to_string();
+        // Generate time-bound authentication token to prevent local process hijacking
+        let token = generate_token();
 
         // Bind to localhost (not 127.0.0.1) to avoid macOS sandbox issues with WebView
         // Using port 0 lets the OS assign an available port
@@ -168,8 +215,8 @@ impl WsBridge {
         session_handle: SessionHandle,
         scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String, ResizeRx), String> {
-        // Generate one-time authentication token to prevent local process hijacking
-        let token = uuid::Uuid::new_v4().to_string();
+        // Generate time-bound authentication token to prevent local process hijacking
+        let token = generate_token();
 
         let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(32);
 
@@ -216,8 +263,8 @@ impl WsBridge {
         session_handle: SshExtendedSessionHandle,
         scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String), String> {
-        // Generate one-time authentication token to prevent local process hijacking
-        let token = uuid::Uuid::new_v4().to_string();
+        // Generate time-bound authentication token to prevent local process hijacking
+        let token = generate_token();
 
         let listener = TcpListener::bind("localhost:0")
             .await
@@ -259,8 +306,8 @@ impl WsBridge {
         session_handle: SshExtendedSessionHandle,
         scroll_buffer: Arc<ScrollBuffer>,
     ) -> Result<(String, u16, String, oneshot::Receiver<DisconnectReason>), String> {
-        // Generate one-time authentication token to prevent local process hijacking
-        let token = uuid::Uuid::new_v4().to_string();
+        // Generate time-bound authentication token to prevent local process hijacking
+        let token = generate_token();
 
         let listener = TcpListener::bind("localhost:0")
             .await
@@ -415,20 +462,20 @@ impl WsBridge {
 
         match auth_result {
             Ok(Some(Ok(Message::Text(token)))) => {
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful");
                 } else {
-                    error!("WebSocket token authentication failed: invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed: invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Ok(Message::Binary(data)))) => {
                 let token = String::from_utf8_lossy(&data);
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful (binary)");
                 } else {
-                    error!("WebSocket token authentication failed: invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed: invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Err(e))) => {
@@ -814,20 +861,20 @@ impl WsBridge {
 
         match auth_result {
             Ok(Some(Ok(Message::Text(token)))) => {
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful (v2))");
                 } else {
-                    error!("WebSocket token authentication failed (v2): invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed (v2): invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Ok(Message::Binary(data)))) => {
                 let token = String::from_utf8_lossy(&data);
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful (v2, binary)");
                 } else {
-                    error!("WebSocket token authentication failed (v2): invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed (v2): invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Err(e))) => {
@@ -1084,20 +1131,20 @@ impl WsBridge {
 
         match auth_result {
             Ok(Some(Ok(Message::Text(token)))) => {
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful (v2+disconnect)");
                 } else {
-                    error!("WebSocket token authentication failed: invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed: invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Ok(Message::Binary(data)))) => {
                 let token = String::from_utf8_lossy(&data);
-                if token.trim() == expected_token {
+                if validate_token(&token, &expected_token) {
                     debug!("WebSocket token authentication successful (v2+disconnect, binary)");
                 } else {
-                    error!("WebSocket token authentication failed: invalid token");
-                    return Err("Authentication failed: invalid token".to_string());
+                    error!("WebSocket token authentication failed: invalid or expired token");
+                    return Err("Authentication failed: invalid or expired token".to_string());
                 }
             }
             Ok(Some(Err(e))) => {

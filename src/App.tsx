@@ -1,5 +1,6 @@
 import { AppLayout } from './components/layout/AppLayout';
 import { Toaster } from './components/ui/toaster';
+import { ReconnectDialog } from './components/modals/ReconnectDialog';
 import { useReconnectEvents } from './hooks/useReconnectEvents';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 
@@ -12,6 +13,7 @@ function App() {
     <>
       <AppLayout />
       <Toaster />
+      <ReconnectDialog />
     </>
   );
 }

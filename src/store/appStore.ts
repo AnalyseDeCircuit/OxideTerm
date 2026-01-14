@@ -33,11 +33,14 @@ interface AppStore {
   selectedGroup: string | null;
   editingConnection: ConnectionInfo | null;
   networkOnline: boolean;
+  reconnectPendingSessionId: string | null; // Session awaiting password for reconnect
 
   // Actions - Sessions
   connect: (request: ConnectRequest) => Promise<string>;
   disconnect: (sessionId: string) => Promise<void>;
   reconnect: (sessionId: string) => Promise<void>;
+  reconnectWithPassword: (sessionId: string, password: string) => Promise<void>;
+  cancelReconnectDialog: () => void;
   cancelReconnect: (sessionId: string) => Promise<void>;
   updateSessionState: (sessionId: string, state: SessionState, error?: string) => void;
   
@@ -78,6 +81,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activeTabId: null,
   sidebarCollapsed: false,
   sidebarActiveSection: 'sessions',
+  reconnectPendingSessionId: null,
   modals: {
     newConnection: false,
     settings: false,
@@ -144,6 +148,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const session = get().sessions.get(sessionId);
     if (!session) return;
 
+    // Password auth requires user to re-enter password
+    if (session.auth_type === 'password') {
+      set({ reconnectPendingSessionId: sessionId });
+      return;
+    }
+
     // Update state to connecting
     get().updateSessionState(sessionId, 'connecting');
 
@@ -151,15 +161,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // Disconnect existing session first
       await api.disconnect(sessionId).catch(() => {});
       
-      // Reconnect with same parameters
-      // Note: Using default_key as auth_type because:
-      // 1. SessionInfo doesn't persist auth_type (password would require re-entry)
-      // 2. Default SSH key is the most reliable fallback for reconnection
+      // Determine auth_type for reconnection:
+      // - 'agent' -> use agent
+      // - 'key' with key_path -> use key with the specific path
+      // - 'key' without key_path -> use default_key (fallback)
+      // - 'default_key' -> use default_key
+      let reconnectAuthType: 'key' | 'default_key' | 'agent' = 'default_key';
+      let reconnectKeyPath: string | undefined = undefined;
+
+      if (session.auth_type === 'agent') {
+        reconnectAuthType = 'agent';
+      } else if (session.auth_type === 'key' && session.key_path) {
+        reconnectAuthType = 'key';
+        reconnectKeyPath = session.key_path;
+      }
+      // else: default_key fallback
+
+      // Reconnect with saved authentication info
       const newSession = await api.connect({
         host: session.host,
         port: session.port,
         username: session.username,
-        auth_type: 'default_key',
+        auth_type: reconnectAuthType,
+        key_path: reconnectKeyPath,
         name: session.name,
       });
 
@@ -184,6 +208,59 @@ export const useAppStore = create<AppStore>((set, get) => ({
       console.error('Reconnect failed:', error);
       get().updateSessionState(sessionId, 'error', String(error));
     }
+  },
+
+  reconnectWithPassword: async (sessionId: string, password: string) => {
+    const session = get().sessions.get(sessionId);
+    if (!session) {
+      set({ reconnectPendingSessionId: null });
+      return;
+    }
+
+    // Clear pending state
+    set({ reconnectPendingSessionId: null });
+
+    // Update state to connecting
+    get().updateSessionState(sessionId, 'connecting');
+
+    try {
+      // Disconnect existing session first
+      await api.disconnect(sessionId).catch(() => {});
+      
+      // Reconnect with password
+      const newSession = await api.connect({
+        host: session.host,
+        port: session.port,
+        username: session.username,
+        auth_type: 'password',
+        password,
+        name: session.name,
+      });
+
+      // Update session map with new session info
+      set((state) => {
+        const newSessions = new Map(state.sessions);
+        newSessions.delete(sessionId);
+        newSessions.set(newSession.id, newSession);
+        
+        const newTabs = state.tabs.map(tab => 
+          tab.sessionId === sessionId 
+            ? { ...tab, sessionId: newSession.id }
+            : tab
+        );
+        
+        return { sessions: newSessions, tabs: newTabs };
+      });
+
+      console.log(`Reconnected session with password: ${sessionId} -> ${newSession.id}`);
+    } catch (error) {
+      console.error('Reconnect with password failed:', error);
+      get().updateSessionState(sessionId, 'error', String(error));
+    }
+  },
+
+  cancelReconnectDialog: () => {
+    set({ reconnectPendingSessionId: null });
   },
 
   cancelReconnect: async (sessionId: string) => {

@@ -296,10 +296,20 @@ pub struct SessionInfo {
     pub color: String,
     pub uptime_secs: u64,
     pub order: usize,
+    // Authentication info for reconnection (password is never exposed)
+    pub auth_type: String,
+    pub key_path: Option<String>,
 }
 
 impl From<&SessionEntry> for SessionInfo {
     fn from(entry: &SessionEntry) -> Self {
+        // Extract auth_type and key_path from config.auth
+        let (auth_type, key_path) = match &entry.config.auth {
+            AuthMethod::Password { .. } => ("password".to_string(), None),
+            AuthMethod::Key { key_path, .. } => ("key".to_string(), Some(key_path.clone())),
+            AuthMethod::Agent => ("agent".to_string(), None),
+        };
+
         Self {
             id: entry.id.clone(),
             name: entry.config.display_name(),
@@ -313,6 +323,8 @@ impl From<&SessionEntry> for SessionInfo {
             color: entry.config.auto_color(),
             uptime_secs: entry.uptime_secs(),
             order: entry.order,
+            auth_type,
+            key_path,
         }
     }
 }

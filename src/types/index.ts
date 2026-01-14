@@ -1,5 +1,6 @@
 // Session Types
 export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
+export type AuthType = 'password' | 'key' | 'default_key' | 'agent';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Global Event Map Extensions (TS 5.8+ strict typing for custom events)
@@ -43,6 +44,9 @@ export interface SessionInfo {
   ws_token?: string; // Authentication token for WebSocket connection
   color: string;
   uptime_secs: number;
+  // Authentication info for reconnection
+  auth_type: AuthType;
+  key_path?: string; // Only for key auth (password is never stored)
   // Reconnection state
   reconnectAttempt?: number;
   reconnectMaxAttempts?: number;

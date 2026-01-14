@@ -460,7 +460,9 @@ const mockConnect = async (req: ConnectRequest): Promise<SessionInfo> => {
     username: req.username,
     state: 'connected',
     color: '#3b82f6',
-    uptime_secs: 0
+    uptime_secs: 0,
+    auth_type: req.auth_type,
+    key_path: req.key_path,
   };
 };
 
