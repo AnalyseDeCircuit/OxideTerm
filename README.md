@@ -128,6 +128,7 @@ OxideTerm 采用**双平面架构**，将数据流与控制流分离：
 - 自定义二进制协议：`[Type:1][Length:4][Payload:n]`
 - 心跳检测保持连接活跃（30秒间隔）
 - 背压控制防止内存溢出
+- `⌘F` / `Ctrl+F` 终端输出搜索
 
 **控制平面 (Control Plane)**
 - Tauri Commands 处理连接管理、文件操作、配置等

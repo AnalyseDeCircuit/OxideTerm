@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { SearchBar } from './SearchBar';
+import { SearchMatch } from '../../types';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -108,15 +109,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   // Focus terminal when it becomes active (tab switch)
   useEffect(() => {
-    if (isActive && terminalRef.current) {
+    if (isActive && terminalRef.current && !searchOpen) {
       // Small delay to ensure DOM is ready
       const focusTimeout = setTimeout(() => {
-        terminalRef.current?.focus();
+        if (!searchOpen) { // Double-check before focusing
+          terminalRef.current?.focus();
+        }
         fitAddonRef.current?.fit();
       }, 50);
       return () => clearTimeout(focusTimeout);
     }
-  }, [isActive]);
+  }, [isActive, searchOpen]);
 
   // WebSocket reconnection effect - triggers when ws_url changes (after auto-reconnect)
   useEffect(() => {
@@ -464,7 +467,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   }, [sessionId]); // Only re-mount if sessionId changes absolutely
 
   const handleContainerClick = () => {
-    terminalRef.current?.focus();
+    if (!searchOpen) {
+      terminalRef.current?.focus();
+    }
   };
 
   const currentTheme = themes[settings.theme] || themes.default;
@@ -482,11 +487,110 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Handle jump to line from search
-  const handleJumpToLine = (lineNumber: number) => {
-    // TODO: Implement virtual scrolling to jump to specific line
-    // For now, this is a placeholder
-    console.log('Jump to line:', lineNumber);
+  // Handle jump to match from search
+  const handleJumpToMatch = async (match: SearchMatch) => {
+    const term = terminalRef.current;
+    if (!term) return;
+
+    console.log('Jumping to match:', match);
+
+    // Clear previous selection
+    term.clearSelection();
+
+    // Try to find ALL occurrences of the matched text in the visible buffer
+    const buffer = term.buffer.active;
+    const totalRows = buffer.length;
+    const matchedText = match.matched_text;
+    
+    // Find all rows containing the match
+    const matchedRows: { row: number; col: number }[] = [];
+    for (let row = 0; row < totalRows; row++) {
+      const line = buffer.getLine(row);
+      if (!line) continue;
+      
+      const lineText = line.translateToString(true);
+      let startIndex = 0;
+      let foundIndex;
+      
+      // Find all occurrences in this line
+      while ((foundIndex = lineText.indexOf(matchedText, startIndex)) !== -1) {
+        matchedRows.push({ row, col: foundIndex });
+        startIndex = foundIndex + 1;
+      }
+    }
+    
+    console.log(`Found ${matchedRows.length} matches in visible buffer`);
+    
+    if (matchedRows.length > 0) {
+      // Find the match closest to the target line content
+      let bestMatch = matchedRows[0];
+      const targetContent = match.line_content.trim();
+      
+      for (const m of matchedRows) {
+        const line = buffer.getLine(m.row);
+        if (line) {
+          const lineText = line.translateToString(true).trim();
+          if (lineText === targetContent || lineText.includes(targetContent)) {
+            bestMatch = m;
+            break;
+          }
+        }
+      }
+      
+      // Scroll to the best match
+      term.scrollToLine(bestMatch.row);
+      
+      // Select the text - wait a bit for scroll to complete
+      setTimeout(() => {
+        if (terminalRef.current) {
+          terminalRef.current.select(bestMatch.col, bestMatch.row, matchedText.length);
+        }
+      }, 50);
+      
+      return;
+    }
+
+    // Not found in visible buffer - need to load from backend
+    console.warn('Match not in visible buffer. Loading from backend...', match);
+    
+    try {
+      // Get context around the matched line from backend
+      const lines = await api.scrollToLine(sessionId, match.line_number, 50);
+      
+      if (lines && lines.length > 0) {
+        // Write the context to terminal
+        term.clear();
+        term.writeln(`\x1b[33m--- Jumped to line ${match.line_number} (loaded from backend) ---\x1b[0m`);
+        lines.forEach(line => {
+          term.writeln(line.text);
+        });
+        term.writeln(`\x1b[33m--- End of context ---\x1b[0m`);
+        
+        // Scroll to show the match (approximate middle of loaded content)
+        const targetRow = Math.min(25, lines.length / 2);
+        term.scrollToLine(targetRow);
+        
+        // Try to select the matched text in the loaded content
+        setTimeout(() => {
+          const buffer = term.buffer.active;
+          for (let row = 0; row < buffer.length; row++) {
+            const line = buffer.getLine(row);
+            if (!line) continue;
+            const lineText = line.translateToString(true);
+            if (lineText.includes(match.matched_text)) {
+              const matchStart = lineText.indexOf(match.matched_text);
+              if (matchStart >= 0) {
+                term.select(matchStart, row, match.matched_text.length);
+              }
+              break;
+            }
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Failed to load line from backend:', error);
+      term.writeln(`\x1b[31mError: Could not load line ${match.line_number} from backend\x1b[0m`);
+    }
   };
   
   return (
@@ -512,7 +616,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
          sessionId={sessionId}
          isOpen={searchOpen}
          onClose={() => setSearchOpen(false)}
-         onJumpToLine={handleJumpToLine}
+         onJumpToMatch={handleJumpToMatch}
        />
     </div>
   );

@@ -5,20 +5,20 @@ import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { api } from '../../lib/api';
-import { SearchOptions, SearchResult } from '../../types';
+import { SearchOptions, SearchResult, SearchMatch } from '../../types';
 
 interface SearchBarProps {
   sessionId: string;
   isOpen: boolean;
   onClose: () => void;
-  onJumpToLine?: (lineNumber: number) => void;
+  onJumpToMatch?: (match: SearchMatch) => void;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ 
   sessionId, 
   isOpen, 
   onClose,
-  onJumpToLine 
+  onJumpToMatch 
 }) => {
   const [query, setQuery] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -64,17 +64,17 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       setCurrentMatchIndex(result.total_matches > 0 ? 0 : -1);
 
       // Jump to first match if available
-      if (result.total_matches > 0 && onJumpToLine) {
-        onJumpToLine(result.matches[0].line_number);
+      if (result.total_matches > 0 && onJumpToMatch) {
+        onJumpToMatch(result.matches[0]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '搜索失败');
+      setError(err instanceof Error ? err.message : 'Search failed');
       setSearchResult(null);
       setCurrentMatchIndex(-1);
     } finally {
       setIsSearching(false);
     }
-  }, [query, caseSensitive, useRegex, wholeWord, sessionId, onJumpToLine]);
+  }, [query, caseSensitive, useRegex, wholeWord, sessionId, onJumpToMatch]);
 
   // Trigger search on query or options change (debounced)
   useEffect(() => {
@@ -103,10 +103,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     
     setCurrentMatchIndex(newIndex);
     
-    if (onJumpToLine) {
-      onJumpToLine(searchResult.matches[newIndex].line_number);
+    if (onJumpToMatch) {
+      onJumpToMatch(searchResult.matches[newIndex]);
     }
-  }, [searchResult, currentMatchIndex, onJumpToLine]);
+  }, [searchResult, currentMatchIndex, onJumpToMatch]);
 
   // Navigate to next match
   const gotoNextMatch = useCallback(() => {
@@ -118,10 +118,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     
     setCurrentMatchIndex(newIndex);
     
-    if (onJumpToLine) {
-      onJumpToLine(searchResult.matches[newIndex].line_number);
+    if (onJumpToMatch) {
+      onJumpToMatch(searchResult.matches[newIndex]);
     }
-  }, [searchResult, currentMatchIndex, onJumpToLine]);
+  }, [searchResult, currentMatchIndex, onJumpToMatch]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -152,8 +152,21 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   if (!isOpen) return null;
 
+  // Prevent terminal from stealing focus
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="absolute top-4 right-4 z-50 w-96 bg-zinc-900 border border-theme-border rounded-md shadow-2xl">
+    <div 
+      className="absolute top-4 right-4 z-50 w-96 bg-zinc-900 border border-theme-border rounded-md shadow-2xl"
+      onKeyDown={handleKeyDown}
+      onMouseDown={handleMouseDown}
+    >
       {/* Main Search Row */}
       <div className="flex items-center gap-2 p-3 border-b border-theme-border">
         <Search className="w-4 h-4 text-zinc-400" />
@@ -162,7 +175,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索终端输出..."
+          placeholder="Search terminal output..."
           className="flex-1 h-8 text-sm border-0 focus-visible:ring-0 bg-transparent"
         />
         
@@ -170,7 +183,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         {searchResult && (
           <div className="text-xs text-zinc-400 whitespace-nowrap">
             {searchResult.total_matches === 0 
-              ? '无结果' 
+              ? 'No results' 
               : `${currentMatchIndex + 1}/${searchResult.total_matches}`
             }
           </div>
@@ -221,7 +234,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             className="text-xs cursor-pointer flex items-center gap-1"
           >
             <CaseSensitive className="w-3.5 h-3.5" />
-            <span>大小写</span>
+            <span>Aa</span>
           </Label>
         </div>
 
@@ -237,7 +250,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             className="text-xs cursor-pointer flex items-center gap-1"
           >
             <Regex className="w-3.5 h-3.5" />
-            <span>正则</span>
+            <span>.*</span>
           </Label>
         </div>
 
@@ -253,13 +266,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             className="text-xs cursor-pointer flex items-center gap-1"
           >
             <WholeWord className="w-3.5 h-3.5" />
-            <span>全词</span>
+            <span>Word</span>
           </Label>
         </div>
 
         {/* Loading/Error Indicator */}
         {isSearching && (
-          <div className="ml-auto text-xs text-zinc-500">搜索中...</div>
+          <div className="ml-auto text-xs text-zinc-500">Searching...</div>
         )}
         {error && (
           <div className="ml-auto text-xs text-red-400">{error}</div>

@@ -43,8 +43,9 @@ impl Perform for TerminalParser {
                 self.lines.push(std::mem::take(&mut self.current_line));
             }
             b'\r' => {
-                // Carriage return: clear current line (common in progress bars)
-                self.current_line.clear();
+                // Carriage return: usually followed by \n, so just ignore it
+                // (Only clear line if it's an actual overwrite, which we can't easily detect)
+                // For now, just ignore \r to preserve content
             }
             b'\t' => {
                 // Tab: convert to spaces
