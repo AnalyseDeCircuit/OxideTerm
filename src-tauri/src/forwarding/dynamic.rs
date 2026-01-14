@@ -160,6 +160,11 @@ pub async fn start_dynamic_forward(
                                 break;
                             }
 
+                            // Disable Nagle's algorithm for low-latency SOCKS5 proxy
+                            if let Err(e) = stream.set_nodelay(true) {
+                                warn!("Failed to set TCP_NODELAY: {}", e);
+                            }
+
                             debug!("SOCKS5: Accepted connection from {}", peer_addr);
 
                             // Update stats

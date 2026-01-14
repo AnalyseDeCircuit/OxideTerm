@@ -19,6 +19,7 @@ interface TerminalViewProps {
 const MSG_TYPE_DATA = 0x00;
 const MSG_TYPE_RESIZE = 0x01;
 const MSG_TYPE_HEARTBEAT = 0x02;
+const MSG_TYPE_ERROR = 0x03;
 const HEADER_SIZE = 5; // 1 byte type + 4 bytes length
 
 // Helper function to encode a heartbeat response frame
@@ -85,13 +86,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
             terminalRef.current.options.cursorBlink = e.detail.cursorBlink;
             terminalRef.current.options.lineHeight = e.detail.lineHeight;
             
-            // Apply theme update - must set each property individually for xterm to detect changes
+            // Apply theme update - use the theme setter for type-safe assignment
             const themeConfig = themes[e.detail.theme] || themes.default;
-            if (terminalRef.current) {
-                Object.keys(themeConfig).forEach((key) => {
-                    (terminalRef.current!.options as any)[key] = (themeConfig as any)[key];
-                });
-            }
+            terminalRef.current.options.theme = themeConfig;
             
             terminalRef.current.refresh(0, terminalRef.current.rows - 1);
             fitAddonRef.current?.fit();
@@ -228,8 +225,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                                 const response = encodeHeartbeatFrame(seq);
                                 ws.send(response);
                             }
+                        } else if (type === MSG_TYPE_ERROR) {
+                            // Error message from backend - display in terminal
+                            const payload = new Uint8Array(data, HEADER_SIZE, length);
+                            const decoder = new TextDecoder('utf-8');
+                            const errorMsg = decoder.decode(payload);
+                            term.writeln(`\r\n\x1b[31mServer error: ${errorMsg}\x1b[0m`);
                         }
-                        // MSG_TYPE_ERROR (0x03) can be handled here if needed
                     }
                 };
 

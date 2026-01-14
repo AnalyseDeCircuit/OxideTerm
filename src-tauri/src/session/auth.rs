@@ -88,8 +88,25 @@ impl KeyAuth {
     }
 }
 
-/// Load a private key from file
+/// Load a private key from file (async version - preferred in async contexts)
+pub async fn load_private_key_async(path: &Path, passphrase: Option<&str>) -> Result<KeyPair, KeyError> {
+    let path = path.to_path_buf();
+    let passphrase = passphrase.map(|s| s.to_string());
+    
+    tokio::task::spawn_blocking(move || {
+        load_private_key_sync(&path, passphrase.as_deref())
+    })
+    .await
+    .map_err(|e| KeyError::ParseError(format!("Task join error: {}", e)))?
+}
+
+/// Load a private key from file (sync version - use spawn_blocking in async contexts)
 pub fn load_private_key(path: &Path, passphrase: Option<&str>) -> Result<KeyPair, KeyError> {
+    load_private_key_sync(path, passphrase)
+}
+
+/// Internal sync implementation
+fn load_private_key_sync(path: &Path, passphrase: Option<&str>) -> Result<KeyPair, KeyError> {
     let key_data = std::fs::read_to_string(path)?;
 
     // Check if key is encrypted

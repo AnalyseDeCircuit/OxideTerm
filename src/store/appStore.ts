@@ -82,13 +82,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return { sessions: newSessions };
       });
 
-      // MOCK State Update (if API is mock)
-      // If real API, we expect events or immediate correct state
-      if (sessionInfo.state === 'connecting') {
-          setTimeout(() => {
-            get().updateSessionState(sessionInfo.id, 'connected');
-          }, 1000);
-      }
+      // State is managed by the backend - no fake timeout needed
+      // The session state will be updated via WebSocket events or API responses
 
       // Open terminal tab by default
       get().createTab('terminal', sessionInfo.id);
@@ -139,11 +134,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
       await api.disconnect(sessionId).catch(() => {});
       
       // Reconnect with same parameters
+      // Note: Using default_key as auth_type because:
+      // 1. SessionInfo doesn't persist auth_type (password would require re-entry)
+      // 2. Default SSH key is the most reliable fallback for reconnection
       const newSession = await api.connect({
         host: session.host,
         port: session.port,
         username: session.username,
-        auth_type: 'default_key', // Use default key for reconnect
+        auth_type: 'default_key',
         name: session.name,
       });
 

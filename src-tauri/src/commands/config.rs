@@ -62,6 +62,11 @@ impl ConfigState {
         self.keychain.store(key, value).map_err(|e| e.to_string())
     }
 
+    /// Public API: Delete value from keychain
+    pub fn delete_keychain_value(&self, key: &str) -> Result<(), String> {
+        self.keychain.delete(key).map_err(|e| e.to_string())
+    }
+
     /// Public API: Save config to disk
     pub async fn save_config(&self) -> Result<(), String> {
         self.save().await

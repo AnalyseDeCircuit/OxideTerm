@@ -36,6 +36,13 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
   const [keyPath, setKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState<string>('');
 
+  // Type-safe auth type handler
+  const handleAuthTypeChange = (value: string) => {
+    if (value === 'password' || value === 'key' || value === 'default_key') {
+      setAuthType(value);
+    }
+  };
+
   const handleBrowseKey = async () => {
     try {
       const selected = await openDialog({
@@ -111,7 +118,7 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
             <Label>Authentication</Label>
             <Tabs
               value={authType}
-              onValueChange={(v) => setAuthType(v as any)}
+              onValueChange={handleAuthTypeChange}
               className="w-full"
             >
               <TabsList className="grid w-full grid-cols-3">

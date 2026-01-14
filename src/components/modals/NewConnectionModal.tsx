@@ -50,6 +50,13 @@ export const NewConnectionModal = () => {
   const [showAddJumpDialog, setShowAddJumpDialog] = useState(false);
   const [proxyChainExpanded, setProxyChainExpanded] = useState(false);
 
+  // Type-safe auth type handler
+  const handleAuthTypeChange = (value: string) => {
+    if (value === 'password' || value === 'key' || value === 'default_key') {
+      setAuthType(value);
+    }
+  };
+
   // Load groups when modal opens
   useEffect(() => {
     if (modals.newConnection) {
@@ -205,7 +212,7 @@ export const NewConnectionModal = () => {
               <Label>Authentication</Label>
               <Tabs
                 value={authType}
-                onValueChange={(v) => setAuthType(v as any)}
+                onValueChange={handleAuthTypeChange}
                 className="w-full"
               >
                 <TabsList className="grid w-full grid-cols-2">

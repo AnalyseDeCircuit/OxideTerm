@@ -168,6 +168,11 @@ pub async fn start_local_forward(
                                 break;
                             }
 
+                            // Disable Nagle's algorithm for low-latency forwarding
+                            if let Err(e) = stream.set_nodelay(true) {
+                                warn!("Failed to set TCP_NODELAY: {}", e);
+                            }
+
                             debug!("Accepted connection from {} for forward", peer_addr);
 
                             // Update stats

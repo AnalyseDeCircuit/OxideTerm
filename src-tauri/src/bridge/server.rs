@@ -34,7 +34,7 @@ impl ConnectionState {
             last_seen: AtomicU64::new(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
             ),
             heartbeat_seq: AtomicU32::new(0),
@@ -45,7 +45,7 @@ impl ConnectionState {
         self.last_seen.store(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
             Ordering::SeqCst,
         );
@@ -217,6 +217,10 @@ impl WsBridge {
 
         match accept_result {
             Ok(Ok((stream, addr))) => {
+                // Disable Nagle's algorithm for low-latency interactive terminal
+                if let Err(e) = stream.set_nodelay(true) {
+                    warn!("Failed to set TCP_NODELAY: {}", e);
+                }
                 info!(
                     "WebSocket connection from {} for session {}",
                     addr, session_id
@@ -253,6 +257,10 @@ impl WsBridge {
 
         match accept_result {
             Ok(Ok((stream, addr))) => {
+                // Disable Nagle's algorithm for low-latency interactive terminal
+                if let Err(e) = stream.set_nodelay(true) {
+                    warn!("Failed to set TCP_NODELAY: {}", e);
+                }
                 info!(
                     "WebSocket connection (extended) from {} for session {}",
                     addr, session_id
@@ -579,6 +587,10 @@ impl WsBridge {
 
         match accept_result {
             Ok(Ok((stream, addr))) => {
+                // Disable Nagle's algorithm for low-latency interactive terminal
+                if let Err(e) = stream.set_nodelay(true) {
+                    warn!("Failed to set TCP_NODELAY: {}", e);
+                }
                 info!(
                     "WebSocket connection (v2) from {} for session {}",
                     addr, session_id

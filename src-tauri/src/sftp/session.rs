@@ -520,7 +520,7 @@ impl SftpSession {
         }
 
         // Check if LibreOffice is available
-        let soffice_path = Self::find_libreoffice();
+        let soffice_path = Self::find_libreoffice_async().await;
         if soffice_path.is_none() {
             let extension = Path::new(path)
                 .extension()
@@ -670,8 +670,16 @@ impl SftpSession {
         })
     }
 
-    /// Find LibreOffice executable
-    fn find_libreoffice() -> Option<String> {
+    /// Find LibreOffice executable (async - runs blocking checks in spawn_blocking)
+    async fn find_libreoffice_async() -> Option<String> {
+        tokio::task::spawn_blocking(Self::find_libreoffice_sync)
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Find LibreOffice executable (sync version)
+    fn find_libreoffice_sync() -> Option<String> {
         // Check common paths
         let paths = [
             "/usr/bin/soffice",

@@ -368,6 +368,11 @@ pub async fn handle_forwarded_connection(
         SshError::ConnectionFailed(format!("Failed to connect to {}: {}", local_addr, e))
     })?;
 
+    // Disable Nagle's algorithm for low-latency forwarding
+    if let Err(e) = local_stream.set_nodelay(true) {
+        warn!("Failed to set TCP_NODELAY: {}", e);
+    }
+
     info!(
         "Bridging forwarded connection {}:{} -> {}",
         connected_address, connected_port, local_addr

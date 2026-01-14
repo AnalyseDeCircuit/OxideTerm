@@ -107,15 +107,19 @@ pub async fn export_to_oxide(
             }
         } else if let Some(jump_id) = &saved_conn.options.jump_host {
             // Legacy jump_host format - convert to proxy_chain
-            if let Some(jump_conn) = config.get_connection(jump_id) {
-                let hop_auth = convert_auth(&jump_conn.auth, &format!("jump host of {}", saved_conn.name))?;
-                encrypted_proxy_chain.push(EncryptedProxyHop {
-                    host: jump_conn.host.clone(),
-                    port: jump_conn.port,
-                    username: jump_conn.username.clone(),
-                    auth: hop_auth,
-                });
-            }
+            let jump_conn = config.get_connection(jump_id)
+                .ok_or_else(|| format!(
+                    "Connection '{}' references jump host '{}' which does not exist. \
+                    Please ensure all jump hosts are saved before exporting.",
+                    saved_conn.name, jump_id
+                ))?;
+            let hop_auth = convert_auth(&jump_conn.auth, &format!("jump host of {}", saved_conn.name))?;
+            encrypted_proxy_chain.push(EncryptedProxyHop {
+                host: jump_conn.host.clone(),
+                port: jump_conn.port,
+                username: jump_conn.username.clone(),
+                auth: hop_auth,
+            });
         }
 
         // Export target server with its proxy_chain
