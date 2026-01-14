@@ -9,6 +9,7 @@ import {
   PreviewContent,
   ForwardRequest,
   ForwardRule,
+  ForwardResponse,
   SshHostInfo,
   SshKeyInfo,
   PersistedSessionInfo,
@@ -16,7 +17,10 @@ import {
   TerminalLine,
   BufferStats,
   SearchOptions,
-  SearchResult
+  SearchResult,
+  ListFilter,
+  SessionStats,
+  QuickHealthCheck
 } from '../types';
 
 // Toggle this for development without a backend
@@ -30,7 +34,7 @@ export const api = {
     // Backend returns ConnectResponseV2, extract session info and add ws_token
     // Convert proxy_chain if present
     const proxy_chain = request.proxy_chain;
-    const response: any = await invoke('connect_v2', { request, proxy_chain });
+    const response = await invoke<{ session: SessionInfo; ws_token?: string }>('connect_v2', { request, proxy_chain });
     const session = response.session || response;
     // Add ws_token from response if available
     if (response.ws_token) {
@@ -54,8 +58,8 @@ export const api = {
     return invoke('get_session', { sessionId });
   },
 
-  getSessionStats: async (): Promise<any> => {
-    if (USE_MOCK) return { total: 0, connected: 0, connecting: 0, failed: 0 };
+  getSessionStats: async (): Promise<SessionStats> => {
+    if (USE_MOCK) return { total: 0, connected: 0, connecting: 0, error: 0 };
     return invoke('get_session_stats');
   },
 
@@ -189,7 +193,7 @@ export const api = {
     return invoke('sftp_is_initialized', { sessionId });
   },
 
-  sftpListDir: async (sessionId: string, path: string, filter?: any): Promise<FileInfo[]> => {
+  sftpListDir: async (sessionId: string, path: string, filter?: ListFilter): Promise<FileInfo[]> => {
     if (USE_MOCK) return mockFiles;
     return invoke('sftp_list_dir', { sessionId, path, filter: filter || null });
   },
@@ -291,8 +295,8 @@ export const api = {
     return invoke('list_port_forwards', { sessionId });
   },
   
-  createPortForward: async (request: ForwardRequest): Promise<any> => {
-    if (USE_MOCK) return { success: true, forward: { id: 'mock-fwd-id' } };
+  createPortForward: async (request: ForwardRequest): Promise<ForwardResponse> => {
+    if (USE_MOCK) return { success: true, forward: { id: 'mock-fwd-id', forward_type: 'local', bind_address: '127.0.0.1', bind_port: 8080, target_host: 'localhost', target_port: 80, status: 'active' } };
     // Backend returns ForwardResponse
     return invoke('create_port_forward', { request });
   },
@@ -307,8 +311,8 @@ export const api = {
     return invoke('delete_port_forward', { sessionId, forwardId });
   },
 
-  restartPortForward: async (sessionId: string, forwardId: string): Promise<any> => {
-    if (USE_MOCK) return { success: true, forward: { id: forwardId } };
+  restartPortForward: async (sessionId: string, forwardId: string): Promise<ForwardResponse> => {
+    if (USE_MOCK) return { success: true, forward: { id: forwardId, forward_type: 'local', bind_address: '127.0.0.1', bind_port: 8080, target_host: 'localhost', target_port: 80, status: 'active' } };
     return invoke('restart_port_forward', { sessionId, forwardId });
   },
 
@@ -320,7 +324,7 @@ export const api = {
     target_host?: string;
     target_port?: number;
     description?: string;
-  }): Promise<any> => {
+  }): Promise<ForwardResponse> => {
     if (USE_MOCK) return { success: true };
     return invoke('update_port_forward', { request });
   },
@@ -340,18 +344,18 @@ export const api = {
     return invoke('stop_all_forwards', { sessionId });
   },
 
-  forwardJupyter: async (sessionId: string, localPort: number, remotePort: number): Promise<any> => {
-    if (USE_MOCK) return { success: true, forward: { id: 'mock-jupyter' } };
+  forwardJupyter: async (sessionId: string, localPort: number, remotePort: number): Promise<ForwardResponse> => {
+    if (USE_MOCK) return { success: true, forward: { id: 'mock-jupyter', forward_type: 'local', bind_address: '127.0.0.1', bind_port: localPort, target_host: 'localhost', target_port: remotePort, status: 'active' } };
     return invoke('forward_jupyter', { sessionId, localPort, remotePort });
   },
 
-  forwardTensorboard: async (sessionId: string, localPort: number, remotePort: number): Promise<any> => {
-    if (USE_MOCK) return { success: true, forward: { id: 'mock-tensorboard' } };
+  forwardTensorboard: async (sessionId: string, localPort: number, remotePort: number): Promise<ForwardResponse> => {
+    if (USE_MOCK) return { success: true, forward: { id: 'mock-tensorboard', forward_type: 'local', bind_address: '127.0.0.1', bind_port: localPort, target_host: 'localhost', target_port: remotePort, status: 'active' } };
     return invoke('forward_tensorboard', { sessionId, localPort, remotePort });
   },
 
-  forwardVscode: async (sessionId: string, localPort: number, remotePort: number): Promise<any> => {
-    if (USE_MOCK) return { success: true, forward: { id: 'mock-vscode' } };
+  forwardVscode: async (sessionId: string, localPort: number, remotePort: number): Promise<ForwardResponse> => {
+    if (USE_MOCK) return { success: true, forward: { id: 'mock-vscode', forward_type: 'local', bind_address: '127.0.0.1', bind_port: localPort, target_host: 'localhost', target_port: remotePort, status: 'active' } };
     return invoke('forward_vscode', { sessionId, localPort, remotePort });
   },
 
@@ -377,18 +381,18 @@ export const api = {
     return invoke('get_connection_health', { sessionId });
   },
 
-  getQuickHealth: async (sessionId: string): Promise<any> => {
-    if (USE_MOCK) return { session_id: sessionId, status: 'Healthy', latency_ms: 10 };
+  getQuickHealth: async (sessionId: string): Promise<QuickHealthCheck> => {
+    if (USE_MOCK) return { session_id: sessionId, status: 'Healthy', latency_ms: 10, message: 'Connected • 10ms' };
     return invoke('get_quick_health', { sessionId });
   },
 
-  getAllHealthStatus: async (): Promise<Record<string, any>> => {
+  getAllHealthStatus: async (): Promise<Record<string, QuickHealthCheck>> => {
     if (USE_MOCK) return {};
     return invoke('get_all_health_status');
   },
 
-  getHealthForDisplay: async (sessionId: string): Promise<any> => {
-    if (USE_MOCK) return { session_id: sessionId, status: 'healthy', latency_ms: 10 };
+  getHealthForDisplay: async (sessionId: string): Promise<QuickHealthCheck> => {
+    if (USE_MOCK) return { session_id: sessionId, status: 'Healthy', latency_ms: 10, message: 'Connected • 10ms' };
     return invoke('get_health_for_display', { sessionId });
   },
 

@@ -111,9 +111,10 @@ export const Sidebar = () => {
       await loadSavedConnections();
       console.log(`Successfully deleted ${count} connection(s)`);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete connections:', error);
-      alert(`Failed to delete some connections: ${error?.message || error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Failed to delete some connections: ${message}`);
       // Refresh list anyway to show which ones were deleted
       await loadSavedConnections();
     }

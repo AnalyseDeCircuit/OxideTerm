@@ -8,7 +8,7 @@ import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { SearchBar } from './SearchBar';
-import { SearchMatch } from '../../types';
+import { SearchMatch, SettingsChangedDetail } from '../../types';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -84,9 +84,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
         };
   });
 
-  // Listen for settings changes
+  // Listen for settings changes (type-safe via WindowEventMap extension)
   useEffect(() => {
-    const handleSettingsChange = (e: CustomEvent) => {
+    const handleSettingsChange = (e: CustomEvent<SettingsChangedDetail>) => {
         setSettings(e.detail);
         if (terminalRef.current) {
             terminalRef.current.options.fontFamily = getFontFamily(e.detail.fontFamily);
@@ -103,8 +103,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
             fitAddonRef.current?.fit();
         }
     };
-    window.addEventListener('settings-changed', handleSettingsChange as EventListener);
-    return () => window.removeEventListener('settings-changed', handleSettingsChange as EventListener);
+    window.addEventListener('settings-changed', handleSettingsChange);
+    return () => window.removeEventListener('settings-changed', handleSettingsChange);
   }, []);
 
   // Focus terminal when it becomes active (tab switch)

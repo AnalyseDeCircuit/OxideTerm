@@ -7,7 +7,12 @@ import { Label } from '../ui/label';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Checkbox } from '../ui/checkbox';
 import { api } from '../../lib/api';
+import { createTypeGuard } from '../../lib/utils';
 import { ForwardRule, ForwardType } from '../../types';
+
+// Type guard for ForwardType using const type parameter (TS 5.0+)
+const FORWARD_TYPES = ['local', 'remote', 'dynamic'] as const;
+const isForwardType = createTypeGuard(FORWARD_TYPES);
 
 interface ForwardStats {
   connection_count: number;
@@ -118,8 +123,8 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
           setTargetPort('');
           setSkipHealthCheck(false);
           fetchForwards();
-      } catch (e: any) {
-          setCreateError(e.toString());
+      } catch (e: unknown) {
+          setCreateError(e instanceof Error ? e.message : String(e));
       } finally {
           setIsCreating(false);
       }
@@ -288,7 +293,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                     <Button variant="ghost" size="sm" onClick={() => setShowNewForm(false)}>Cancel</Button>
                 </div>
                 
-                <RadioGroup value={forwardType} onValueChange={(v: string) => setForwardType(v as ForwardType)} className="flex gap-4">
+                <RadioGroup value={forwardType} onValueChange={(v) => { if (isForwardType(v)) setForwardType(v); }} className="flex gap-4">
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="local" id="r-local" />
                         <Label htmlFor="r-local">Local (L)</Label>
@@ -360,7 +365,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                         <Checkbox 
                             id="skip-health"
                             checked={skipHealthCheck}
-                            onCheckedChange={(checked) => setSkipHealthCheck(checked as boolean)}
+                            onCheckedChange={(checked) => { if (typeof checked === 'boolean') setSkipHealthCheck(checked); }}
                         />
                         <Label 
                             htmlFor="skip-health" 
@@ -481,8 +486,8 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                                 });
                                 setEditingForward(null);
                                 fetchForwards();
-                            } catch (e: any) {
-                                setCreateError(e.toString());
+                            } catch (e: unknown) {
+                                setCreateError(e instanceof Error ? e.message : String(e));
                             }
                         }}>
                             Save Changes

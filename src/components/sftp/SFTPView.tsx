@@ -667,7 +667,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
               size: info.size || 0,
               modified: info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0,
               permissions: ''
-            } as FileInfo;
+            } satisfies FileInfo;
           } catch {
             return {
               name: entry.name,
@@ -676,7 +676,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
               size: 0,
               modified: 0,
               permissions: ''
-            } as FileInfo;
+            } satisfies FileInfo;
           }
         })
       );

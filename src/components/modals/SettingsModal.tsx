@@ -47,31 +47,48 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
 };
 
 // Extended persistence hook
+interface PersistedSettings {
+    // Terminal
+    theme: string;
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    cursorStyle: string;
+    cursorBlink: boolean;
+    scrollback: number;
+    // Buffer
+    bufferMaxLines: number;
+    bufferSaveOnDisconnect: boolean;
+    // Appearance
+    sidebarCollapsedDefault: boolean;
+    // Connections
+    defaultUsername: string;
+    defaultPort: number;
+}
+
+const defaultSettings: PersistedSettings = {
+    // Terminal
+    theme: 'default',
+    fontFamily: 'jetbrains',
+    fontSize: 14,
+    lineHeight: 1.2,
+    cursorStyle: 'block',
+    cursorBlink: true,
+    scrollback: 1000,
+    // Buffer
+    bufferMaxLines: 100000,
+    bufferSaveOnDisconnect: true,
+    // Appearance
+    sidebarCollapsedDefault: false,
+    // Connections
+    defaultUsername: 'root',
+    defaultPort: 22,
+};
+
 const usePersistedSettings = () => {
-    const [settings, setSettings] = useState(() => {
+    const [settings, setSettings] = useState<PersistedSettings>(() => {
         const saved = localStorage.getItem('oxide-settings');
-        const defaults = {
-            // Terminal
-            theme: 'default',
-            fontFamily: 'jetbrains',
-            fontSize: 14,
-            lineHeight: 1.2,
-            cursorStyle: 'block',
-            cursorBlink: true,
-            scrollback: 1000,
-            
-            // Buffer
-            bufferMaxLines: 100000,
-            bufferSaveOnDisconnect: true,
-            
-            // Appearance
-            sidebarCollapsedDefault: false,
-            
-            // Connections
-            defaultUsername: 'root',
-            defaultPort: 22,
-        };
-        return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+        return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
     });
 
     useEffect(() => {
@@ -79,11 +96,12 @@ const usePersistedSettings = () => {
         window.dispatchEvent(new CustomEvent('settings-changed', { detail: settings }));
     }, [settings]);
 
-    const updateSetting = (key: string, value: any) => {
-        setSettings((prev: any) => ({ ...prev, [key]: value }));
+    const updateSetting = <K extends keyof PersistedSettings>(key: K, value: PersistedSettings[K]) => {
+        setSettings((prev) => ({ ...prev, [key]: value }));
         
         // Apply global theme immediately when theme changes
-        if (key === 'theme') {
+        // Use typeof guard to safely narrow the generic value type
+        if (key === 'theme' && typeof value === 'string') {
             applyGlobalTheme(value);
         }
     };

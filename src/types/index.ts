@@ -1,6 +1,36 @@
 // Session Types
 export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Global Event Map Extensions (TS 5.8+ strict typing for custom events)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Settings changed event detail - matches PersistedSettings from SettingsModal
+ */
+export interface SettingsChangedDetail {
+  theme: string;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  cursorStyle: 'block' | 'underline' | 'bar';
+  cursorBlink: boolean;
+  scrollback: number;
+  bufferMaxLines: number;
+  bufferSaveOnDisconnect: boolean;
+  sidebarCollapsedDefault: boolean;
+  defaultUsername: string;
+  defaultPort: number;
+}
+
+declare global {
+  interface WindowEventMap {
+    'settings-changed': CustomEvent<SettingsChangedDetail>;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+
 export interface SessionInfo {
   id: string;
   name: string;
@@ -154,6 +184,16 @@ export interface FileInfo {
   permissions: string | null;
 }
 
+// SFTP Sort Order
+export type SortOrder = 'Name' | 'NameDesc' | 'Size' | 'SizeDesc' | 'Modified' | 'ModifiedDesc' | 'Type' | 'TypeDesc';
+
+// SFTP List Filter
+export interface ListFilter {
+  show_hidden?: boolean;
+  pattern?: string | null;
+  sort?: SortOrder;
+}
+
 export type PreviewContent =
   | { Text: { data: string; mime_type: string | null; language: string | null } }
   | { Image: { data: string; mime_type: string } }
@@ -207,6 +247,41 @@ export interface ForwardRule {
   target_port: number;
   status: 'starting' | 'active' | 'stopped' | 'error';
   description?: string;
+}
+
+// Forward Response from backend
+export interface ForwardRuleDto {
+  id: string;
+  forward_type: string;
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  status: string;
+  description?: string;
+}
+
+export interface ForwardResponse {
+  success: boolean;
+  forward?: ForwardRuleDto;
+  error?: string;
+}
+
+// Session Stats
+export interface SessionStats {
+  total: number;
+  connected: number;
+  connecting: number;
+  error: number;
+  max_sessions?: number;
+}
+
+// Quick Health Check
+export interface QuickHealthCheck {
+  session_id: string;
+  status: HealthStatus;
+  latency_ms: number | null;
+  message: string;
 }
 
 // Health Types

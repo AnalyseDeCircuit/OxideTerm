@@ -86,9 +86,10 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
       
       onOpenChange(false);
       if (onConnect) onConnect();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Failed to connect:', e);
-      setError(e.message || 'Failed to connect. Please check your credentials.');
+      const message = e instanceof Error ? e.message : 'Failed to connect. Please check your credentials.';
+      setError(message);
     } finally {
       setIsConnecting(false);
     }

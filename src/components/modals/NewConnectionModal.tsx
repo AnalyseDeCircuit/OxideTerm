@@ -80,8 +80,28 @@ export const NewConnectionModal = () => {
     }
   };
 
-  const handleAddJumpServer = (server: any) => {
-    setProxyServers([...proxyServers, server]);
+  // Convert JumpServer from dialog to ProxyHopConfig for backend
+  const handleAddJumpServer = (server: { 
+    id: string; 
+    host: string; 
+    port: string; 
+    username: string; 
+    authType: 'password' | 'key' | 'default_key' | 'agent';
+    password?: string;
+    keyPath?: string;
+    passphrase?: string;
+  }) => {
+    const proxyConfig: ProxyHopConfig = {
+      id: server.id,
+      host: server.host,
+      port: parseInt(server.port, 10) || 22,
+      username: server.username,
+      auth_type: server.authType,
+      password: server.password,
+      key_path: server.keyPath,
+      passphrase: server.passphrase,
+    };
+    setProxyServers([...proxyServers, proxyConfig]);
   };
 
   const handleRemoveJumpServer = (index: number) => {
