@@ -1,6 +1,6 @@
 [package]
 name = "oxideterm"
-version = "0.2.1"
+version = "0.3.0"
 description = "A modern SSH terminal client built with Rust and Tauri"
 authors = ["OxideTerm Team"]
 edition = "2021"
