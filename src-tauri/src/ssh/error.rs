@@ -33,6 +33,12 @@ pub enum SshError {
 
     #[error("Disconnected")]
     Disconnected,
+
+    #[error("SSH Agent not available: {0}")]
+    AgentNotAvailable(String),
+
+    #[error("SSH Agent error: {0}")]
+    AgentError(String),
 }
 
 impl From<russh::Error> for SshError {

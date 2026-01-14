@@ -39,7 +39,7 @@ export const NewConnectionModal = () => {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('root');
-  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key'>('password');
+  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent'>('password');
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [saveConnection, setSaveConnection] = useState(false);
@@ -52,7 +52,7 @@ export const NewConnectionModal = () => {
 
   // Type-safe auth type handler
   const handleAuthTypeChange = (value: string) => {
-    if (value === 'password' || value === 'key' || value === 'default_key') {
+    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent') {
       setAuthType(value);
     }
   };
@@ -215,9 +215,11 @@ export const NewConnectionModal = () => {
                 onValueChange={handleAuthTypeChange}
                 className="w-full"
               >
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="password">Password</TabsTrigger>
+                  <TabsTrigger value="default_key">Default Key</TabsTrigger>
                   <TabsTrigger value="key">SSH Key</TabsTrigger>
+                  <TabsTrigger value="agent">SSH Agent</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="password">
@@ -249,6 +251,21 @@ export const NewConnectionModal = () => {
                         <Button variant="outline" onClick={handleBrowseKey}>Browse</Button>
                      </div>
                    </div>
+                </TabsContent>
+                
+                <TabsContent value="default_key">
+                  <div className="text-sm text-zinc-500 pt-2">
+                    使用默认 SSH 密钥 (~/.ssh/id_rsa, ~/.ssh/id_ed25519 等)
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="agent">
+                  <div className="text-sm text-zinc-400 pt-2 space-y-2">
+                    <p>使用系统 SSH Agent 进行认证</p>
+                    <p className="text-xs text-zinc-500">
+                      需要确保 SSH Agent 正在运行且包含所需密钥
+                    </p>
+                  </div>
                 </TabsContent>
               </Tabs>
             </div>

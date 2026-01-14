@@ -24,7 +24,7 @@ export interface ProxyHopConfig {
   host: string;
   port: number;
   username: string;
-  auth_type: 'password' | 'key' | 'default_key';
+  auth_type: 'password' | 'key' | 'default_key' | 'agent';
   password?: string;
   key_path?: string;
   passphrase?: string;
@@ -34,7 +34,7 @@ export interface ConnectRequest {
   host: string;
   port: number;
   username: string;
-  auth_type: 'password' | 'key' | 'default_key';
+  auth_type: 'password' | 'key' | 'default_key' | 'agent';
   password?: string;
   key_path?: string;
   passphrase?: string;

@@ -33,15 +33,16 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState('');
-  const [authType, setAuthType] = useState<'password' | 'key'>('password');
+  const [authType, setAuthType] = useState<'password' | 'key' | 'agent'>('password');
   const [group, setGroup] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (open && connection) {
-      // Map auth_type to modal's authType (only 'password' or 'key')
-      const modalAuthType = connection.auth_type === 'password' ? 'password' : 'key';
+      // Map auth_type to modal's authType
+      const modalAuthType = connection.auth_type === 'password' ? 'password' : 
+                           connection.auth_type === 'agent' ? 'agent' : 'key';
       setAuthType(modalAuthType);
       setKeyPath(connection.key_path || '');
       setGroup(connection.group || '');
@@ -108,7 +109,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
             <Label className="text-theme-text">Authentication Method</Label>
             <RadioGroup 
               value={authType} 
-              onValueChange={(v: 'password' | 'key') => setAuthType(v)}
+              onValueChange={(v: 'password' | 'key' | 'agent') => setAuthType(v)}
               className="flex space-x-4"
             >
               <div className="flex items-center space-x-2">
@@ -118,6 +119,10 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="key" id="auth-key" className="border-theme-border data-[state=checked]:bg-theme-accent" />
                 <Label htmlFor="auth-key" className="text-theme-text">SSH Key</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="agent" id="auth-agent" className="border-theme-border data-[state=checked]:bg-theme-accent" />
+                <Label htmlFor="auth-agent" className="text-theme-text">SSH Agent</Label>
               </div>
             </RadioGroup>
           </div>
@@ -135,7 +140,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
                 autoFocus
               />
             </div>
-          ) : (
+          ) : authType === 'key' ? (
             <>
               <div className="space-y-2">
                 <Label htmlFor="key-path" className="text-theme-text">SSH Key Path</Label>
@@ -159,6 +164,13 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
                 />
               </div>
             </>
+          ) : (
+            <div className="text-sm text-zinc-400 pt-2 space-y-2">
+              <p>使用系统 SSH Agent 进行认证</p>
+              <p className="text-xs text-zinc-500">
+                需要确保 SSH Agent 正在运行且包含所需密钥
+              </p>
+            </div>
           )}
 
           <div className="space-y-2">

@@ -9,6 +9,7 @@
 //! - SSH config file parsing
 //! - Host key verification via ~/.ssh/known_hosts
 
+mod agent;
 mod client;
 mod config;
 mod error;
@@ -17,6 +18,7 @@ pub mod known_hosts;
 mod proxy;
 mod session;
 
+pub use agent::{is_agent_available, SshAgentClient};
 pub use client::{ClientHandler, SshClient};
 pub use config::{AuthMethod, ProxyHopConfig, SshConfig};
 pub use error::SshError;

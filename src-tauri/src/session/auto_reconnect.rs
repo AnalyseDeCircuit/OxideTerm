@@ -259,7 +259,8 @@ impl AutoReconnectService {
                 passphrase: passphrase.clone(),
             },
             super::types::AuthMethod::Agent => {
-                return Err("SSH Agent not yet supported".to_string());
+                // Agent authentication is supported
+                SshAuthMethod::Agent
             }
         };
 

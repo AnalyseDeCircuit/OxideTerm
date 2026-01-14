@@ -87,10 +87,17 @@ impl SshClient {
                     .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
             }
             AuthMethod::Agent => {
-                // Agent auth is more complex, simplify for now
-                return Err(SshError::AuthenticationFailed(
-                    "SSH agent authentication not yet implemented".to_string(),
-                ));
+                // Connect to SSH Agent and authenticate
+                let mut agent = crate::ssh::agent::SshAgentClient::connect().await
+                    .map_err(|e| SshError::AuthenticationFailed(
+                        format!("Failed to connect to SSH agent: {}", e)
+                    ))?;
+                
+                agent.authenticate(&handle, &self.config.username).await
+                    .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?;
+                
+                // Agent authentication returns () on success, set flag manually
+                true
             }
         };
 

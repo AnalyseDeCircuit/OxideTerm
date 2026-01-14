@@ -223,9 +223,11 @@ async fn direct_connect(
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }
         AuthMethod::Agent => {
-            return Err(SshError::AuthenticationFailed(
-                "SSH agent authentication not yet supported for proxy hops".into(),
-            ));
+            // Connect to SSH Agent and authenticate
+            let mut agent = crate::ssh::agent::SshAgentClient::connect().await?;
+            agent.authenticate(&handle, &hop.username).await?;
+            // Agent authentication returns () on success, set flag manually
+            true
         }
     };
 
@@ -323,9 +325,11 @@ async fn connect_via_stream(
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }
         AuthMethod::Agent => {
-            return Err(SshError::AuthenticationFailed(
-                "SSH agent authentication not yet supported for proxy hops".into(),
-            ));
+            // Connect to SSH Agent and authenticate
+            let mut agent = crate::ssh::agent::SshAgentClient::connect().await?;
+            agent.authenticate(&handle, &hop.username).await?;
+            // Agent authentication returns () on success, set flag manually
+            true
         }
     };
 

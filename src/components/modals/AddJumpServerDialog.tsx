@@ -31,14 +31,14 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('');
-  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key'>('key');
+  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent'>('key');
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState<string>('');
 
   // Type-safe auth type handler
   const handleAuthTypeChange = (value: string) => {
-    if (value === 'password' || value === 'key' || value === 'default_key') {
+    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent') {
       setAuthType(value);
     }
   };
@@ -121,10 +121,11 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
               onValueChange={handleAuthTypeChange}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="default_key">Default Key</TabsTrigger>
                 <TabsTrigger value="key">SSH Key</TabsTrigger>
                 <TabsTrigger value="password">Password</TabsTrigger>
+                <TabsTrigger value="agent">SSH Agent</TabsTrigger>
               </TabsList>
 
               <TabsContent value="default_key">
@@ -166,6 +167,15 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="agent">
+                <div className="text-sm text-zinc-400 pt-2 space-y-2">
+                  <p>使用系统 SSH Agent 进行认证</p>
+                  <p className="text-xs text-zinc-500">
+                    需要确保 SSH Agent 正在运行且包含所需密钥
+                  </p>
                 </div>
               </TabsContent>
             </Tabs>
