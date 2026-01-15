@@ -68,13 +68,13 @@ impl PersistedForward {
     }
 
     /// Serialize to bytes
-    pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(self)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+        postcard::to_stdvec(self)
     }
 
     /// Deserialize from bytes
-    pub fn from_bytes(data: &[u8]) -> Result<Self, bincode::Error> {
-        bincode::deserialize(data)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(data)
     }
 }
 

@@ -29,7 +29,7 @@ pub enum OxideFileError {
     Io(#[from] std::io::Error),
 
     #[error("Serialization error: {0}")]
-    Serialization(#[from] bincode::Error),
+    Serialization(#[from] postcard::Error),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),

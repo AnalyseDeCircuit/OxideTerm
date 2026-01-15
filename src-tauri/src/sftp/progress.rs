@@ -269,7 +269,7 @@ impl ProgressStore for RedbProgressStore {
             progress.progress_percent()
         );
 
-        let serialized = bincode::serialize(progress).map_err(|e| {
+        let serialized = postcard::to_stdvec(progress).map_err(|e| {
             SftpError::StorageError(format!("Failed to serialize progress: {}", e))
         })?;
 
@@ -313,7 +313,7 @@ impl ProgressStore for RedbProgressStore {
             SftpError::StorageError(format!("Failed to read progress: {}", e))
         })? {
             Some(value) => {
-                let progress: StoredTransferProgress = bincode::deserialize(&value.value())
+                let progress: StoredTransferProgress = postcard::from_bytes(&value.value())
                     .map_err(|e| {
                         SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                     })?;
@@ -352,7 +352,7 @@ impl ProgressStore for RedbProgressStore {
                 SftpError::StorageError(format!("Failed to read progress entry: {}", e))
             })?;
 
-            let progress: StoredTransferProgress = bincode::deserialize(value.value())
+            let progress: StoredTransferProgress = postcard::from_bytes(value.value())
                 .map_err(|e| {
                     SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                 })?;
@@ -397,7 +397,7 @@ impl ProgressStore for RedbProgressStore {
                 SftpError::StorageError(format!("Failed to read progress entry: {}", e))
             })?;
 
-            let progress: StoredTransferProgress = bincode::deserialize(value.value())
+            let progress: StoredTransferProgress = postcard::from_bytes(value.value())
                 .map_err(|e| {
                     SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                 })?;

@@ -114,7 +114,7 @@ pub struct EncryptedConnection {
     /// Proxy chain for multi-hop connections (intermediate jump hosts)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proxy_chain: Vec<EncryptedProxyHop>,
-    /// Terminal buffer snapshot (base64-encoded bincode)
+    /// Terminal buffer snapshot (base64-encoded postcard)
     /// This can be quite large, so it's optional
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_buffer: Option<String>,

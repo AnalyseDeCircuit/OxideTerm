@@ -174,7 +174,7 @@ impl ScrollBuffer {
     }
 
     /// Serialize buffer to bytes for persistence
-    pub async fn save_to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+    pub async fn save_to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
         let lines = self.lines.read().await;
 
         let serialized = SerializedBuffer {
@@ -184,12 +184,12 @@ impl ScrollBuffer {
             max_lines: self.max_lines,
         };
 
-        bincode::serialize(&serialized)
+        postcard::to_stdvec(&serialized)
     }
 
     /// Load buffer from serialized bytes
-    pub async fn load_from_bytes(data: &[u8]) -> Result<Arc<Self>, bincode::Error> {
-        let serialized: SerializedBuffer = bincode::deserialize(data)?;
+    pub async fn load_from_bytes(data: &[u8]) -> Result<Arc<Self>, postcard::Error> {
+        let serialized: SerializedBuffer = postcard::from_bytes(data)?;
 
         let buffer = Self {
             lines: RwLock::new(serialized.lines.into_iter().collect()),

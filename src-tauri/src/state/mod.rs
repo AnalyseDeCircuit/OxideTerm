@@ -1,4 +1,4 @@
-//! State persistence using redb + bincode
+//! State persistence using redb + postcard
 //! Handles session metadata and forward rules persistence
 
 pub mod forwarding;
