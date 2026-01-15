@@ -36,7 +36,6 @@ pub struct StoredTransferProgress {
     pub status: TransferStatus,
 
     /// Last update timestamp
-    #[serde(with = "crate::state::datetime_serde")]
     pub last_updated: DateTime<Utc>,
 
     /// Session ID (for reconnection recovery)
@@ -270,7 +269,7 @@ impl ProgressStore for RedbProgressStore {
             progress.progress_percent()
         );
 
-        let serialized = postcard::to_stdvec(progress).map_err(|e| {
+        let serialized = rmp_serde::to_vec_named(progress).map_err(|e| {
             SftpError::StorageError(format!("Failed to serialize progress: {}", e))
         })?;
 
@@ -314,7 +313,7 @@ impl ProgressStore for RedbProgressStore {
             SftpError::StorageError(format!("Failed to read progress: {}", e))
         })? {
             Some(value) => {
-                let progress: StoredTransferProgress = postcard::from_bytes(&value.value())
+                let progress: StoredTransferProgress = rmp_serde::from_slice(&value.value())
                     .map_err(|e| {
                         SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                     })?;
@@ -353,7 +352,7 @@ impl ProgressStore for RedbProgressStore {
                 SftpError::StorageError(format!("Failed to read progress entry: {}", e))
             })?;
 
-            let progress: StoredTransferProgress = postcard::from_bytes(value.value())
+            let progress: StoredTransferProgress = rmp_serde::from_slice(value.value())
                 .map_err(|e| {
                     SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                 })?;
@@ -398,7 +397,7 @@ impl ProgressStore for RedbProgressStore {
                 SftpError::StorageError(format!("Failed to read progress entry: {}", e))
             })?;
 
-            let progress: StoredTransferProgress = postcard::from_bytes(value.value())
+            let progress: StoredTransferProgress = rmp_serde::from_slice(value.value())
                 .map_err(|e| {
                     SftpError::StorageError(format!("Failed to deserialize progress: {}", e))
                 })?;

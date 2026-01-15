@@ -50,8 +50,8 @@ pub fn encrypt_oxide_file(
     // 2. Derive encryption key from password
     let key = derive_key(password, &salt)?;
 
-    // 3. Serialize payload with serde_json (supports tagged enums for compatibility)
-    let plaintext = serde_json::to_vec(payload).map_err(OxideFileError::Json)?;
+    // 3. Serialize payload with MessagePack (supports tagged enums)
+    let plaintext = rmp_serde::to_vec_named(payload)?;
 
     // 4. Encrypt with ChaCha20-Poly1305
     let cipher =
@@ -107,9 +107,9 @@ pub fn decrypt_oxide_file(
         .decrypt(nonce_obj, ciphertext_with_tag.as_ref())
         .map_err(|_| OxideFileError::DecryptionFailed)?;
 
-    // 5. Deserialize payload (use standard config for compatibility)
+    // 5. Deserialize payload with MessagePack
     let payload: EncryptedPayload =
-        serde_json::from_slice(&plaintext).map_err(OxideFileError::Json)?;
+        rmp_serde::from_slice(&plaintext)?;
 
     // 6. Verify internal checksum
     verify_checksum(&payload)?;
@@ -122,7 +122,7 @@ pub fn compute_checksum(connections: &[EncryptedConnection]) -> Result<String, O
     let mut hasher = Sha256::new();
 
     for conn in connections {
-        let conn_bytes = serde_json::to_vec(conn).map_err(OxideFileError::Json)?;
+        let conn_bytes = rmp_serde::to_vec_named(conn)?;
         hasher.update(&conn_bytes);
     }
 

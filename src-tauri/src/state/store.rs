@@ -42,8 +42,8 @@ pub enum StateError {
     #[error("Commit error: {0}")]
     Commit(#[from] redb::CommitError),
 
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    #[error("MessagePack serialization error: {0}")]
+    Serialization(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -53,6 +53,18 @@ pub enum StateError {
 
     #[error("Version mismatch: found {found}, expected {expected}")]
     VersionMismatch { found: u32, expected: u32 },
+}
+
+impl From<rmp_serde::encode::Error> for StateError {
+    fn from(e: rmp_serde::encode::Error) -> Self {
+        StateError::Serialization(e.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for StateError {
+    fn from(e: rmp_serde::decode::Error) -> Self {
+        StateError::Serialization(e.to_string())
+    }
 }
 
 /// High-performance state store using redb
@@ -162,7 +174,7 @@ impl StateStore {
             let mut table = write_txn.open_table(METADATA_TABLE)?;
 
             let current_version = if let Some(version_bytes) = table.get("version")? {
-                let version: u32 = serde_json::from_slice(version_bytes.value())?;
+                let version: u32 = rmp_serde::from_slice(version_bytes.value())?;
 
                 if version > STATE_VERSION {
                     return Err(StateError::VersionMismatch {
@@ -185,7 +197,7 @@ impl StateStore {
 
             if current_version.is_none() {
                 // First time initialization
-                let version_bytes = serde_json::to_vec(&STATE_VERSION)?;
+                let version_bytes = rmp_serde::to_vec(&STATE_VERSION)?;
                 table.insert("version", version_bytes.as_slice())?;
                 info!("Initialized state database version: {}", STATE_VERSION);
             }

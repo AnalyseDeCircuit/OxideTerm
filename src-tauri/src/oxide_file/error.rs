@@ -30,4 +30,19 @@ pub enum OxideFileError {
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("MessagePack serialization error: {0}")]
+    MsgPack(String),
+}
+
+impl From<rmp_serde::encode::Error> for OxideFileError {
+    fn from(e: rmp_serde::encode::Error) -> Self {
+        OxideFileError::MsgPack(e.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for OxideFileError {
+    fn from(e: rmp_serde::decode::Error) -> Self {
+        OxideFileError::MsgPack(e.to_string())
+    }
 }

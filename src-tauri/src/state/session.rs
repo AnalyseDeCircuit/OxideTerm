@@ -102,14 +102,14 @@ impl PersistedSession {
         }
     }
 
-    /// Serialize to bytes (using JSON for compatibility with complex types)
-    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        serde_json::to_vec(self)
+    /// Serialize to bytes (using MessagePack for binary persistence)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+        rmp_serde::to_vec_named(self)
     }
 
     /// Deserialize from bytes
-    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(data)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
+        rmp_serde::from_slice(data)
     }
 }
 
@@ -126,7 +126,7 @@ impl SessionPersistence {
 
     /// Save a session (synchronous)
     pub fn save(&self, session: &PersistedSession) -> Result<(), StateError> {
-        let data = session.to_bytes().map_err(StateError::Serialization)?;
+        let data = session.to_bytes()?;
 
         self.store.save_session(&session.id, &data)?;
 
@@ -135,7 +135,7 @@ impl SessionPersistence {
 
     /// Save a session (async, non-blocking)
     pub async fn save_async(&self, session: PersistedSession) -> Result<(), StateError> {
-        let data = session.to_bytes().map_err(StateError::Serialization)?;
+        let data = session.to_bytes()?;
 
         self.store.save_session_async(session.id, data).await?;
 
@@ -146,7 +146,7 @@ impl SessionPersistence {
     pub fn load(&self, id: &str) -> Result<PersistedSession, StateError> {
         let data = self.store.load_session(id)?;
 
-        PersistedSession::from_bytes(&data).map_err(StateError::Serialization)
+        Ok(PersistedSession::from_bytes(&data)?)
     }
 
     /// Delete a session (synchronous)

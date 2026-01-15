@@ -67,14 +67,14 @@ impl PersistedForward {
         }
     }
 
-    /// Serialize to bytes (using JSON for compatibility with complex types)
-    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        serde_json::to_vec(self)
+    /// Serialize to bytes (using MessagePack for binary persistence)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+        rmp_serde::to_vec_named(self)
     }
 
     /// Deserialize from bytes
-    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(data)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
+        rmp_serde::from_slice(data)
     }
 }
 
@@ -91,7 +91,7 @@ impl ForwardPersistence {
 
     /// Save a forward rule (synchronous)
     pub fn save(&self, forward: &PersistedForward) -> Result<(), StateError> {
-        let data = forward.to_bytes().map_err(StateError::Serialization)?;
+        let data = forward.to_bytes()?;
 
         self.store.save_forward(&forward.id, &data)?;
 
@@ -100,7 +100,7 @@ impl ForwardPersistence {
 
     /// Save a forward rule (async, non-blocking)
     pub async fn save_async(&self, forward: PersistedForward) -> Result<(), StateError> {
-        let data = forward.to_bytes().map_err(StateError::Serialization)?;
+        let data = forward.to_bytes()?;
 
         self.store.save_forward_async(forward.id, data).await?;
 
@@ -111,7 +111,7 @@ impl ForwardPersistence {
     pub fn load(&self, id: &str) -> Result<PersistedForward, StateError> {
         let data = self.store.load_forward(id)?;
 
-        PersistedForward::from_bytes(&data).map_err(StateError::Serialization)
+        Ok(PersistedForward::from_bytes(&data)?)
     }
 
     /// Delete a forward rule (synchronous)
