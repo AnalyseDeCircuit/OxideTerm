@@ -84,6 +84,10 @@ vte = "0.13"
 regex = "1.10"
 strip-ansi-escapes = "0.2"
 
+# Windows-specific dependencies
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52", features = ["Win32_Media_Multimedia"] }
+
 [dev-dependencies]
 tempfile = "3"
 

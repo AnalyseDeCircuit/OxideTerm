@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
+import { platform } from '../../lib/platform';
 import { SearchBar } from './SearchBar';
 import { SearchMatch, SettingsChangedDetail } from '../../types';
 
@@ -65,7 +66,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   // P3: Backpressure handling - batch terminal writes with RAF
   const pendingDataRef = useRef<Uint8Array[]>([]);
   const rafIdRef = useRef<number | null>(null);
-  
+
+  // IME composition state tracking (for Windows input method compatibility)
+  const isComposingRef = useRef(false);
+
   // Track last connected ws_url for reconnection detection
   const lastWsUrlRef = useRef<string | null>(null);
   
@@ -191,23 +195,54 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
         
         switch (msgType) {
           case MSG_TYPE_DATA:
-            pendingDataRef.current.push(payload);
-            if (rafIdRef.current === null) {
-              rafIdRef.current = requestAnimationFrame(() => {
-                if (pendingDataRef.current.length > 0 && terminalRef.current) {
-                  const combined = new Uint8Array(
-                    pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
-                  );
-                  let offset = 0;
-                  for (const chunk of pendingDataRef.current) {
-                    combined.set(chunk, offset);
-                    offset += chunk.length;
-                  }
-                  pendingDataRef.current = [];
-                  terminalRef.current.write(combined);
+            if (platform.isWindows) {
+              // Windows: 根据是否在 IME 合成中决定策略
+              if (isComposingRef.current) {
+                // IME 合成期间：使用 RAF 缓冲，避免候选框抖动
+                pendingDataRef.current.push(payload);
+                if (rafIdRef.current === null) {
+                  rafIdRef.current = requestAnimationFrame(() => {
+                    if (pendingDataRef.current.length > 0 && terminalRef.current) {
+                      const combined = new Uint8Array(
+                        pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
+                      );
+                      let offset = 0;
+                      for (const chunk of pendingDataRef.current) {
+                        combined.set(chunk, offset);
+                        offset += chunk.length;
+                      }
+                      pendingDataRef.current = [];
+                      terminalRef.current.write(combined);
+                    }
+                    rafIdRef.current = null;
+                  });
                 }
-                rafIdRef.current = null;
-              });
+              } else {
+                // 非合成期间：直接写入，最小化延迟
+                if (terminalRef.current) {
+                  terminalRef.current.write(payload);
+                }
+              }
+            } else {
+              // macOS/Linux: 继续使用 RAF 批处理以提升性能
+              pendingDataRef.current.push(payload);
+              if (rafIdRef.current === null) {
+                rafIdRef.current = requestAnimationFrame(() => {
+                  if (pendingDataRef.current.length > 0 && terminalRef.current) {
+                    const combined = new Uint8Array(
+                      pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
+                    );
+                    let offset = 0;
+                    for (const chunk of pendingDataRef.current) {
+                      combined.set(chunk, offset);
+                      offset += chunk.length;
+                    }
+                    pendingDataRef.current = [];
+                    terminalRef.current.write(combined);
+                  }
+                  rafIdRef.current = null;
+                });
+              }
             }
             break;
           case MSG_TYPE_HEARTBEAT:
@@ -408,6 +443,32 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     } else {
          term.writeln(`\x1b[33mNo WebSocket URL available for session.\x1b[0m`);
     }
+
+    // IME composition event listeners (for Windows input method compatibility)
+    const handleCompositionStart = () => {
+      isComposingRef.current = true;
+      if (import.meta.env.DEV) {
+        console.log('[IME] Composition started - using RAF buffering');
+      }
+    };
+
+    const handleCompositionEnd = () => {
+      isComposingRef.current = false;
+      if (import.meta.env.DEV) {
+        console.log('[IME] Composition ended - using direct write');
+      }
+    };
+
+    // Listen for composition events on the terminal element
+    const terminalElement = term.element;
+    terminalElement?.addEventListener('compositionstart', handleCompositionStart);
+    terminalElement?.addEventListener('compositionend', handleCompositionEnd);
+
+    // Cleanup function for composition listeners
+    return () => {
+      terminalElement?.removeEventListener('compositionstart', handleCompositionStart);
+      terminalElement?.removeEventListener('compositionend', handleCompositionEnd);
+    };
 
     // Terminal Input -> WebSocket (registered outside setTimeout to work immediately)
     term.onData(data => {

@@ -12,6 +12,57 @@ pub mod sftp;
 pub mod ssh;
 pub mod state;
 
+// Windows: 高精度系统定时器
+#[cfg(target_os = "windows")]
+mod windows_timer {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static TIMER_ENABLED: AtomicBool = AtomicBool::new(false);
+
+    #[link(name = "winmm")]
+    extern "C" {
+        // Windows Multimedia API
+        fn timeBeginPeriod(uPeriod: u32) -> u32;
+        fn timeEndPeriod(uPeriod: u32) -> u32;
+    }
+
+    pub fn enable_high_precision_timer() -> Result<(), String> {
+        if TIMER_ENABLED.load(Ordering::Relaxed) {
+            tracing::debug!("High-precision timer already enabled");
+            return Ok(());
+        }
+
+        unsafe {
+            // 设置系统定时器精度为 1ms
+            // 返回 0 表示成功 (TIMERR_NOERROR)
+            let result = timeBeginPeriod(1);
+            if result == 0 {
+                TIMER_ENABLED.store(true, Ordering::Relaxed);
+                tracing::info!("✅ Windows high-precision timer enabled (1ms precision)");
+                Ok(())
+            } else {
+                let error_code = result as u32;
+                let msg = format!("timeBeginPeriod failed with error code: {}", error_code);
+                tracing::error!("❌ {}", msg);
+                Err(msg)
+            }
+        }
+    }
+
+    pub fn disable_high_precision_timer() {
+        if TIMER_ENABLED.load(Ordering::Relaxed) {
+            unsafe {
+                timeEndPeriod(1);
+                TIMER_ENABLED.store(false, Ordering::Relaxed);
+                tracing::info!("Windows high-precision timer disabled");
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+use windows_timer::{enable_high_precision_timer, disable_high_precision_timer};
+
 use bridge::BridgeManager;
 use commands::config::ConfigState;
 use commands::HealthRegistry;
@@ -152,6 +203,13 @@ pub fn run() {
     let transfer_manager = Arc::new(TransferManager::new());
 
     write_startup_log("All registries initialized, building Tauri app...");
+
+    // Windows: 启用高精度定时器（必须在所有其他初始化之前）
+    #[cfg(target_os = "windows")]
+    if let Err(e) = enable_high_precision_timer() {
+        tracing::warn!("⚠️  Failed to enable high-precision timer: {}. Tokio scheduling may be less precise.", e);
+        write_startup_log(&format!("WARNING: Failed to enable high-precision timer: {}", e));
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -294,6 +352,10 @@ pub fn run() {
             // Handle app lifecycle events
             if let tauri::RunEvent::Exit = event {
                 tracing::info!("App exit requested, cleaning up resources...");
+
+                // Windows: 清理高精度定时器（恢复系统默认值）
+                #[cfg(target_os = "windows")]
+                disable_high_precision_timer();
                 
                 // Clean up BridgeManager (WebSocket servers)
                 if let Some(bridge_manager) = app_handle.try_state::<BridgeManager>() {
