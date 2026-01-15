@@ -329,16 +329,38 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
     term.writeln(`\x1b[38;2;234;88;12mInitialized OxideTerm\x1b[0m`);
     
+    // Font loading detection - ensure fonts are loaded before connecting
+    const ensureFontsLoaded = async () => {
+        try {
+            const fontsToCheck = ['JetBrains Mono', 'MesloLGM Nerd Font', 'Tinos Nerd Font'];
+            for (const fontName of fontsToCheck) {
+                await document.fonts.load(`16px "${fontName}"`);
+                if (import.meta.env.DEV) {
+                    console.log(`[Font] ${fontName} loaded`);
+                }
+            }
+            if (import.meta.env.DEV) {
+                console.log('[Font] All fonts loaded, ready to connect');
+            }
+        } catch (error) {
+            console.warn('[Font] Failed to load fonts:', error);
+            // Continue anyway - fonts may load later
+        }
+    };
+
     // Delay WebSocket connection to avoid React StrictMode double-mount issue
     let wsConnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    
+
     if (session?.ws_url) {
         const wsUrl = session.ws_url; // Capture to avoid undefined in closure
         term.writeln(`Connecting to ${session.username}@${session.host}...`);
-        
-        wsConnectTimeout = setTimeout(() => {
+
+        wsConnectTimeout = setTimeout(async () => {
             if (!isMountedRef.current) return; // Check if still mounted after delay
-            
+
+            // Wait for fonts to load before connecting
+            await ensureFontsLoaded();
+
             try {
                 const ws = new WebSocket(wsUrl);
                 ws.binaryType = 'arraybuffer';
@@ -350,14 +372,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                         ws.close();
                         return;
                     }
-                    
+
                     // SECURITY: Send authentication token as first message
                     if (session?.ws_token) {
                         ws.send(session.ws_token);
                     } else {
                         console.warn('No WebSocket token available - authentication may fail');
                     }
-                    
+
                     term.writeln("Connected.\r\n");
                     // Initial resize using Wire Protocol v1
                     const frame = encodeResizeFrame(term.cols, term.rows);
@@ -373,27 +395,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                         // Parse Wire Protocol v1 frame: [Type: 1][Length: 4][Payload: n]
                         const view = new DataView(data);
                         if (data.byteLength < HEADER_SIZE) return;
-                        
+
                         const type = view.getUint8(0);
                         const length = view.getUint32(1, false); // big-endian
-                        
+
                         if (data.byteLength < HEADER_SIZE + length) return;
-                        
+
                         if (type === MSG_TYPE_DATA) {
                             const payload = new Uint8Array(data, HEADER_SIZE, length);
                             // P3: Queue data and batch writes with RAF for backpressure handling
                             pendingDataRef.current.push(payload);
-                            
+
                             // Schedule RAF flush if not already scheduled
                             if (rafIdRef.current === null) {
                                 rafIdRef.current = requestAnimationFrame(() => {
                                     rafIdRef.current = null;
                                     if (!isMountedRef.current || !terminalRef.current) return;
-                                    
+
                                     // Flush all pending data in one batch
                                     const pending = pendingDataRef.current;
                                     if (pending.length === 0) return;
-                                    
+
                                     // Concatenate all chunks for single write
                                     const totalLength = pending.reduce((sum, chunk) => sum + chunk.length, 0);
                                     const combined = new Uint8Array(totalLength);
@@ -402,7 +424,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                                         combined.set(chunk, offset);
                                         offset += chunk.length;
                                     }
-                                    
+
                                     pendingDataRef.current = [];
                                     terminalRef.current.write(combined);
                                 });
