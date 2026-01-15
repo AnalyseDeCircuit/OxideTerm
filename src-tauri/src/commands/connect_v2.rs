@@ -697,3 +697,129 @@ pub struct PersistedSessionDto {
     pub created_at: String,
     pub order: usize,
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Connection Pool Commands (建立连接，不创建终端)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 建立连接响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstablishConnectionResponse {
+    /// 连接 ID
+    pub connection_id: String,
+    /// 是否复用了已有连接
+    pub reused: bool,
+    /// 连接信息
+    pub connection: crate::ssh::ConnectionInfo,
+}
+
+/// 建立 SSH 连接（不创建终端）
+/// 
+/// 如果已有相同配置的活跃连接，则复用；否则建立新连接。
+/// 连接加入连接池，用户可以稍后从连接池创建终端。
+#[tauri::command]
+pub async fn establish_connection(
+    request: ConnectRequest,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<EstablishConnectionResponse, String> {
+    info!(
+        "Establish connection request: {}@{}:{}",
+        request.username, request.host, request.port
+    );
+
+    // 构建配置用于查找/创建
+    let auth = match request.auth {
+        AuthRequest::Password { password } => AuthMethod::Password { password },
+        AuthRequest::Key {
+            key_path,
+            passphrase,
+        } => AuthMethod::Key {
+            key_path,
+            passphrase,
+        },
+        AuthRequest::DefaultKey { passphrase } => {
+            let key_auth = KeyAuth::from_default_locations(passphrase.as_deref())
+                .map_err(|e| format!("No SSH key found: {}", e))?;
+            AuthMethod::Key {
+                key_path: key_auth.key_path.to_string_lossy().to_string(),
+                passphrase,
+            }
+        }
+        AuthRequest::Agent => {
+            return Err("SSH Agent not yet supported".to_string());
+        }
+    };
+
+    let config = SessionConfig {
+        host: request.host.clone(),
+        port: request.port,
+        username: request.username.clone(),
+        auth,
+        name: request.name.clone(),
+        color: None,
+        cols: request.cols,
+        rows: request.rows,
+    };
+
+    // 检查是否有可复用的连接
+    if let Some(existing_id) = connection_registry.find_by_config(&config) {
+        info!("Reusing existing connection: {}", existing_id);
+        
+        let connection_info = connection_registry
+            .get_info(&existing_id)
+            .await
+            .ok_or_else(|| "Connection disappeared".to_string())?;
+
+        return Ok(EstablishConnectionResponse {
+            connection_id: existing_id,
+            reused: true,
+            connection: connection_info,
+        });
+    }
+
+    // 建立新连接
+    // TODO: 支持 proxy_chain
+    if request.proxy_chain.is_some() {
+        return Err("Proxy chain not yet supported in establish_connection. Use connect_v2 for proxy connections.".to_string());
+    }
+
+    let connection_id = connection_registry
+        .connect(config)
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    let connection_info = connection_registry
+        .get_info(&connection_id)
+        .await
+        .ok_or_else(|| "Connection disappeared after creation".to_string())?;
+
+    info!("New connection established: {}", connection_id);
+
+    Ok(EstablishConnectionResponse {
+        connection_id,
+        reused: false,
+        connection: connection_info,
+    })
+}
+
+/// 获取连接池中所有连接
+#[tauri::command]
+pub async fn list_connections(
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<Vec<crate::ssh::ConnectionInfo>, String> {
+    Ok(connection_registry.inner().list_connections().await)
+}
+
+/// 断开连接池中的连接
+#[tauri::command]
+pub async fn disconnect_connection(
+    connection_id: String,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<(), String> {
+    connection_registry
+        .inner()
+        .disconnect(&connection_id)
+        .await
+        .map_err(|e| format!("Failed to disconnect: {}", e))
+}

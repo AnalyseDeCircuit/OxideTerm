@@ -527,6 +527,7 @@ pub async fn create_terminal(
         .connect_success_with_connection(
             &session_id,
             port,
+            token.clone(),
             cmd_tx,
             handle_controller,
             request.connection_id.clone(),

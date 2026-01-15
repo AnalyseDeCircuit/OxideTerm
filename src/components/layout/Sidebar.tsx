@@ -36,6 +36,8 @@ export const Sidebar = () => {
     connections,
     toggleModal,
     createTab,
+    tabs,
+    setActiveTab,
     savedConnections,
     groups,
     selectedGroup,
@@ -45,10 +47,13 @@ export const Sidebar = () => {
     connectToSaved,
     modals,
     editingConnection,
-    disconnect
+    disconnect,
+    disconnectSsh,
+    createTerminalSession
   } = useAppStore();
 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['ungrouped']));
+  const [expandedConnections, setExpandedConnections] = useState<Set<string>>(new Set());
   const [isManageMode, setIsManageMode] = useState(false);
   const [selectedConnections, setSelectedConnections] = useState<Set<string>>(new Set());
   const [showExportModal, setShowExportModal] = useState(false);
@@ -67,6 +72,18 @@ export const Sidebar = () => {
         next.delete(groupName);
       } else {
         next.add(groupName);
+      }
+      return next;
+    });
+  };
+
+  const toggleConnection = (connectionId: string) => {
+    setExpandedConnections(prev => {
+      const next = new Set(prev);
+      if (next.has(connectionId)) {
+        next.delete(connectionId);
+      } else {
+        next.add(connectionId);
       }
       return next;
     });
@@ -145,7 +162,7 @@ export const Sidebar = () => {
           title="Sessions"
           className="rounded-sm"
         >
-          <Terminal className="h-4 w-4" />
+          <Link2 className="h-4 w-4" />
         </Button>
         <Button 
           variant={sidebarActiveSection === 'sftp' ? 'secondary' : 'ghost'} 
@@ -172,7 +189,7 @@ export const Sidebar = () => {
           title="SSH 连接池"
           className="rounded-sm relative"
         >
-          <Link2 className="h-4 w-4" />
+          <Terminal className="h-4 w-4" />
           {/* 连接数角标 */}
           {connections.size > 0 && (
             <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
@@ -208,39 +225,144 @@ export const Sidebar = () => {
             </div>
             
             <div className="space-y-1">
-              {sessionList.length === 0 ? (
+              {connections.size === 0 ? (
                 <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
                   No active sessions
                 </div>
               ) : (
-                sessionList.map(session => (
-                  <div 
-                    key={session.id}
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text hover:bg-theme-bg-hover rounded-sm group"
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full ${session.state === 'connected' ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                    <span 
-                      className="truncate flex-1 cursor-pointer"
-                      onClick={() => createTab('terminal', session.id)}
-                    >
-                      {session.name}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`Disconnect from "${session.name}"?`)) {
-                          disconnect(session.id);
-                        }
-                      }}
-                      title="Disconnect"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))
+                Array.from(connections.values()).map(connection => {
+                  const isExpanded = expandedConnections.has(connection.id);
+                  // 获取该连接下的所有终端 session
+                  const terminalSessions = connection.terminalIds
+                    .map(tid => sessions.get(tid))
+                    .filter(Boolean);
+                  const displayName = `${connection.username}@${connection.host}`;
+                  
+                  return (
+                    <div key={connection.id} className="space-y-0.5">
+                      {/* 连接主行 */}
+                      <div 
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm text-theme-text hover:bg-theme-bg-hover rounded-sm group cursor-pointer"
+                        onClick={() => toggleConnection(connection.id)}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="h-3 w-3 text-theme-text-muted" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3 text-theme-text-muted" />
+                        )}
+                        <div className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          connection.state === 'active' ? 'bg-green-500' : 
+                          connection.state === 'idle' ? 'bg-blue-500' : 'bg-yellow-500'
+                        )} />
+                        <Server className="h-3.5 w-3.5 text-theme-text-muted" />
+                        <span className="truncate flex-1">{displayName}</span>
+                        <span className="text-[10px] text-theme-text-muted">
+                          {terminalSessions.length > 0 && `${terminalSessions.length}`}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Disconnect from "${displayName}"? This will close all terminals.`)) {
+                              disconnectSsh(connection.id);
+                            }
+                          }}
+                          title="Disconnect"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      
+                      {/* 展开的子列表 */}
+                      {isExpanded && (
+                        <div className="ml-4 pl-2 border-l border-theme-border space-y-0.5">
+                          {/* 终端列表 */}
+                          {terminalSessions.map((session, index) => {
+                            if (!session) return null;
+                            const existingTab = tabs.find(t => t.sessionId === session.id && t.type === 'terminal');
+                            return (
+                              <div
+                                key={session.id}
+                                className="flex items-center gap-2 px-2 py-1 text-xs text-theme-text hover:bg-theme-bg-hover rounded-sm group cursor-pointer"
+                                onClick={() => {
+                                  if (existingTab) {
+                                    setActiveTab(existingTab.id);
+                                  } else {
+                                    createTab('terminal', session.id);
+                                  }
+                                }}
+                              >
+                                <Terminal className="h-3 w-3 text-theme-text-muted" />
+                                <span className="flex-1 truncate">Terminal {index + 1}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-4 w-4 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    disconnect(session.id);
+                                  }}
+                                  title="Close terminal"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                          
+                          {/* 新建终端按钮 */}
+                          <div
+                            className="flex items-center gap-2 px-2 py-1 text-xs text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover rounded-sm cursor-pointer"
+                            onClick={() => createTerminalSession(connection.id)}
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>New Terminal</span>
+                          </div>
+                          
+                          {/* SFTP 入口 */}
+                          <div
+                            className="flex items-center gap-2 px-2 py-1 text-xs text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover rounded-sm cursor-pointer"
+                            onClick={() => {
+                              // 如果有终端 session，用第一个打开 SFTP
+                              const firstSession = terminalSessions[0];
+                              if (firstSession) {
+                                createTab('sftp', firstSession.id);
+                              }
+                            }}
+                          >
+                            <Folder className="h-3 w-3" />
+                            <span>SFTP</span>
+                            {connection.sftpSessionId && (
+                              <span className="text-[10px] text-green-500">●</span>
+                            )}
+                          </div>
+                          
+                          {/* 端口转发入口 */}
+                          <div
+                            className="flex items-center gap-2 px-2 py-1 text-xs text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover rounded-sm cursor-pointer"
+                            onClick={() => {
+                              const firstSession = terminalSessions[0];
+                              if (firstSession) {
+                                createTab('forwards', firstSession.id);
+                              }
+                            }}
+                          >
+                            <ArrowLeftRight className="h-3 w-3" />
+                            <span>Port Forwarding</span>
+                            {connection.forwardIds.length > 0 && (
+                              <span className="text-[10px] text-theme-text-muted">
+                                ({connection.forwardIds.length})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 
@@ -412,11 +534,10 @@ export const Sidebar = () => {
                   <div 
                     key={session.id}
                     onClick={() => createTab('sftp', session.id)}
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text hover:bg-theme-bg-hover rounded-sm cursor-pointer group"
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text rounded-sm cursor-pointer"
                   >
                     <Folder className="h-3 w-3 text-theme-text-muted" />
                     <span className="truncate flex-1">{session.name}</span>
-                    <ChevronRight className="h-3 w-3 text-theme-text-muted opacity-0 group-hover:opacity-100" />
                   </div>
                 ))
               )}
@@ -444,11 +565,10 @@ export const Sidebar = () => {
                   <div 
                     key={session.id}
                     onClick={() => createTab('forwards', session.id)}
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text hover:bg-theme-bg-hover rounded-sm cursor-pointer group"
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text rounded-sm cursor-pointer"
                   >
                     <ArrowLeftRight className="h-3 w-3 text-theme-text-muted" />
                     <span className="truncate flex-1">{session.name}</span>
-                    <ChevronRight className="h-3 w-3 text-theme-text-muted opacity-0 group-hover:opacity-100" />
                   </div>
                 ))
               )}

@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
 
@@ -40,6 +40,46 @@ export const TabBar = () => {
   const [closing, setClosing] = React.useState<string | null>(null);
   // Force re-render for countdown
   const [, setTick] = React.useState(0);
+  
+  // Scroll state
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  
+  // Check scroll state
+  const updateScrollState = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      setCanScrollLeft(container.scrollLeft > 0);
+      setCanScrollRight(
+        container.scrollLeft < container.scrollWidth - container.clientWidth - 1
+      );
+    }
+  };
+  
+  useEffect(() => {
+    updateScrollState();
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', updateScrollState);
+      window.addEventListener('resize', updateScrollState);
+      return () => {
+        container.removeEventListener('scroll', updateScrollState);
+        window.removeEventListener('resize', updateScrollState);
+      };
+    }
+  }, [tabs]);
+  
+  const scroll = (direction: 'left' | 'right') => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const scrollAmount = 200;
+      container.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   // Update countdown every second when there are reconnecting sessions
   React.useEffect(() => {
@@ -98,15 +138,30 @@ export const TabBar = () => {
   };
 
   return (
-    <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border overflow-x-auto no-scrollbar">
+    <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border">
+      {/* Left scroll button */}
+      {canScrollLeft && (
+        <button
+          onClick={() => scroll('left')}
+          className="flex-shrink-0 h-full px-1 hover:bg-zinc-800 border-r border-theme-border"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      )}
+      
       {/* Network status indicator */}
       {!networkOnline && (
-        <div className="flex items-center gap-1.5 px-3 h-full border-r border-theme-border bg-amber-900/30 text-amber-400 text-xs">
+        <div className="flex-shrink-0 flex items-center gap-1.5 px-3 h-full border-r border-theme-border bg-amber-900/30 text-amber-400 text-xs">
           <WifiOff className="h-3.5 w-3.5" />
           <span>Offline</span>
         </div>
       )}
       
+      {/* Scrollable tabs container */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 flex items-center overflow-x-auto no-scrollbar"
+      >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         const isManualReconnecting = reconnecting === tab.sessionId;
@@ -185,6 +240,17 @@ export const TabBar = () => {
           </div>
         );
       })}
+      </div>
+      
+      {/* Right scroll button */}
+      {canScrollRight && (
+        <button
+          onClick={() => scroll('right')}
+          className="flex-shrink-0 h-full px-1 hover:bg-zinc-800 border-l border-theme-border"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 };

@@ -205,6 +205,7 @@ impl SessionRegistry {
         &self,
         session_id: &str,
         ws_port: u16,
+        ws_token: String,
         cmd_tx: mpsc::Sender<SessionCommand>,
         handle_controller: HandleController,
         connection_id: String,
@@ -220,6 +221,7 @@ impl SessionRegistry {
             .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
 
         entry.ws_port = Some(ws_port);
+        entry.ws_token = Some(ws_token);
         entry.cmd_tx = Some(cmd_tx);
         entry.handle_controller = Some(handle_controller);
         entry.connection_id = Some(connection_id.clone());

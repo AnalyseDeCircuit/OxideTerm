@@ -272,6 +272,9 @@ pub fn run() {
             commands::list_persisted_sessions,
             commands::delete_persisted_session,
             // SSH connection pool commands (new architecture)
+            commands::establish_connection,
+            commands::list_connections,
+            commands::disconnect_connection,
             commands::ssh_connect,
             commands::ssh_disconnect,
             commands::ssh_list_connections,

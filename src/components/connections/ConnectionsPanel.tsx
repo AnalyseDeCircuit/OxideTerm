@@ -5,11 +5,9 @@ import {
   FolderOpen, 
   GitFork, 
   RefreshCw, 
-  X, 
   Clock,
   Shield,
-  ShieldOff,
-  Plus
+  ShieldOff
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
@@ -54,10 +52,8 @@ const formatTime = (isoString: string): string => {
 // 单个连接卡片
 const ConnectionCard: React.FC<{
   connection: SshConnectionInfo;
-  onCreateTerminal: (connectionId: string) => void;
-  onDisconnect: (connectionId: string) => void;
   onToggleKeepAlive: (connectionId: string, keepAlive: boolean) => void;
-}> = ({ connection, onCreateTerminal, onDisconnect, onToggleKeepAlive }) => {
+}> = ({ connection, onToggleKeepAlive }) => {
   const { text: stateText, color: stateColor } = formatState(connection.state);
   const isIdle = connection.state === 'idle';
   const isActive = connection.state === 'active';
@@ -126,28 +122,6 @@ const ConnectionCard: React.FC<{
           </span>
         )}
       </div>
-      
-      {/* 操作按钮 */}
-      <div className="flex items-center gap-2 pt-2 border-t border-theme-border">
-        <Button
-          variant="outline"
-          size="sm"
-          className="flex-1"
-          onClick={() => onCreateTerminal(connection.id)}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          新建终端
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-          onClick={() => onDisconnect(connection.id)}
-        >
-          <X className="h-3.5 w-3.5 mr-1" />
-          断开
-        </Button>
-      </div>
     </div>
   );
 };
@@ -157,8 +131,6 @@ export const ConnectionsPanel: React.FC = () => {
   const { 
     connections, 
     refreshConnections, 
-    createTerminalSession,
-    disconnectSsh,
     setConnectionKeepAlive
   } = useAppStore();
   
@@ -175,22 +147,6 @@ export const ConnectionsPanel: React.FC = () => {
       await refreshConnections();
     } finally {
       setLoading(false);
-    }
-  };
-  
-  const handleCreateTerminal = async (connectionId: string) => {
-    try {
-      await createTerminalSession(connectionId);
-    } catch (error) {
-      console.error('Failed to create terminal:', error);
-    }
-  };
-  
-  const handleDisconnect = async (connectionId: string) => {
-    try {
-      await disconnectSsh(connectionId);
-    } catch (error) {
-      console.error('Failed to disconnect:', error);
     }
   };
   
@@ -241,8 +197,6 @@ export const ConnectionsPanel: React.FC = () => {
             <ConnectionCard
               key={conn.id}
               connection={conn}
-              onCreateTerminal={handleCreateTerminal}
-              onDisconnect={handleDisconnect}
               onToggleKeepAlive={handleToggleKeepAlive}
             />
           ))

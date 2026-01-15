@@ -682,7 +682,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // Get full connection info with credentials from backend
       const savedConn = await api.getSavedConnectionForConnect(connectionId);
 
-      // Map auth_type for ConnectRequest
+      // Map auth_type for SshConnectRequest
       const mapAuthType = (authType: string): 'password' | 'key' | 'default_key' | 'agent' => {
         if (authType === 'agent') return 'agent';
         if (authType === 'key') return 'key';
@@ -690,33 +690,51 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return 'default_key';
       };
 
-      // Build proxy_chain for ConnectRequest
-      const proxyChain: ConnectRequest['proxy_chain'] = savedConn.proxy_chain.length > 0
-        ? savedConn.proxy_chain.map((hop, index) => ({
-            id: `hop-${index}`,
-            host: hop.host,
-            port: hop.port,
-            username: hop.username,
-            auth_type: mapAuthType(hop.auth_type),
-            password: hop.password,
-            key_path: hop.key_path,
-            passphrase: hop.passphrase,
-          }))
-        : undefined;
+      // TODO: 暂不支持 proxy_chain，需要后续扩展 sshConnect
+      if (savedConn.proxy_chain && savedConn.proxy_chain.length > 0) {
+        // 对于代理链连接，使用旧的 connect_v2 API（会创建终端）
+        const proxyChain: ConnectRequest['proxy_chain'] = savedConn.proxy_chain.map((hop, index) => ({
+          id: `hop-${index}`,
+          host: hop.host,
+          port: hop.port,
+          username: hop.username,
+          auth_type: mapAuthType(hop.auth_type),
+          password: hop.password,
+          key_path: hop.key_path,
+          passphrase: hop.passphrase,
+        }));
 
-      const request: ConnectRequest = {
+        const request: ConnectRequest = {
+          host: savedConn.host,
+          port: savedConn.port,
+          username: savedConn.username,
+          auth_type: mapAuthType(savedConn.auth_type),
+          password: savedConn.password,
+          key_path: savedConn.key_path,
+          passphrase: savedConn.passphrase,
+          name: savedConn.name,
+          proxy_chain: proxyChain,
+        };
+
+        await get().connect(request);
+        await api.markConnectionUsed(connectionId);
+        return;
+      }
+
+      // 使用新的 sshConnect API - 只建立连接，不创建终端
+      const sshRequest: SshConnectRequest = {
         host: savedConn.host,
         port: savedConn.port,
         username: savedConn.username,
-        auth_type: mapAuthType(savedConn.auth_type),
+        authType: mapAuthType(savedConn.auth_type),
         password: savedConn.password,
-        key_path: savedConn.key_path,
+        keyPath: savedConn.key_path,
         passphrase: savedConn.passphrase,
         name: savedConn.name,
-        proxy_chain: proxyChain,
+        reuseConnection: true, // 尝试复用已有连接
       };
 
-      await get().connect(request);
+      await get().connectSsh(sshRequest);
       await api.markConnectionUsed(connectionId);
     } catch (error) {
       console.error('Failed to connect to saved connection:', error);

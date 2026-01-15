@@ -36,7 +36,6 @@ export const NewConnectionModal = () => {
     toggleModal, 
     connect, 
     connectSsh, 
-    createTerminalSession, 
     connections 
   } = useAppStore();
   const [loading, setLoading] = useState(false);
@@ -163,11 +162,11 @@ export const NewConnectionModal = () => {
 
       // 使用新的连接池 API（无跳板机时）
       if (useConnectionPool && proxyServers.length === 0) {
-        // 如果选择复用且有现有连接，直接创建终端
+        // 如果选择复用且有现有连接，直接关闭对话框
         if (reuseConnection && existingConnectionId) {
-          await createTerminalSession(existingConnectionId);
+          // 连接已存在，无需操作
         } else {
-          // 创建新连接
+          // 创建新连接（不自动创建终端）
           const sshRequest: SshConnectRequest = {
             host,
             port: parseInt(port) || 22,
@@ -179,8 +178,7 @@ export const NewConnectionModal = () => {
             reuseConnection: false, // 强制新建
           };
           
-          const connectionId = await connectSsh(sshRequest);
-          await createTerminalSession(connectionId);
+          await connectSsh(sshRequest);
         }
         
         // 如果需要保存连接配置
