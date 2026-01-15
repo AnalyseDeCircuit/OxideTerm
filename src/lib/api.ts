@@ -611,6 +611,149 @@ export const api = {
   scrollToLine: async (sessionId: string, lineNumber: number, contextLines: number): Promise<TerminalLine[]> => {
     if (USE_MOCK) return [];
     return invoke('scroll_to_line', { sessionId, lineNumber, contextLines });
+  },
+
+  // ============ Session Tree (Dynamic Jump Host) ============
+
+  /**
+   * 获取扁平化的会话树（用于前端渲染）
+   */
+  getSessionTree: async (): Promise<import('../types').FlatNode[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_session_tree');
+  },
+
+  /**
+   * 获取会话树摘要信息
+   */
+  getSessionTreeSummary: async (): Promise<import('../types').SessionTreeSummary> => {
+    if (USE_MOCK) return { totalNodes: 0, rootCount: 0, connectedCount: 0, maxDepth: 0 };
+    return invoke('get_session_tree_summary');
+  },
+
+  /**
+   * 添加直连节点（depth=0）
+   */
+  addRootNode: async (request: import('../types').ConnectServerRequest): Promise<string> => {
+    if (USE_MOCK) return 'mock-node-id';
+    return invoke('add_root_node', { request });
+  },
+
+  /**
+   * 从已连接节点钻入新服务器（模式3: 动态钻入）
+   */
+  treeDrillDown: async (request: import('../types').DrillDownRequest): Promise<string> => {
+    if (USE_MOCK) return 'mock-child-node-id';
+    return invoke('tree_drill_down', { request });
+  },
+
+  /**
+   * 展开静态手工预设链（模式1）
+   */
+  expandManualPreset: async (request: import('../types').ConnectPresetChainRequest): Promise<string> => {
+    if (USE_MOCK) return 'mock-target-node-id';
+    return invoke('expand_manual_preset', { request });
+  },
+
+  /**
+   * 更新节点状态
+   */
+  updateTreeNodeState: async (nodeId: string, newState: string, error?: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('update_tree_node_state', { nodeId, newState, error });
+  },
+
+  /**
+   * 关联 SSH 连接 ID 到节点
+   */
+  setTreeNodeConnection: async (nodeId: string, connectionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('set_tree_node_connection', { nodeId, connectionId });
+  },
+
+  /**
+   * 关联终端会话 ID 到节点
+   */
+  setTreeNodeTerminal: async (nodeId: string, sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('set_tree_node_terminal', { nodeId, sessionId });
+  },
+
+  /**
+   * 关联 SFTP 会话 ID 到节点
+   */
+  setTreeNodeSftp: async (nodeId: string, sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('set_tree_node_sftp', { nodeId, sessionId });
+  },
+
+  /**
+   * 移除节点（递归移除所有子节点）
+   */
+  removeTreeNode: async (nodeId: string): Promise<string[]> => {
+    if (USE_MOCK) return [nodeId];
+    return invoke('remove_tree_node', { nodeId });
+  },
+
+  /**
+   * 获取节点详情
+   */
+  getTreeNode: async (nodeId: string): Promise<import('../types').FlatNode | null> => {
+    if (USE_MOCK) return null;
+    return invoke('get_tree_node', { nodeId });
+  },
+
+  /**
+   * 获取节点到根的完整路径
+   */
+  getTreeNodePath: async (nodeId: string): Promise<import('../types').FlatNode[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_tree_node_path', { nodeId });
+  },
+
+  /**
+   * 清空会话树
+   */
+  clearSessionTree: async (): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('clear_session_tree');
+  },
+
+  /**
+   * 连接树节点（建立 SSH 连接）
+   */
+  connectTreeNode: async (request: { nodeId: string; cols?: number; rows?: number }): Promise<{ nodeId: string; sshConnectionId: string; parentConnectionId?: string }> => {
+    if (USE_MOCK) {
+      return { nodeId: request.nodeId, sshConnectionId: crypto.randomUUID() };
+    }
+    return invoke('connect_tree_node', { request });
+  },
+
+  /**
+   * 断开树节点（断开 SSH 连接）
+   */
+  disconnectTreeNode: async (nodeId: string): Promise<string[]> => {
+    if (USE_MOCK) return [nodeId];
+    return invoke('disconnect_tree_node', { nodeId });
+  },
+
+  /**
+   * 连接手工预设的跳板链（模式1: 静态全手工）
+   */
+  connectManualPreset: async (
+    request: { savedConnectionId: string; hops: Array<{ host: string; port: number; username: string; authType?: string; password?: string; keyPath?: string; passphrase?: string }>; target: { host: string; port: number; username: string; authType?: string; password?: string; keyPath?: string; passphrase?: string } },
+    cols?: number,
+    rows?: number
+  ): Promise<{ targetNodeId: string; targetSshConnectionId: string; connectedNodeIds: string[]; chainDepth: number }> => {
+    if (USE_MOCK) {
+      return {
+        targetNodeId: crypto.randomUUID(),
+        targetSshConnectionId: crypto.randomUUID(),
+        connectedNodeIds: [crypto.randomUUID()],
+        chainDepth: request.hops.length + 1,
+      };
+    }
+    return invoke('connect_manual_preset', { request, cols, rows });
   }
 };
 

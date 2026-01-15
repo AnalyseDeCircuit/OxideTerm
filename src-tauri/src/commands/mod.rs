@@ -10,6 +10,7 @@ pub mod network;
 pub mod oxide_export;
 pub mod oxide_import;
 pub mod scroll;
+pub mod session_tree;
 pub mod sftp;
 pub mod ssh;
 
@@ -18,5 +19,6 @@ pub use forwarding::*;
 pub use health::*;
 pub use network::*;
 pub use scroll::*;
+pub use session_tree::*;
 pub use sftp::*;
 pub use ssh::*;

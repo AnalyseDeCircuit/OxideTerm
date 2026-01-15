@@ -65,6 +65,7 @@ use windows_timer::{enable_high_precision_timer, disable_high_precision_timer};
 
 use bridge::BridgeManager;
 use commands::config::ConfigState;
+use commands::session_tree::SessionTreeState;
 use commands::HealthRegistry;
 use session::{AutoReconnectService, SessionRegistry};
 use sftp::session::SftpRegistry;
@@ -206,6 +207,9 @@ pub fn run() {
     // Create transfer manager for concurrent transfer control
     let transfer_manager = Arc::new(TransferManager::new());
 
+    // Create session tree state for dynamic jump host support
+    let session_tree_state = Arc::new(SessionTreeState::new());
+
     write_startup_log("All registries initialized, building Tauri app...");
 
     // Windows: 启用高精度定时器（必须在所有其他初始化之前）
@@ -227,6 +231,7 @@ pub fn run() {
         .manage(transfer_manager)
         .manage(progress_store)
         .manage(ssh_connection_registry.clone())
+        .manage(session_tree_state)
         .setup(move |app| {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
@@ -302,6 +307,23 @@ pub fn run() {
             // Search commands
             commands::search_terminal,
             commands::scroll_to_line,
+            // Session tree commands (dynamic jump host)
+            commands::get_session_tree,
+            commands::get_session_tree_summary,
+            commands::add_root_node,
+            commands::tree_drill_down,
+            commands::expand_manual_preset,
+            commands::update_tree_node_state,
+            commands::set_tree_node_connection,
+            commands::set_tree_node_terminal,
+            commands::set_tree_node_sftp,
+            commands::remove_tree_node,
+            commands::get_tree_node,
+            commands::get_tree_node_path,
+            commands::clear_session_tree,
+            commands::connect_tree_node,
+            commands::disconnect_tree_node,
+            commands::connect_manual_preset,
             // Config commands
             commands::config::get_connections,
             commands::config::get_recent_connections,

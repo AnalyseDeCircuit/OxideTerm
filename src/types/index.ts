@@ -35,6 +35,8 @@ export interface SshConnectionInfo {
   terminalIds: string[];
   sftpSessionId?: string;
   forwardIds: string[];
+  /** Parent connection ID for tunneled connections */
+  parentConnectionId?: string;
 }
 
 /**
@@ -524,4 +526,141 @@ export interface IncompleteTransferInfo {
   error?: string;
   progress_percent: number;
   can_resume: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Session Tree Types (Dynamic Jump Host)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * 节点状态
+ */
+export type TreeNodeState = 
+  | { status: 'pending' }
+  | { status: 'connecting' }
+  | { status: 'connected' }
+  | { status: 'disconnected' }
+  | { status: 'failed'; error: string };
+
+/**
+ * 节点来源类型
+ */
+export type TreeNodeOriginType = 
+  | 'manual_preset'  // 模式1: 静态全手工
+  | 'auto_route'     // 模式2: 静态自动计算
+  | 'drill_down'     // 模式3: 动态钻入
+  | 'direct'         // 直接连接
+  | 'restored';      // 从配置恢复
+
+/**
+ * 扁平化节点 - 用于前端渲染
+ */
+export interface FlatNode {
+  id: string;
+  parentId: string | null;
+  depth: number;
+  host: string;
+  port: number;
+  username: string;
+  displayName: string | null;
+  state: TreeNodeState;
+  hasChildren: boolean;
+  isLastChild: boolean;
+  originType: TreeNodeOriginType;
+  terminalSessionId: string | null;
+  sftpSessionId: string | null;
+  sshConnectionId: string | null;
+}
+
+/**
+ * 会话树摘要
+ */
+export interface SessionTreeSummary {
+  totalNodes: number;
+  rootCount: number;
+  connectedCount: number;
+  maxDepth: number;
+}
+
+/**
+ * 连接服务器请求
+ */
+export interface ConnectServerRequest {
+  host: string;
+  port: number;
+  username: string;
+  authType?: 'password' | 'key' | 'agent';
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+  displayName?: string;
+}
+
+/**
+ * 钻入请求
+ */
+export interface DrillDownRequest {
+  parentNodeId: string;
+  host: string;
+  port: number;
+  username: string;
+  authType?: 'password' | 'key' | 'agent';
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+  displayName?: string;
+}
+
+/**
+ * 跳板机信息
+ */
+export interface HopInfo {
+  host: string;
+  port: number;
+  username: string;
+  authType?: 'password' | 'key' | 'agent';
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+}
+
+/**
+ * 预设链连接请求
+ */
+export interface ConnectPresetChainRequest {
+  savedConnectionId: string;
+  hops: HopInfo[];
+  target: HopInfo;
+}
+
+/**
+ * 连接树节点请求
+ */
+export interface ConnectTreeNodeRequest {
+  nodeId: string;
+  cols?: number;
+  rows?: number;
+}
+
+/**
+ * 连接树节点响应
+ */
+export interface ConnectTreeNodeResponse {
+  nodeId: string;
+  sshConnectionId: string;
+  parentConnectionId?: string;
+}
+
+/**
+ * 连接手工预设响应
+ */
+export interface ConnectManualPresetResponse {
+  /** 目标节点 ID */
+  targetNodeId: string;
+  /** 目标节点的 SSH 连接 ID */
+  targetSshConnectionId: string;
+  /** 所有已连接的节点 ID（从根到目标） */
+  connectedNodeIds: string[];
+  /** 链的深度（跳板数量 + 1） */
+  chainDepth: number;
 }

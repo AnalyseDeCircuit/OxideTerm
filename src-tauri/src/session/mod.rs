@@ -7,6 +7,7 @@
 //! - Silent reconnection with exponential backoff
 //! - Connection health monitoring
 //! - Tauri event emission for frontend state sync
+//! - **Session Tree** for dynamic jump host support (三种跳板机模式)
 
 pub mod auth;
 pub mod auto_reconnect;
@@ -18,6 +19,7 @@ mod registry;
 pub mod scroll_buffer;
 pub mod search;
 mod state;
+pub mod tree;
 pub mod types;
 
 pub use auth::{load_private_key, KeyAuth};
@@ -35,4 +37,5 @@ pub use registry::{RegistryError, SessionRegistry};
 pub use scroll_buffer::{BufferStats, ScrollBuffer, SerializedBuffer, TerminalLine};
 pub use search::{search_lines, SearchMatch, SearchOptions, SearchResult};
 pub use state::{SessionState, SessionStateMachine};
+pub use tree::{FlatNode, NodeConnection, NodeOrigin, NodeState, SessionTree, TreeError};
 pub use types::{AuthMethod, SessionConfig, SessionEntry, SessionInfo, SessionStats};

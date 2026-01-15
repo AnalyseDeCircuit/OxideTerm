@@ -147,6 +147,8 @@ pub struct ConnectionInfo {
     pub sftp_session_id: Option<String>,
     /// 关联的 forward IDs
     pub forward_ids: Vec<String>,
+    /// 父连接 ID（隧道连接时非空）
+    pub parent_connection_id: Option<String>,
 }
 
 /// 单个 SSH 连接条目
@@ -207,6 +209,11 @@ pub struct ConnectionEntry {
 
     /// 最后一次发送的状态事件（用于状态守卫，避免重复发送）
     last_emitted_status: RwLock<Option<String>>,
+
+    /// 父连接 ID（用于隧道连接，通过父连接的 direct-tcpip 建立）
+    /// None = 直连本地
+    /// Some(id) = 通过父连接的隧道建立
+    parent_connection_id: Option<String>,
 }
 
 impl ConnectionEntry {
@@ -339,7 +346,13 @@ impl ConnectionEntry {
             terminal_ids: self.terminal_ids().await,
             sftp_session_id: self.sftp_session_id().await,
             forward_ids: self.forward_ids().await,
+            parent_connection_id: self.parent_connection_id.clone(),
         }
+    }
+
+    /// 获取父连接 ID
+    pub fn parent_connection_id(&self) -> Option<&str> {
+        self.parent_connection_id.as_deref()
     }
 
     /// 重置心跳失败计数
@@ -632,9 +645,229 @@ impl SshConnectionRegistry {
             reconnect_attempts: AtomicU32::new(0),
             current_attempt_id: AtomicU64::new(0),
             last_emitted_status: RwLock::new(None),
+            parent_connection_id: None, // 直连，无父连接
         });
 
         self.connections.insert(connection_id.clone(), entry);
+
+        Ok(connection_id)
+    }
+
+    /// 通过已有连接建立隧道连接（用于动态钻入跳板机）
+    ///
+    /// # 工作原理
+    ///
+    /// ```text
+    /// [本地] --SSH--> [父连接] --direct-tcpip--> [目标主机]
+    ///                    ↓                           ↓
+    ///              parent_connection_id         新 SSH 连接
+    /// ```
+    ///
+    /// # Arguments
+    /// * `parent_connection_id` - 父连接 ID（必须是已连接状态）
+    /// * `target_config` - 目标服务器配置
+    ///
+    /// # Returns
+    /// * `Ok(connection_id)` - 新的隧道连接 ID
+    pub async fn establish_tunneled_connection(
+        &self,
+        parent_connection_id: &str,
+        target_config: SessionConfig,
+    ) -> Result<String, ConnectionRegistryError> {
+        // 1. 获取父连接
+        let parent_entry = self
+            .connections
+            .get(parent_connection_id)
+            .ok_or_else(|| ConnectionRegistryError::NotFound(parent_connection_id.to_string()))?;
+
+        let parent_conn = parent_entry.value().clone();
+        drop(parent_entry); // 释放 DashMap 锁
+
+        // 检查父连接状态
+        let parent_state = parent_conn.state().await;
+        if parent_state != ConnectionState::Active && parent_state != ConnectionState::Idle {
+            return Err(ConnectionRegistryError::InvalidState(format!(
+                "Parent connection {} is not in Active/Idle state: {:?}",
+                parent_connection_id, parent_state
+            )));
+        }
+
+        info!(
+            "Establishing tunneled connection via {} -> {}@{}:{}",
+            parent_connection_id, target_config.username, target_config.host, target_config.port
+        );
+
+        // 2. 通过父连接打开 direct-tcpip 隧道
+        let channel = parent_conn
+            .handle_controller
+            .open_direct_tcpip(
+                &target_config.host,
+                target_config.port as u32,
+                "127.0.0.1", // originator_host
+                0,           // originator_port (local)
+            )
+            .await
+            .map_err(|e| {
+                ConnectionRegistryError::ConnectionFailed(format!(
+                    "Failed to open direct-tcpip channel: {}",
+                    e
+                ))
+            })?;
+
+        debug!("Direct-tcpip channel opened to {}:{}", target_config.host, target_config.port);
+
+        // 3. 将 channel 转换为 stream 用于 SSH-over-SSH
+        let stream = channel.into_stream();
+
+        // 4. 在隧道上建立新的 SSH 连接
+        let connection_id = uuid::Uuid::new_v4().to_string();
+
+        // 创建 SSH 配置（非严格主机密钥检查，因为是隧道连接）
+        let ssh_config = russh::client::Config {
+            inactivity_timeout: Some(std::time::Duration::from_secs(300)),
+            keepalive_interval: Some(std::time::Duration::from_secs(30)),
+            keepalive_max: 3,
+            ..Default::default()
+        };
+
+        let handler = super::client::ClientHandler::new(
+            target_config.host.clone(),
+            target_config.port,
+            false, // 隧道连接不严格检查主机密钥
+        );
+
+        // 使用 russh::connect_stream 在隧道上建立 SSH
+        let mut handle = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            russh::client::connect_stream(std::sync::Arc::new(ssh_config), stream, handler),
+        )
+        .await
+        .map_err(|_| {
+            ConnectionRegistryError::ConnectionFailed(format!(
+                "Connection to {}:{} via tunnel timed out",
+                target_config.host, target_config.port
+            ))
+        })?
+        .map_err(|e| {
+            ConnectionRegistryError::ConnectionFailed(format!(
+                "Failed to connect via tunnel: {}",
+                e
+            ))
+        })?;
+
+        debug!("SSH handshake via tunnel completed");
+
+        // 5. 认证
+        let authenticated = match &target_config.auth {
+            AuthMethod::Password { password } => {
+                handle
+                    .authenticate_password(&target_config.username, password)
+                    .await
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Authentication failed: {}",
+                            e
+                        ))
+                    })?
+            }
+            AuthMethod::Key {
+                key_path,
+                passphrase,
+            } => {
+                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Failed to load key: {}",
+                            e
+                        ))
+                    })?;
+
+                let key_with_hash =
+                    russh_keys::key::PrivateKeyWithHashAlg::new(std::sync::Arc::new(key), None)
+                        .map_err(|e| {
+                            ConnectionRegistryError::ConnectionFailed(format!(
+                                "Failed to prepare key: {}",
+                                e
+                            ))
+                        })?;
+
+                handle
+                    .authenticate_publickey(&target_config.username, key_with_hash)
+                    .await
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Authentication failed: {}",
+                            e
+                        ))
+                    })?
+            }
+            AuthMethod::Agent => {
+                let mut agent = crate::ssh::agent::SshAgentClient::connect()
+                    .await
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Failed to connect to SSH agent: {}",
+                            e
+                        ))
+                    })?;
+                agent.authenticate(&handle, &target_config.username).await.map_err(|e| {
+                    ConnectionRegistryError::ConnectionFailed(format!(
+                        "Agent authentication failed: {}",
+                        e
+                    ))
+                })?;
+                true
+            }
+        };
+
+        if !authenticated {
+            return Err(ConnectionRegistryError::ConnectionFailed(format!(
+                "Authentication to {} rejected",
+                target_config.host
+            )));
+        }
+
+        info!(
+            "Tunneled SSH connection {} established via {}",
+            connection_id, parent_connection_id
+        );
+
+        // 6. 创建 SshSession 并启动 Handle Owner Task
+        let session = super::session::SshSession::new(handle, target_config.cols, target_config.rows);
+        let handle_controller = session.start(connection_id.clone());
+
+        // 7. 创建连接条目（带父连接 ID）
+        let entry = Arc::new(ConnectionEntry {
+            id: connection_id.clone(),
+            config: target_config,
+            handle_controller,
+            state: RwLock::new(ConnectionState::Active),
+            ref_count: AtomicU32::new(0),
+            last_active: AtomicU64::new(Utc::now().timestamp() as u64),
+            keep_alive: RwLock::new(false),
+            created_at: Utc::now(),
+            idle_timer: Mutex::new(None),
+            terminal_ids: RwLock::new(Vec::new()),
+            sftp_session_id: RwLock::new(None),
+            forward_ids: RwLock::new(Vec::new()),
+            heartbeat_task: Mutex::new(None),
+            heartbeat_failures: AtomicU32::new(0),
+            reconnect_task: Mutex::new(None),
+            is_reconnecting: AtomicBool::new(false),
+            reconnect_attempts: AtomicU32::new(0),
+            current_attempt_id: AtomicU64::new(0),
+            last_emitted_status: RwLock::new(None),
+            parent_connection_id: Some(parent_connection_id.to_string()), // 隧道连接，记录父连接
+        });
+
+        self.connections.insert(connection_id.clone(), entry);
+
+        // 8. 增加父连接的引用计数（隧道连接依赖父连接）
+        parent_conn.add_ref();
+        debug!(
+            "Parent connection {} ref_count increased (tunneled child: {})",
+            parent_connection_id, connection_id
+        );
 
         Ok(connection_id)
     }
@@ -773,16 +1006,40 @@ impl SshConnectionRegistry {
     }
 
     /// 强制断开连接
+    /// 
+    /// 如果此连接有子连接（隧道连接），会先断开所有子连接。
+    /// 如果此连接是子连接，会减少父连接的引用计数。
     pub async fn disconnect(
         &self,
         connection_id: &str,
     ) -> Result<(), ConnectionRegistryError> {
+        // 1. 先断开所有依赖此连接的子连接
+        let child_ids: Vec<String> = self
+            .connections
+            .iter()
+            .filter(|e| e.value().parent_connection_id.as_deref() == Some(connection_id))
+            .map(|e| e.key().clone())
+            .collect();
+
+        for child_id in &child_ids {
+            info!(
+                "Disconnecting child connection {} (parent: {})",
+                child_id, connection_id
+            );
+            // 递归断开子连接（使用 Box::pin 避免递归 async 问题）
+            if let Err(e) = Box::pin(self.disconnect(child_id)).await {
+                warn!("Failed to disconnect child connection {}: {}", child_id, e);
+            }
+        }
+
+        // 2. 获取当前连接
         let entry = self
             .connections
             .get(connection_id)
             .ok_or_else(|| ConnectionRegistryError::NotFound(connection_id.to_string()))?;
 
         let conn = entry.value().clone();
+        let parent_id = conn.parent_connection_id.clone();
         drop(entry);
 
         info!("Force disconnecting connection {}", connection_id);
@@ -803,6 +1060,18 @@ impl SshConnectionRegistry {
         self.connections.remove(connection_id);
 
         info!("Connection {} disconnected and removed", connection_id);
+
+        // 3. 如果是隧道连接，减少父连接的引用计数
+        if let Some(parent_id) = parent_id {
+            if let Some(parent_entry) = self.connections.get(&parent_id) {
+                let parent_conn = parent_entry.value();
+                parent_conn.release();
+                debug!(
+                    "Parent connection {} ref_count decreased (child {} disconnected)",
+                    parent_id, connection_id
+                );
+            }
+        }
 
         Ok(())
     }
@@ -894,6 +1163,7 @@ impl SshConnectionRegistry {
             reconnect_attempts: AtomicU32::new(0),
             current_attempt_id: AtomicU64::new(0),
             last_emitted_status: RwLock::new(None),
+            parent_connection_id: None, // 从旧连接注册，无父连接
         });
 
         self.connections.insert(connection_id.clone(), entry);
@@ -1393,6 +1663,7 @@ impl SshConnectionRegistry {
                 reconnect_attempts: AtomicU32::new(0),
                 current_attempt_id: AtomicU64::new(old_entry.current_attempt_id.load(Ordering::SeqCst)),
                 last_emitted_status: RwLock::new(None),
+                parent_connection_id: old_entry.parent_connection_id.clone(), // 保持父连接关系
             });
             
             drop(entry); // 释放引用
