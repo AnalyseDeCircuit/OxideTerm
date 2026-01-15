@@ -464,12 +464,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     terminalElement?.addEventListener('compositionstart', handleCompositionStart);
     terminalElement?.addEventListener('compositionend', handleCompositionEnd);
 
-    // Cleanup function for composition listeners
-    return () => {
-      terminalElement?.removeEventListener('compositionstart', handleCompositionStart);
-      terminalElement?.removeEventListener('compositionend', handleCompositionEnd);
-    };
-
     // Terminal Input -> WebSocket (registered outside setTimeout to work immediately)
     term.onData(data => {
         const ws = wsRef.current;
@@ -509,6 +503,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     return () => {
       isMountedRef.current = false;
       window.removeEventListener('resize', handleResize);
+
+      // Cleanup composition event listeners
+      terminalElement?.removeEventListener('compositionstart', handleCompositionStart);
+      terminalElement?.removeEventListener('compositionend', handleCompositionEnd);
+
       if (wsConnectTimeout) {
           clearTimeout(wsConnectTimeout);
       }
