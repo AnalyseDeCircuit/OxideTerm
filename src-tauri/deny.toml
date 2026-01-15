@@ -1,0 +1,15 @@
+[advisories]
+version = 2
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "Unicode-3.0",           # ICU 全家桶
+    "MPL-2.0",               # cssparser、selectors 等
+    "Apache-2.0 WITH LLVM-exception",  # target-lexicon
+    "CC0-1.0",               # ← 新增
+    "CC-BY-NC-4.0",          # ← 新增（自家 crate）
+]

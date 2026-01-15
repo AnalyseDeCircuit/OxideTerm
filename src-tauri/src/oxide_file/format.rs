@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_invalid_magic() {
-        let mut bytes = vec![0u8; 20];
+        let mut bytes = vec![0u8; 21]; // Header needs at least 21 bytes
         bytes[0..5].copy_from_slice(b"WRONG");
 
         let result = FileHeader::from_bytes(&bytes);

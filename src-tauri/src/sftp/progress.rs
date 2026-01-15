@@ -36,6 +36,7 @@ pub struct StoredTransferProgress {
     pub status: TransferStatus,
 
     /// Last update timestamp
+    #[serde(with = "crate::state::datetime_serde")]
     pub last_updated: DateTime<Utc>,
 
     /// Session ID (for reconnection recovery)
@@ -559,7 +560,7 @@ mod tests {
 
     #[test]
     fn test_progress_percent() {
-        let progress = TransferProgress {
+        let progress = StoredTransferProgress {
             transfer_id: "test".to_string(),
             transfer_type: TransferType::Download,
             source_path: "/remote/file.txt".into(),

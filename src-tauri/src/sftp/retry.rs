@@ -350,6 +350,7 @@ mod tests {
             RetryConfig::default(),
             Arc::new(MockStore),
             progress,
+            None, // No transfer control for basic test
         )
         .await;
 
@@ -420,6 +421,7 @@ mod tests {
             RetryConfig::new(3), // Allow up to 3 retries
             Arc::new(MockStore),
             progress,
+            None, // No transfer control for retry test
         )
         .await;
 
@@ -475,6 +477,7 @@ mod tests {
             RetryConfig::default(),
             Arc::new(MockStore),
             progress,
+            None, // No transfer control for non-retryable error test
         )
         .await;
 

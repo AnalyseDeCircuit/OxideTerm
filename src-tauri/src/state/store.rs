@@ -43,7 +43,7 @@ pub enum StateError {
     Commit(#[from] redb::CommitError),
 
     #[error("Serialization error: {0}")]
-    Serialization(#[from] postcard::Error),
+    Serialization(#[from] serde_json::Error),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -162,7 +162,7 @@ impl StateStore {
             let mut table = write_txn.open_table(METADATA_TABLE)?;
 
             let current_version = if let Some(version_bytes) = table.get("version")? {
-                let version: u32 = postcard::from_bytes(version_bytes.value())?;
+                let version: u32 = serde_json::from_slice(version_bytes.value())?;
 
                 if version > STATE_VERSION {
                     return Err(StateError::VersionMismatch {
@@ -185,7 +185,7 @@ impl StateStore {
 
             if current_version.is_none() {
                 // First time initialization
-                let version_bytes = postcard::to_stdvec(&STATE_VERSION)?;
+                let version_bytes = serde_json::to_vec(&STATE_VERSION)?;
                 table.insert("version", version_bytes.as_slice())?;
                 info!("Initialized state database version: {}", STATE_VERSION);
             }

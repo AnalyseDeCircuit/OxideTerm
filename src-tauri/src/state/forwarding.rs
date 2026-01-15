@@ -67,14 +67,14 @@ impl PersistedForward {
         }
     }
 
-    /// Serialize to bytes
-    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
-        postcard::to_stdvec(self)
+    /// Serialize to bytes (using JSON for compatibility with complex types)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
     }
 
     /// Deserialize from bytes
-    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
-        postcard::from_bytes(data)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(data)
     }
 }
 
