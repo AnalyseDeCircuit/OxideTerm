@@ -91,7 +91,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
             fontFamily: 'jetbrains',
             fontSize: 14,
             cursorStyle: 'block',
-            cursorBlink: true
+            cursorBlink: true,
+            scrollback: 1000
         };
   });
 
@@ -358,6 +359,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       fontSize: settings.fontSize,
       lineHeight: 1.2,
       theme: themes[settings.theme] || themes.default,
+      scrollback: settings.scrollback || 1000,
       allowProposedApi: true,
     });
 

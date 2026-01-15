@@ -17,6 +17,11 @@ import {
   SshConnectRequest,
 } from '../types';
 
+// 重连 UI 防抖定时器（避免瞬时断网恢复时 overlay 闪烁）
+// 设计：收到 reconnecting 事件后延迟 1.5s 再显示 overlay，期间恢复则跳过
+const RECONNECT_OVERLAY_DELAY_MS = 1500;
+const reconnectDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 interface ModalsState {
   newConnection: boolean;
   settings: boolean;
@@ -492,24 +497,53 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   _handleSessionReconnecting: (payload: SessionReconnectingPayload) => {
     console.log('Session reconnecting:', payload);
-    set((s) => {
-      const session = s.sessions.get(payload.session_id);
-      if (!session) return {};
+    
+    // 防抖：延迟显示 reconnecting overlay，避免瞬时恢复时闪烁
+    // 如果已有定时器（之前的重连尝试），先清除
+    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // 延迟 1.5s 后再更新状态（如果期间恢复，定时器会被取消）
+    const timer = setTimeout(() => {
+      reconnectDebounceTimers.delete(payload.session_id);
       
-      const newSessions = new Map(s.sessions);
-      newSessions.set(payload.session_id, {
-        ...session,
-        state: 'reconnecting',
-        reconnectAttempt: payload.attempt,
-        reconnectMaxAttempts: payload.max_attempts,
-        reconnectNextRetry: payload.next_attempt_at,
+      set((s) => {
+        const session = s.sessions.get(payload.session_id);
+        if (!session) return {};
+        
+        // 如果已经恢复了，不要再设置 reconnecting 状态
+        if (session.state === 'connected') {
+          console.log('Session already reconnected, skipping overlay update');
+          return {};
+        }
+        
+        const newSessions = new Map(s.sessions);
+        newSessions.set(payload.session_id, {
+          ...session,
+          state: 'reconnecting',
+          reconnectAttempt: payload.attempt,
+          reconnectMaxAttempts: payload.max_attempts,
+          reconnectNextRetry: payload.next_attempt_at,
+        });
+        return { sessions: newSessions };
       });
-      return { sessions: newSessions };
-    });
+    }, RECONNECT_OVERLAY_DELAY_MS);
+    
+    reconnectDebounceTimers.set(payload.session_id, timer);
   },
 
   _handleSessionReconnected: async (payload: SessionReconnectedPayload) => {
     console.log('Session reconnected:', payload);
+    
+    // 取消防抖定时器（如果存在），立即更新状态为 connected
+    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      reconnectDebounceTimers.delete(payload.session_id);
+      console.log('Reconnect debounce timer cancelled - fast recovery');
+    }
     
     // Fetch updated session info to get new ws_url and ws_token
     try {
@@ -556,6 +590,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => {
     console.log('Session reconnect failed:', payload);
+    
+    // 清除防抖定时器
+    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      reconnectDebounceTimers.delete(payload.session_id);
+    }
+    
     set((s) => {
       const session = s.sessions.get(payload.session_id);
       if (!session) return {};
@@ -575,6 +617,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   _handleSessionReconnectCancelled: (payload: SessionReconnectCancelledPayload) => {
     console.log('Session reconnect cancelled:', payload);
+    
+    // 清除防抖定时器
+    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      reconnectDebounceTimers.delete(payload.session_id);
+    }
+    
     set((s) => {
       const session = s.sessions.get(payload.session_id);
       if (!session) return {};

@@ -28,10 +28,21 @@
 use russh::client::{Handle, Msg};
 use russh::Channel;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use super::client::ClientHandler;
 use super::error::SshError;
+
+/// Ping 结果类型，区分不同的失败原因
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PingResult {
+    /// 连接正常
+    Ok,
+    /// 超时（可能是网络延迟，可重试）
+    Timeout,
+    /// IO 错误（物理连接断开，应立即重连）
+    IoError,
+}
 
 /// Commands sent to the Handle Owner Task
 pub enum HandleCommand {
@@ -65,7 +76,7 @@ pub enum HandleCommand {
 
     /// Ping the connection (for keepalive check)
     Ping {
-        reply_tx: oneshot::Sender<bool>,
+        reply_tx: oneshot::Sender<PingResult>,
     },
 
     /// Disconnect the SSH connection
@@ -195,13 +206,13 @@ impl HandleController {
     }
 
     /// Ping the connection (for keepalive check)
-    /// Returns true if the connection is alive, false otherwise
-    pub async fn ping(&self) -> bool {
+    /// Returns PingResult indicating connection status
+    pub async fn ping(&self) -> PingResult {
         let (reply_tx, reply_rx) = oneshot::channel();
         if self.cmd_tx.send(HandleCommand::Ping { reply_tx }).await.is_err() {
-            return false;
+            return PingResult::IoError;
         }
-        reply_rx.await.unwrap_or(false)
+        reply_rx.await.unwrap_or(PingResult::IoError)
     }
 
     /// Check if the Handle Owner Task is still running
@@ -313,8 +324,10 @@ pub fn spawn_handle_owner_task(
                         HandleCommand::Ping { reply_tx } => {
                             // Try to open a session channel as a keepalive probe
                             // This validates the SSH connection is still functional
-                            let is_alive = match tokio::time::timeout(
-                                std::time::Duration::from_secs(10),
+                            // Timeout set to 5s to avoid blocking heartbeat too long
+                            debug!("Ping probe starting for session {}", session_id);
+                            let result = match tokio::time::timeout(
+                                std::time::Duration::from_secs(5),
                                 handle.channel_open_session(),
                             )
                             .await
@@ -322,11 +335,21 @@ pub fn spawn_handle_owner_task(
                                 Ok(Ok(channel)) => {
                                     // Successfully opened, close it immediately
                                     drop(channel);
-                                    true
+                                    debug!("Ping OK for session {}", session_id);
+                                    PingResult::Ok
                                 }
-                                Ok(Err(_)) | Err(_) => false,
+                                Ok(Err(e)) => {
+                                    // SSH protocol error - likely unrecoverable
+                                    warn!("Ping SSH error for session {}: {:?}", session_id, e);
+                                    PingResult::IoError
+                                }
+                                Err(_) => {
+                                    // Timeout
+                                    warn!("Ping timeout for session {} (5s)", session_id);
+                                    PingResult::Timeout
+                                }
                             };
-                            let _ = reply_tx.send(is_alive);
+                            let _ = reply_tx.send(result);
                         }
 
                         HandleCommand::Disconnect => {
@@ -378,7 +401,7 @@ fn drain_pending_commands(cmd_rx: &mut mpsc::Receiver<HandleCommand>) {
                 let _ = reply_tx.send(Err(russh::Error::Disconnect));
             }
             HandleCommand::Ping { reply_tx } => {
-                let _ = reply_tx.send(false);
+                let _ = reply_tx.send(PingResult::IoError);
             }
             HandleCommand::Disconnect => {
                 // Already disconnecting, ignore

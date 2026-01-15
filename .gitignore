@@ -64,9 +64,7 @@ pnpm-lock.yaml
 .#*
 todo.md
 techplan.md
-docs/UI_REFACTOR_PLAN.md
 sftptodo
-docs/HANDLE_OWNER_TASK.md
 forwarding-todo.md
 
 # User data and state (DO NOT COMMIT)
@@ -76,14 +74,6 @@ config.json
 keychain.json
 .cursorignore
 AGENTS.md
-docs/ISSUES.md
-docs/RECONNECT_BACKPRESSURE.md
-docs/performance（ingitignore）.md
-docs/BACKEND_SCROLL_BUFFER.md
 PROXY_CHAIN_TODO.md
 CLAUDE.md
-docs/SCROLL_BUFFER_OPTIMIZATION.md
-docs/SFTP_RESUME_TRANSFER.md
-docs/PHASE2_FRONTEND_MIGRATION.md
-docs/SHELL_RECONNECT_BEHAVIOR.md
 .gitignore

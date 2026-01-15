@@ -50,14 +50,21 @@ use crate::session::{AuthMethod, SessionConfig};
 /// 默认空闲超时时间（30 分钟）
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
-/// 心跳间隔（30 秒）
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
+/// 心跳间隔（15 秒）
+/// 配合 HEARTBEAT_FAIL_THRESHOLD=2，确保 30 秒内检测到断连
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 
 /// 心跳连续失败次数阈值，达到后标记为 LinkDown
-const HEARTBEAT_FAIL_THRESHOLD: u32 = 3;
+/// 15s × 2 = 30s 内必触发重连
+const HEARTBEAT_FAIL_THRESHOLD: u32 = 2;
 
 /// 重连间隔（初始值，使用指数退避）
-const RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(2);
+/// 优化：从 2s 降至 0.5s，加速短时断网恢复
+const RECONNECT_INITIAL_DELAY: Duration = Duration::from_millis(500);
+
+/// 首次重连延迟（快速首跳）
+/// 设计：首次重连仅等待 200ms，瞬断场景近乎无感
+const RECONNECT_FIRST_DELAY: Duration = Duration::from_millis(200);
 
 /// 重连最大间隔
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(60);
@@ -194,6 +201,12 @@ pub struct ConnectionEntry {
 
     /// 重连尝试次数
     reconnect_attempts: AtomicU32,
+
+    /// 当前重连任务 ID（用于状态幂等检查，防止旧任务结果覆盖新任务）
+    current_attempt_id: AtomicU64,
+
+    /// 最后一次发送的状态事件（用于状态守卫，避免重复发送）
+    last_emitted_status: RwLock<Option<String>>,
 }
 
 impl ConnectionEntry {
@@ -403,6 +416,16 @@ impl ConnectionEntry {
         self.is_reconnecting.store(false, Ordering::SeqCst);
         self.reconnect_attempts.store(0, Ordering::SeqCst);
     }
+
+    /// 生成新的重连尝试 ID 并返回
+    pub fn new_attempt_id(&self) -> u64 {
+        self.current_attempt_id.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// 获取当前重连尝试 ID
+    pub fn current_attempt_id(&self) -> u64 {
+        self.current_attempt_id.load(Ordering::SeqCst)
+    }
 }
 
 /// SSH 连接注册表错误
@@ -434,6 +457,9 @@ pub struct SshConnectionRegistry {
 
     /// Tauri App Handle（用于发送事件）
     app_handle: RwLock<Option<AppHandle>>,
+
+    /// 待发送的事件（AppHandle 未就绪时缓存）
+    pending_events: Mutex<Vec<(String, String)>>,
 }
 
 impl Default for SshConnectionRegistry {
@@ -449,6 +475,7 @@ impl SshConnectionRegistry {
             connections: DashMap::new(),
             config: RwLock::new(ConnectionPoolConfig::default()),
             app_handle: RwLock::new(None),
+            pending_events: Mutex::new(Vec::new()),
         }
     }
 
@@ -458,12 +485,49 @@ impl SshConnectionRegistry {
             connections: DashMap::new(),
             config: RwLock::new(config),
             app_handle: RwLock::new(None),
+            pending_events: Mutex::new(Vec::new()),
         }
     }
 
     /// 设置 AppHandle（用于发送事件）
+    /// 
+    /// 设置后会立即处理所有缓存的事件
     pub async fn set_app_handle(&self, handle: AppHandle) {
+        use tauri::Emitter;
+        
+        // 先取出所有缓存的事件
+        let pending = {
+            let mut events = self.pending_events.lock().await;
+            std::mem::take(&mut *events)
+        };
+        
+        // 发送所有缓存的事件
+        if !pending.is_empty() {
+            info!("AppHandle ready, flushing {} cached events", pending.len());
+            
+            #[derive(Clone, serde::Serialize)]
+            struct ConnectionStatusEvent {
+                connection_id: String,
+                status: String,
+            }
+            
+            for (connection_id, status) in pending {
+                let event = ConnectionStatusEvent {
+                    connection_id: connection_id.clone(),
+                    status: status.clone(),
+                };
+                
+                if let Err(e) = handle.emit("connection_status_changed", event) {
+                    error!("Failed to emit cached event: {}", e);
+                } else {
+                    debug!("Emitted cached event: {} -> {}", connection_id, status);
+                }
+            }
+        }
+        
+        // 设置 AppHandle
         *self.app_handle.write().await = Some(handle);
+        info!("AppHandle registered and ready");
     }
 
     /// 获取配置
@@ -566,6 +630,8 @@ impl SshConnectionRegistry {
             reconnect_task: Mutex::new(None),
             is_reconnecting: AtomicBool::new(false),
             reconnect_attempts: AtomicU32::new(0),
+            current_attempt_id: AtomicU64::new(0),
+            last_emitted_status: RwLock::new(None),
         });
 
         self.connections.insert(connection_id.clone(), entry);
@@ -826,6 +892,8 @@ impl SshConnectionRegistry {
             reconnect_task: Mutex::new(None),
             is_reconnecting: AtomicBool::new(false),
             reconnect_attempts: AtomicU32::new(0),
+            current_attempt_id: AtomicU64::new(0),
+            last_emitted_status: RwLock::new(None),
         });
 
         self.connections.insert(connection_id.clone(), entry);
@@ -980,11 +1048,13 @@ impl SshConnectionRegistry {
         let connection_id = connection_id.to_string();
 
         let task = tokio::spawn(async move {
-            info!("Heartbeat task started for connection {}", connection_id);
+            info!("Heartbeat task started for connection {} (interval={}s, threshold={})", 
+                  connection_id, HEARTBEAT_INTERVAL.as_secs(), HEARTBEAT_FAIL_THRESHOLD);
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
                 interval.tick().await;
+                debug!("Heartbeat tick for connection {}", connection_id);
 
                 // 检查连接状态，如果正在重连或已断开，停止心跳
                 let state = conn.state().await;
@@ -994,34 +1064,46 @@ impl SshConnectionRegistry {
                 }
 
                 // 发送心跳 ping
-                let is_alive = conn.handle_controller.ping().await;
+                let ping_result = conn.handle_controller.ping().await;
+                debug!("Connection {} ping result: {:?}", connection_id, ping_result);
 
-                if is_alive {
-                    // 心跳成功，重置失败计数
-                    conn.reset_heartbeat_failures();
-                    conn.update_activity();
-                    debug!("Connection {} heartbeat OK", connection_id);
-                } else {
-                    // 心跳失败
-                    let failures = conn.increment_heartbeat_failures();
-                    warn!(
-                        "Connection {} heartbeat failed ({}/{})",
-                        connection_id, failures, HEARTBEAT_FAIL_THRESHOLD
-                    );
-
-                    if failures >= HEARTBEAT_FAIL_THRESHOLD {
-                        // 达到失败阈值，标记为 LinkDown
-                        error!("Connection {} marked as LinkDown after {} heartbeat failures", 
-                               connection_id, failures);
+                match ping_result {
+                    crate::ssh::handle_owner::PingResult::Ok => {
+                        // 心跳成功，重置失败计数
+                        conn.reset_heartbeat_failures();
+                        conn.update_activity();
+                        debug!("Connection {} heartbeat OK", connection_id);
+                    }
+                    crate::ssh::handle_owner::PingResult::IoError => {
+                        // IO 错误，物理连接已断，立即触发重连
+                        error!("Connection {} IO error detected, triggering immediate reconnect", connection_id);
                         conn.set_state(ConnectionState::LinkDown).await;
-
-                        // 广播状态变更事件
                         registry.emit_connection_status_changed(&connection_id, "link_down").await;
-
-                        // 启动重连
                         registry.start_reconnect(&connection_id).await;
-
                         break;
+                    }
+                    crate::ssh::handle_owner::PingResult::Timeout => {
+                        // 超时，累计失败次数
+                        let failures = conn.increment_heartbeat_failures();
+                        warn!(
+                            "Connection {} heartbeat timeout ({}/{})",
+                            connection_id, failures, HEARTBEAT_FAIL_THRESHOLD
+                        );
+
+                        if failures >= HEARTBEAT_FAIL_THRESHOLD {
+                            // 达到失败阈值，标记为 LinkDown
+                            error!("Connection {} marked as LinkDown after {} heartbeat failures", 
+                                   connection_id, failures);
+                            conn.set_state(ConnectionState::LinkDown).await;
+
+                            // 广播状态变更事件
+                            registry.emit_connection_status_changed(&connection_id, "link_down").await;
+
+                            // 启动重连
+                            registry.start_reconnect(&connection_id).await;
+
+                            break;
+                        }
                     }
                 }
             }
@@ -1043,10 +1125,17 @@ impl SshConnectionRegistry {
         };
 
         let conn = entry.value().clone();
+        
+        // 抢占式清理：取消旧的重连任务（如果存在）
+        // 确保新任务不会与旧任务竞争
         if conn.is_reconnecting() {
-            debug!("Connection {} already reconnecting, skip", connection_id);
-            return;
+            debug!("Connection {} cancelling previous reconnect task", connection_id);
+            conn.cancel_reconnect().await;
         }
+
+        // 生成新的 attempt_id（用于状态幂等检查）
+        let attempt_id = conn.new_attempt_id();
+        debug!("Connection {} starting reconnect with attempt_id={}", connection_id, attempt_id);
 
         let is_pinned = conn.is_keep_alive().await;
         let registry = Arc::clone(self);
@@ -1056,32 +1145,63 @@ impl SshConnectionRegistry {
 
         let task = tokio::spawn(async move {
             info!(
-                "Reconnect task started for connection {} (pinned={})",
-                connection_id, is_pinned
+                "Reconnect task started for connection {} (pinned={}, attempt_id={})",
+                connection_id, is_pinned, attempt_id
             );
 
             conn_for_task.set_state(ConnectionState::Reconnecting).await;
             registry.emit_connection_status_changed(&connection_id, "reconnecting").await;
 
-            let mut delay = RECONNECT_INITIAL_DELAY;
+            // 首跳提速：第一次重连使用短延迟，后续使用指数退避
+            let mut delay = RECONNECT_FIRST_DELAY;
             let max_attempts = if is_pinned { u32::MAX } else { RECONNECT_MAX_ATTEMPTS };
 
             loop {
+                // 状态幂等检查：如果 attempt_id 已经变化，说明新的重连任务已启动，当前任务应退出
+                if conn_for_task.current_attempt_id() != attempt_id {
+                    warn!(
+                        "Connection {} reconnect task {} superseded by newer attempt {}, exiting",
+                        connection_id, attempt_id, conn_for_task.current_attempt_id()
+                    );
+                    return;
+                }
+
                 let attempt = conn_for_task.increment_reconnect_attempts();
                 info!(
-                    "Connection {} reconnect attempt {}/{}",
+                    "Connection {} reconnect attempt {}/{} (attempt_id={})",
                     connection_id,
                     attempt,
-                    if is_pinned { "∞".to_string() } else { max_attempts.to_string() }
+                    if is_pinned { "∞".to_string() } else { max_attempts.to_string() },
+                    attempt_id
                 );
 
-                // 等待延迟
+                // 等待延迟（首次 200ms，后续指数退避）
                 tokio::time::sleep(delay).await;
+
+                // 再次检查幂等性（延迟期间可能有新任务启动）
+                if conn_for_task.current_attempt_id() != attempt_id {
+                    warn!(
+                        "Connection {} reconnect task {} superseded during delay, exiting",
+                        connection_id, attempt_id
+                    );
+                    return;
+                }
 
                 // 尝试重连
                 match registry.try_reconnect(&connection_id, &config).await {
                     Ok(new_controller) => {
-                        info!("Connection {} reconnected successfully", connection_id);
+                        // 最终幂等性检查：确保这个结果仍然有效
+                        if conn_for_task.current_attempt_id() != attempt_id {
+                            warn!(
+                                "Connection {} reconnect task {} succeeded but superseded, discarding result",
+                                connection_id, attempt_id
+                            );
+                            // 关闭新创建的连接，避免泄漏
+                            drop(new_controller);
+                            return;
+                        }
+
+                        info!("Connection {} reconnected successfully (attempt_id={})", connection_id, attempt_id);
 
                         // 获取关联的 terminal IDs 和 forward IDs（在更新前获取）
                         let terminal_ids = conn_for_task.terminal_ids().await;
@@ -1131,7 +1251,12 @@ impl SshConnectionRegistry {
                         }
 
                         // 增加延迟（指数退避）
-                        delay = std::cmp::min(delay * 2, RECONNECT_MAX_DELAY);
+                        // 首次失败后从 RECONNECT_INITIAL_DELAY 开始，然后倍增
+                        if delay == RECONNECT_FIRST_DELAY {
+                            delay = RECONNECT_INITIAL_DELAY;
+                        } else {
+                            delay = std::cmp::min(delay * 2, RECONNECT_MAX_DELAY);
+                        }
                     }
                 }
             }
@@ -1188,7 +1313,31 @@ impl SshConnectionRegistry {
     }
 
     /// 广播连接状态变更事件
+    /// 
+    /// # 状态守卫
+    /// 只有当状态真正变化时才发送事件，避免重复发送相同状态导致前端性能问题
+    /// 
+    /// # AppHandle 生命周期
+    /// 如果 AppHandle 未就绪，事件会被缓存，待 AppHandle 设置后立即发送
     async fn emit_connection_status_changed(&self, connection_id: &str, status: &str) {
+        // === 状态守卫：检查是否需要发送 ===
+        if let Some(entry) = self.connections.get(connection_id) {
+            let conn = entry.value();
+            let mut last_status = conn.last_emitted_status.write().await;
+            
+            // 如果状态未变化，跳过发送
+            if let Some(ref prev) = *last_status {
+                if prev == status {
+                    debug!("Status unchanged for connection {}: {}, skipping emit", connection_id, status);
+                    return;
+                }
+            }
+            
+            // 更新最后发送的状态
+            *last_status = Some(status.to_string());
+        }
+        
+        // === 尝试发送事件 ===
         let app_handle = self.app_handle.read().await;
         if let Some(handle) = app_handle.as_ref() {
             use tauri::Emitter;
@@ -1209,6 +1358,12 @@ impl SshConnectionRegistry {
             } else {
                 debug!("Emitted connection_status_changed: {} -> {}", connection_id, status);
             }
+        } else {
+            // AppHandle 未就绪，缓存事件
+            warn!("AppHandle not ready, caching event: {} -> {}", connection_id, status);
+            let mut pending = self.pending_events.lock().await;
+            pending.push((connection_id.to_string(), status.to_string()));
+            debug!("Event cached, total pending: {}", pending.len());
         }
     }
 
@@ -1236,6 +1391,8 @@ impl SshConnectionRegistry {
                 reconnect_task: Mutex::new(None),
                 is_reconnecting: AtomicBool::new(false),
                 reconnect_attempts: AtomicU32::new(0),
+                current_attempt_id: AtomicU64::new(old_entry.current_attempt_id.load(Ordering::SeqCst)),
+                last_emitted_status: RwLock::new(None),
             });
             
             drop(entry); // 释放引用
@@ -1332,6 +1489,8 @@ mod tests {
             reconnect_task: Mutex::new(None),
             is_reconnecting: AtomicBool::new(false),
             reconnect_attempts: AtomicU32::new(0),
+            current_attempt_id: AtomicU64::new(0),
+            last_emitted_status: RwLock::new(None),
         };
 
         assert_eq!(entry.ref_count(), 0);
