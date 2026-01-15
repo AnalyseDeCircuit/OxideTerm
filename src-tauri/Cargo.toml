@@ -93,3 +93,11 @@ lto = "fat"
 strip = false
 panic = "abort"
 opt-level = 3
+[package.metadata.cargo-deny]
+# 禁止GPL/AGPL进入依赖树
+[metadata.cargo-deny.bans]
+deny = [
+    { name = "*", license = "GPL-2.0" },
+    { name = "*", license = "GPL-3.0" },
+    { name = "*", license = "AGPL-3.0" },
+]
