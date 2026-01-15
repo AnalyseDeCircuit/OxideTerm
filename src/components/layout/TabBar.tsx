@@ -110,8 +110,9 @@ export const TabBar = () => {
   };
 
   return (
-    <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border">
-      {/* Network status indicator */}
+    // 最外层（限制层）：w-full + overflow-hidden 限制总宽度
+    <div className="w-full h-9 overflow-hidden bg-theme-bg border-b border-theme-border flex items-center">
+      {/* Network status indicator - 固定不滚动 */}
       {!networkOnline && (
         <div className="flex-shrink-0 flex items-center gap-1.5 px-3 h-full border-r border-theme-border bg-amber-900/30 text-amber-400 text-xs">
           <WifiOff className="h-3.5 w-3.5" />
@@ -119,90 +120,94 @@ export const TabBar = () => {
         </div>
       )}
       
-      {/* Scrollable tabs container with thin scrollbar */}
+      {/* 中间层（滚动层）：flex-1 + min-w-0 强制收缩 + overflow-x-auto 触发滚动 */}
       <div 
         ref={scrollContainerRef}
         onWheel={handleWheel}
-        className="flex-1 min-w-0 flex items-center overflow-x-auto scrollbar-thin"
+        className="flex-1 min-w-0 h-full overflow-x-auto scrollbar-thin"
       >
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
-        const isManualReconnecting = reconnecting === tab.sessionId;
-        const session = sessions.get(tab.sessionId);
-        const isAutoReconnecting = session?.state === 'reconnecting';
-        const reconnectAttempt = session?.reconnectAttempt;
-        const reconnectMax = session?.reconnectMaxAttempts;
-        const reconnectNextRetry = session?.reconnectNextRetry;
-        const showReconnectProgress = isAutoReconnecting && reconnectAttempt !== undefined;
+        {/* 最内层（渲染层）：inline-flex 让子元素一行排列，不换行 */}
+        <div className="inline-flex h-full">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            const isManualReconnecting = reconnecting === tab.sessionId;
+            const session = sessions.get(tab.sessionId);
+            const isAutoReconnecting = session?.state === 'reconnecting';
+            const reconnectAttempt = session?.reconnectAttempt;
+            const reconnectMax = session?.reconnectMaxAttempts;
+            const reconnectNextRetry = session?.reconnectNextRetry;
+            const showReconnectProgress = isAutoReconnecting && reconnectAttempt !== undefined;
 
-        return (
-          <div
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "group flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[240px] border-r border-theme-border cursor-pointer select-none text-sm transition-colors",
-              isActive 
-                ? "bg-theme-bg-panel text-oxide-text border-t-2 border-t-oxide-accent" 
-                : "bg-theme-bg text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent",
-              showReconnectProgress && "border-t-amber-500"
-            )}
-          >
-            <TabIcon type={tab.type} />
-            <span className="truncate flex-1">{tab.title}</span>
-            
-            {/* Reconnect progress indicator */}
-            {showReconnectProgress && (
-              <div className="flex items-center gap-1 text-xs text-amber-400">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                <span>
-                  {reconnectAttempt}/{reconnectMax}
-                  {reconnectNextRetry && ` (${formatTimeRemaining(reconnectNextRetry)})`}
-                </span>
-                <button
-                  onClick={(e) => handleCancelReconnect(e, tab.sessionId)}
-                  className="hover:bg-zinc-700 rounded p-0.5"
-                  title="Cancel reconnect"
-                >
-                  <XCircle className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-            
-            {/* Normal tab controls */}
-            {!showReconnectProgress && (
-              <div className="flex items-center gap-0.5">
-                {/* Refresh button for terminal tabs */}
-                {tab.type === 'terminal' && (
-                  <button
-                    onClick={(e) => handleReconnect(e, tab.sessionId)}
-                    disabled={isManualReconnecting}
-                    className={cn(
-                      "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
-                      isActive && "opacity-100",
-                      isManualReconnecting && "opacity-100"
-                    )}
-                    title="Reconnect"
-                  >
-                    <RefreshCw className={cn("h-3 w-3", isManualReconnecting && "animate-spin")} />
-                  </button>
+            return (
+              // 每个 Tab 必须 flex-shrink-0，防止被挤压
+              <div
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex-shrink-0 group flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[240px] border-r border-theme-border cursor-pointer select-none text-sm transition-colors",
+                  isActive 
+                    ? "bg-theme-bg-panel text-oxide-text border-t-2 border-t-oxide-accent" 
+                    : "bg-theme-bg text-zinc-500 hover:bg-zinc-900 border-t-2 border-t-transparent",
+                  showReconnectProgress && "border-t-amber-500"
                 )}
-                <button
-                  onClick={(e) => handleCloseTab(e, tab.id, tab.sessionId, tab.type)}
-                  disabled={closing === tab.sessionId}
-                  className={cn(
-                    "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
-                    isActive && "opacity-100",
-                    closing === tab.sessionId && "opacity-100"
-                  )}
-                  title="Close tab"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+              >
+                <TabIcon type={tab.type} />
+                <span className="truncate flex-1">{tab.title}</span>
+                
+                {/* Reconnect progress indicator */}
+                {showReconnectProgress && (
+                  <div className="flex items-center gap-1 text-xs text-amber-400">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>
+                      {reconnectAttempt}/{reconnectMax}
+                      {reconnectNextRetry && ` (${formatTimeRemaining(reconnectNextRetry)})`}
+                    </span>
+                    <button
+                      onClick={(e) => handleCancelReconnect(e, tab.sessionId)}
+                      className="hover:bg-zinc-700 rounded p-0.5"
+                      title="Cancel reconnect"
+                    >
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                
+                {/* Normal tab controls */}
+                {!showReconnectProgress && (
+                  <div className="flex items-center gap-0.5">
+                    {/* Refresh button for terminal tabs */}
+                    {tab.type === 'terminal' && (
+                      <button
+                        onClick={(e) => handleReconnect(e, tab.sessionId)}
+                        disabled={isManualReconnecting}
+                        className={cn(
+                          "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
+                          isActive && "opacity-100",
+                          isManualReconnecting && "opacity-100"
+                        )}
+                        title="Reconnect"
+                      >
+                        <RefreshCw className={cn("h-3 w-3", isManualReconnecting && "animate-spin")} />
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => handleCloseTab(e, tab.id, tab.sessionId, tab.type)}
+                      disabled={closing === tab.sessionId}
+                      className={cn(
+                        "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
+                        isActive && "opacity-100",
+                        closing === tab.sessionId && "opacity-100"
+                      )}
+                      title="Close tab"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

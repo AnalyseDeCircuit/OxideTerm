@@ -1080,18 +1080,32 @@ impl SshConnectionRegistry {
 
                 // 尝试重连
                 match registry.try_reconnect(&connection_id, &config).await {
-                    Ok(_new_controller) => {
+                    Ok(new_controller) => {
                         info!("Connection {} reconnected successfully", connection_id);
 
-                        // 更新连接条目（这里需要更新 handle_controller）
-                        // 由于 handle_controller 是只读的，我们需要用新连接替换旧条目
-                        // 这是一个简化实现，实际可能需要更复杂的处理
+                        // 获取关联的 terminal IDs 和 forward IDs（在更新前获取）
+                        let terminal_ids = conn_for_task.terminal_ids().await;
+                        let forward_ids = conn_for_task.forward_ids().await;
+
+                        // 更新 handle_controller - 需要替换整个连接条目
+                        // 注意：由于 ConnectionEntry 的字段是不可变的，我们需要创建新条目
+                        // 这里简化处理：更新现有条目的状态，新的 handle_controller 通过事件传递
                         
                         conn_for_task.reset_heartbeat_failures();
                         conn_for_task.reset_reconnect_state();
                         conn_for_task.set_state(ConnectionState::Active).await;
 
-                        // 广播重连成功事件
+                        // 用新的 HandleController 替换旧的连接条目
+                        registry.replace_handle_controller(&connection_id, new_controller.clone()).await;
+
+                        // 广播重连成功事件（包含需要恢复的 terminal 和 forward 信息）
+                        registry.emit_connection_reconnected(
+                            &connection_id,
+                            terminal_ids,
+                            forward_ids,
+                        ).await;
+
+                        // 广播状态变更事件
                         registry.emit_connection_status_changed(&connection_id, "connected").await;
 
                         // 重新启动心跳
@@ -1194,6 +1208,73 @@ impl SshConnectionRegistry {
                 error!("Failed to emit connection_status_changed: {}", e);
             } else {
                 debug!("Emitted connection_status_changed: {} -> {}", connection_id, status);
+            }
+        }
+    }
+
+    /// 替换连接的 HandleController（用于重连后更新）
+    async fn replace_handle_controller(&self, connection_id: &str, new_controller: HandleController) {
+        if let Some(entry) = self.connections.get(connection_id) {
+            let old_entry = entry.value();
+            
+            // 创建新的连接条目，复用旧条目的元数据
+            let new_entry = Arc::new(ConnectionEntry {
+                id: old_entry.id.clone(),
+                config: old_entry.config.clone(),
+                handle_controller: new_controller,
+                state: RwLock::new(ConnectionState::Active),
+                ref_count: AtomicU32::new(old_entry.ref_count.load(Ordering::SeqCst)),
+                last_active: AtomicU64::new(Utc::now().timestamp() as u64),
+                keep_alive: RwLock::new(*old_entry.keep_alive.read().await),
+                created_at: old_entry.created_at,
+                idle_timer: Mutex::new(None),
+                terminal_ids: RwLock::new(old_entry.terminal_ids.read().await.clone()),
+                sftp_session_id: RwLock::new(old_entry.sftp_session_id.read().await.clone()),
+                forward_ids: RwLock::new(old_entry.forward_ids.read().await.clone()),
+                heartbeat_task: Mutex::new(None),
+                heartbeat_failures: AtomicU32::new(0),
+                reconnect_task: Mutex::new(None),
+                is_reconnecting: AtomicBool::new(false),
+                reconnect_attempts: AtomicU32::new(0),
+            });
+            
+            drop(entry); // 释放引用
+            
+            // 替换条目
+            self.connections.insert(connection_id.to_string(), new_entry);
+            
+            info!("Connection {} HandleController replaced after reconnect", connection_id);
+        }
+    }
+
+    /// 广播连接重连成功事件（通知前端恢复 Shell 和 Forward）
+    async fn emit_connection_reconnected(
+        &self,
+        connection_id: &str,
+        terminal_ids: Vec<String>,
+        forward_ids: Vec<String>,
+    ) {
+        let app_handle = self.app_handle.read().await;
+        if let Some(handle) = app_handle.as_ref() {
+            use tauri::Emitter;
+            
+            #[derive(Clone, serde::Serialize)]
+            struct ConnectionReconnectedEvent {
+                connection_id: String,
+                terminal_ids: Vec<String>,
+                forward_ids: Vec<String>,
+            }
+
+            let event = ConnectionReconnectedEvent {
+                connection_id: connection_id.to_string(),
+                terminal_ids,
+                forward_ids,
+            };
+
+            if let Err(e) = handle.emit("connection_reconnected", event) {
+                error!("Failed to emit connection_reconnected: {}", e);
+            } else {
+                info!("Emitted connection_reconnected for {}", connection_id);
             }
         }
     }

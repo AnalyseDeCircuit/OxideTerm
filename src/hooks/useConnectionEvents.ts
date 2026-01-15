@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
+import { useTransferStore } from '../store/transferStore';
 import type { SshConnectionState } from '../types';
 
 interface ConnectionStatusEvent {
@@ -17,7 +18,8 @@ interface ConnectionStatusEvent {
 }
 
 export function useConnectionEvents(): void {
-  const { updateConnectionState } = useAppStore();
+  const { updateConnectionState, sessions } = useAppStore();
+  const { interruptTransfersBySession } = useTransferStore();
 
   useEffect(() => {
     // Listen for connection status changes from backend
@@ -46,10 +48,22 @@ export function useConnectionEvents(): void {
       }
 
       updateConnectionState(connection_id, state);
+
+      // When connection goes down, interrupt all SFTP transfers for related sessions
+      if (status === 'link_down' || status === 'disconnected') {
+        // Find all sessions using this connection and interrupt their transfers
+        sessions.forEach((session, sessionId) => {
+          if (session.connectionId === connection_id) {
+            interruptTransfersBySession(sessionId, 
+              status === 'link_down' ? 'Connection lost - reconnecting...' : 'Connection closed'
+            );
+          }
+        });
+      }
     });
 
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [updateConnectionState]);
+  }, [updateConnectionState, sessions, interruptTransfersBySession]);
 }

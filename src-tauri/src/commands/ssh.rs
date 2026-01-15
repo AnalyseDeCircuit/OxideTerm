@@ -624,3 +624,184 @@ pub async fn close_terminal(
 
     Ok(())
 }
+
+/// 重建终端 PTY（用于连接重连后恢复 Shell）
+///
+/// 当物理连接重连成功后，前端调用此命令为每个关联的 session 重建 PTY。
+/// 这会创建新的 shell channel 和 WebSocket bridge，并返回新的 ws_url 和 ws_token。
+#[tauri::command]
+pub async fn recreate_terminal_pty(
+    app_handle: AppHandle,
+    session_id: String,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+    session_registry: State<'_, Arc<SessionRegistry>>,
+    _forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
+) -> Result<RecreateTerminalResponse, String> {
+    info!("Recreate terminal PTY request: {}", session_id);
+
+    // 获取 session 信息
+    let session_info = session_registry
+        .get(&session_id)
+        .ok_or_else(|| format!("Session {} not found", session_id))?;
+
+    let connection_id = session_info.connection_id
+        .ok_or_else(|| "Session has no connection_id".to_string())?;
+
+    // 获取新的 HandleController
+    let handle_controller = connection_registry
+        .get_handle_controller(&connection_id)
+        .ok_or_else(|| "Connection not found".to_string())?;
+
+    // 获取 session 配置
+    let config = session_registry
+        .get_config(&session_id)
+        .ok_or_else(|| "Session config not found".to_string())?;
+
+    // 打开新的 shell channel
+    let mut channel = handle_controller
+        .open_session_channel()
+        .await
+        .map_err(|e| format!("Failed to open channel: {}", e))?;
+
+    // 请求 PTY
+    channel
+        .request_pty(false, "xterm-256color", config.cols, config.rows, 0, 0, &[])
+        .await
+        .map_err(|e| format!("Failed to request PTY: {}", e))?;
+
+    // 请求 shell
+    channel
+        .request_shell(false)
+        .await
+        .map_err(|e| format!("Failed to request shell: {}", e))?;
+
+    // 创建新的 channel handler
+    use crate::ssh::{ExtendedSessionHandle, SessionCommand};
+    use russh::ChannelMsg;
+    use tokio::sync::mpsc;
+
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<SessionCommand>(1024);
+    let (stdout_tx, stdout_rx) = mpsc::channel::<Vec<u8>>(1024);
+
+    let sid = session_id.clone();
+    tokio::spawn(async move {
+        tracing::debug!("Recreated channel handler started for session {}", sid);
+
+        loop {
+            tokio::select! {
+                Some(cmd) = cmd_rx.recv() => {
+                    match cmd {
+                        SessionCommand::Data(data) => {
+                            if let Err(e) = channel.data(&data[..]).await {
+                                tracing::error!("Failed to send data to SSH channel: {}", e);
+                                break;
+                            }
+                        }
+                        SessionCommand::Resize(cols, rows) => {
+                            if let Err(e) = channel.window_change(cols as u32, rows as u32, 0, 0).await {
+                                tracing::error!("Failed to resize PTY: {}", e);
+                            }
+                        }
+                        SessionCommand::Close => {
+                            let _ = channel.eof().await;
+                            break;
+                        }
+                    }
+                }
+
+                Some(msg) = channel.wait() => {
+                    match msg {
+                        ChannelMsg::Data { data } => {
+                            if stdout_tx.send(data.to_vec()).await.is_err() {
+                                break;
+                            }
+                        }
+                        ChannelMsg::ExtendedData { data, ext } => {
+                            if ext == 1 && stdout_tx.send(data.to_vec()).await.is_err() {
+                                break;
+                            }
+                        }
+                        ChannelMsg::Eof | ChannelMsg::Close => {
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+
+                else => break,
+            }
+        }
+
+        tracing::debug!("Recreated channel handler terminated for session {}", sid);
+    });
+
+    let extended_handle = ExtendedSessionHandle {
+        id: session_id.clone(),
+        cmd_tx: cmd_tx.clone(),
+        stdout_rx,
+    };
+
+    // 获取 scroll buffer（保留历史）
+    let scroll_buffer = session_registry
+        .with_session(&session_id, |entry| entry.scroll_buffer.clone())
+        .ok_or_else(|| "Session not found in registry".to_string())?;
+
+    // 启动新的 WebSocket bridge
+    let (_, port, token, disconnect_rx) =
+        WsBridge::start_extended_with_disconnect(extended_handle, scroll_buffer)
+            .await
+            .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
+
+    // 处理断开事件
+    let app_handle_clone = app_handle.clone();
+    let session_id_clone = session_id.clone();
+    let connection_id_clone = connection_id.clone();
+    let registry_clone = session_registry.inner().clone();
+    let conn_registry_clone = connection_registry.inner().clone();
+    tokio::spawn(async move {
+        if let Ok(reason) = disconnect_rx.await {
+            warn!("Recreated session {} disconnected: {:?}", session_id_clone, reason);
+            let _ = registry_clone.disconnect_complete(&session_id_clone, false);
+            let _ = conn_registry_clone.release(&connection_id_clone).await;
+            let _ = conn_registry_clone
+                .remove_terminal(&connection_id_clone, &session_id_clone)
+                .await;
+
+            let payload = SessionDisconnectedPayload {
+                session_id: session_id_clone.clone(),
+                reason: reason.description(),
+                recoverable: reason.is_recoverable(),
+            };
+            let _ = app_handle_clone.emit(event_names::SESSION_DISCONNECTED, &payload);
+        }
+    });
+
+    // 更新 session registry 的 ws_port 和 ws_token
+    session_registry
+        .update_ws_info(&session_id, port, token.clone(), cmd_tx, handle_controller.clone())
+        .map_err(|e| format!("Failed to update session: {}", e))?;
+
+    let ws_url = format!("ws://localhost:{}", port);
+
+    info!(
+        "Terminal PTY recreated: session={}, ws_port={}, connection={}",
+        session_id, port, connection_id
+    );
+
+    Ok(RecreateTerminalResponse {
+        session_id,
+        ws_url,
+        port,
+        ws_token: token,
+    })
+}
+
+/// 重建终端 PTY 的响应
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecreateTerminalResponse {
+    pub session_id: String,
+    pub ws_url: String,
+    pub port: u16,
+    pub ws_token: String,
+}

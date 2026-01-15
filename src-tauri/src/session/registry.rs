@@ -245,6 +245,30 @@ impl SessionRegistry {
         Ok(())
     }
 
+    /// Update WebSocket info for a session after PTY recreation
+    /// Used when connection reconnects and Shell PTY needs to be recreated
+    pub fn update_ws_info(
+        &self,
+        session_id: &str,
+        ws_port: u16,
+        ws_token: String,
+        cmd_tx: mpsc::Sender<SessionCommand>,
+        handle_controller: HandleController,
+    ) -> Result<(), RegistryError> {
+        let mut entry = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
+
+        entry.ws_port = Some(ws_port);
+        entry.ws_token = Some(ws_token);
+        entry.cmd_tx = Some(cmd_tx);
+        entry.handle_controller = Some(handle_controller);
+
+        info!("Session {} ws_info updated after PTY recreation (port: {})", session_id, ws_port);
+        Ok(())
+    }
+
     /// Mark session as failed
     pub fn connect_failed(&self, session_id: &str, error: String) -> Result<(), RegistryError> {
         let mut entry = self

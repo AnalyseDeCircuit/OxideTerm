@@ -293,6 +293,7 @@ pub fn run() {
             commands::ssh_set_pool_config,
             commands::create_terminal,
             commands::close_terminal,
+            commands::recreate_terminal_pty,
             // Scroll buffer commands
             commands::get_scroll_buffer,
             commands::get_buffer_stats,
@@ -325,6 +326,8 @@ pub fn run() {
             commands::create_port_forward,
             commands::stop_port_forward,
             commands::list_port_forwards,
+            commands::pause_port_forwards,
+            commands::restore_port_forwards,
             commands::forward_jupyter,
             commands::forward_tensorboard,
             commands::forward_vscode,

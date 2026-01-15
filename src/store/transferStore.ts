@@ -33,6 +33,7 @@ interface TransferStore {
   pauseTransfer: (id: string) => void;
   resumeTransfer: (id: string) => void;
   cancelTransfer: (id: string) => void;
+  interruptTransfersBySession: (sessionId: string, errorMessage?: string) => void;
   
   // Computed helpers
   getTransfersBySession: (sessionId: string) => TransferItem[];
@@ -183,6 +184,34 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
         state: 'cancelled',
         endTime: Date.now(),
       });
+      return { transfers: newTransfers };
+    });
+  },
+  
+  // Mark all active/pending transfers for a session as interrupted (error state)
+  // Used when connection is lost - preserves transferred bytes for resume
+  interruptTransfersBySession: (sessionId, errorMessage = 'Connection lost') => {
+    set((state) => {
+      const newTransfers = new Map(state.transfers);
+      let interrupted = 0;
+      
+      for (const [id, transfer] of newTransfers) {
+        if (transfer.sessionId === sessionId && 
+            (transfer.state === 'active' || transfer.state === 'pending')) {
+          newTransfers.set(id, {
+            ...transfer,
+            state: 'error',
+            error: errorMessage,
+            // Keep transferred bytes for resume capability
+          });
+          interrupted++;
+        }
+      }
+      
+      if (interrupted > 0) {
+        console.log(`[TransferStore] Interrupted ${interrupted} transfers for session ${sessionId}`);
+      }
+      
       return { transfers: newTransfers };
     });
   },

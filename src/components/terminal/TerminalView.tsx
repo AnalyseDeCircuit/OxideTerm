@@ -10,6 +10,8 @@ import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar } from './SearchBar';
 import { SearchMatch, SettingsChangedDetail } from '../../types';
+import { listen } from '@tauri-apps/api/event';
+import { Lock, Loader2 } from 'lucide-react';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -73,6 +75,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   // Track last connected ws_url for reconnection detection
   const lastWsUrlRef = useRef<string | null>(null);
   
+  // === Standby Mode State (Input Lock during reconnection) ===
+  const [inputLocked, setInputLocked] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'link_down' | 'reconnecting' | 'disconnected'>('connected');
+  const inputLockedRef = useRef(false); // For synchronous check in onData callback
+  
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
 
@@ -87,6 +94,60 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
             cursorBlink: true
         };
   });
+
+  // === Listen for connection status changes (Standby mode trigger) ===
+  useEffect(() => {
+    // Get connection ID from session
+    const connectionId = session?.connectionId;
+    if (!connectionId) return;
+
+    interface ConnectionStatusEvent {
+      connection_id: string;
+      status: 'connected' | 'link_down' | 'reconnecting' | 'disconnected';
+    }
+
+    const unlisten = listen<ConnectionStatusEvent>('connection_status_changed', (event) => {
+      const { connection_id, status } = event.payload;
+      
+      // Only handle events for our connection
+      if (connection_id !== connectionId) return;
+      
+      console.log(`[TerminalView ${sessionId}] Connection status: ${status}`);
+      setConnectionStatus(status);
+      
+      const term = terminalRef.current;
+      const shouldLock = status === 'link_down' || status === 'reconnecting';
+      
+      if (shouldLock && !inputLockedRef.current) {
+        // Entering Standby mode
+        inputLockedRef.current = true;
+        setInputLocked(true);
+        
+        // Write status message (NO clear!)
+        if (term) {
+          if (status === 'link_down') {
+            term.write('\r\n\x1b[33m[OxideTerm] Connection lost. Reconnecting...\x1b[0m\r\n');
+          } else if (status === 'reconnecting') {
+            term.write('\r\n\x1b[33m[OxideTerm] Attempting to reconnect...\x1b[0m\r\n');
+          }
+        }
+      } else if (!shouldLock && inputLockedRef.current) {
+        // Exiting Standby mode
+        inputLockedRef.current = false;
+        setInputLocked(false);
+        
+        if (term && status === 'connected') {
+          term.write('\r\n\x1b[32m[OxideTerm] Link restored. Shell session reset.\x1b[0m\r\n');
+        } else if (term && status === 'disconnected') {
+          term.write('\r\n\x1b[31m[OxideTerm] Connection permanently failed.\x1b[0m\r\n');
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [session?.connectionId, sessionId]);
 
   // Listen for settings changes (type-safe via WindowEventMap extension)
   useEffect(() => {
@@ -487,7 +548,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     terminalElement?.addEventListener('compositionend', handleCompositionEnd);
 
     // Terminal Input -> WebSocket (registered outside setTimeout to work immediately)
+    // === Input Lock: Discard all input when in Standby mode ===
     term.onData(data => {
+        // Strict input interception: discard input when connection is down/reconnecting
+        if (inputLockedRef.current) {
+          console.log('[TerminalView] Input discarded - connection in standby mode');
+          return; // Discard input silently
+        }
+        
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
             // Encode as Wire Protocol v1 Data frame
@@ -499,6 +567,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     });
 
     term.onResize((size) => {
+        // Don't send resize when in Standby mode
+        if (inputLockedRef.current) return;
+        
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
             // Send resize frame using Wire Protocol v1
@@ -692,6 +763,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
            isolation: 'isolate'
          }}
        />
+       
+       {/* Input Lock Overlay - shown during reconnection */}
+       {inputLocked && (
+         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-10">
+           <div className="bg-zinc-900/95 border border-zinc-700 rounded-lg px-6 py-4 flex flex-col items-center gap-3 shadow-xl">
+             <div className="flex items-center gap-2 text-amber-400">
+               {connectionStatus === 'reconnecting' ? (
+                 <Loader2 className="h-5 w-5 animate-spin" />
+               ) : (
+                 <Lock className="h-5 w-5" />
+               )}
+               <span className="font-medium">
+                 {connectionStatus === 'link_down' && 'Connection Lost'}
+                 {connectionStatus === 'reconnecting' && 'Reconnecting...'}
+               </span>
+             </div>
+             <div className="text-xs text-zinc-400 text-center">
+               Input is locked during reconnection
+             </div>
+           </div>
+         </div>
+       )}
        
        {/* Search Bar */}
        <SearchBar 

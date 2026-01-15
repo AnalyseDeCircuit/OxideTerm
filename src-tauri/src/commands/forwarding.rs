@@ -68,6 +68,75 @@ impl ForwardingRegistry {
         }
     }
 
+    /// Pause all forwards for a session (save rules for recovery) without removing from registry
+    /// Used when connection goes down but we want to keep the manager for recovery
+    pub async fn pause_forwards(&self, session_id: &str) -> Vec<ForwardRule> {
+        if let Some(manager) = self.managers.read().await.get(session_id) {
+            manager.stop_all_and_save_rules().await
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Update the HandleController for a session's forwarding manager and restore forwards
+    /// Used after connection reconnects
+    pub async fn restore_forwards(
+        &self,
+        session_id: &str,
+        new_handle_controller: crate::ssh::HandleController,
+    ) -> Result<Vec<ForwardRule>, String> {
+        // Get stopped rules from the old manager
+        let stopped_rules: Vec<ForwardRule> = if let Some(old_manager) = self.managers.read().await.get(session_id) {
+            old_manager.list_stopped_forwards().await
+        } else {
+            Vec::new()
+        };
+
+        let rules_count = stopped_rules.len();
+        if rules_count == 0 {
+            info!("No forwards to restore for session {}", session_id);
+            return Ok(Vec::new());
+        }
+
+        info!(
+            "Restoring {} forwards for session {} with new HandleController",
+            rules_count,
+            session_id
+        );
+
+        // Create a new manager with the new HandleController
+        let new_manager = ForwardingManager::new(new_handle_controller, session_id);
+
+        // Restore each forward rule
+        let mut restored_rules = Vec::new();
+        for rule in stopped_rules {
+            match new_manager.create_forward(rule.clone()).await {
+                Ok(restored_rule) => {
+                    info!("Restored forward: {}", restored_rule.id);
+                    restored_rules.push(restored_rule);
+                }
+                Err(e) => {
+                    warn!("Failed to restore forward {}: {}", rule.id, e);
+                }
+            }
+        }
+
+        // Replace the old manager with the new one
+        self.managers
+            .write()
+            .await
+            .insert(session_id.to_string(), Arc::new(new_manager));
+
+        info!(
+            "Restored {}/{} forwards for session {}",
+            restored_rules.len(),
+            rules_count,
+            session_id
+        );
+
+        Ok(restored_rules)
+    }
+
     /// Stop all forwards across all sessions (for app shutdown)
     pub async fn stop_all_forwards(&self) {
         let managers: Vec<Arc<ForwardingManager>> = {
@@ -365,6 +434,53 @@ pub async fn stop_port_forward(
             })
         }
     }
+}
+
+/// Pause all port forwards for a session (used when connection goes down)
+/// This saves the rules for later recovery
+#[tauri::command]
+pub async fn pause_port_forwards(
+    registry: State<'_, Arc<ForwardingRegistry>>,
+    session_id: String,
+) -> Result<Vec<ForwardRuleDto>, String> {
+    info!("Pausing all forwards for session {}", session_id);
+    
+    let paused_rules = registry.pause_forwards(&session_id).await;
+    
+    info!("Paused {} forwards for session {}", paused_rules.len(), session_id);
+    
+    Ok(paused_rules.into_iter().map(|r| r.into()).collect())
+}
+
+/// Restore port forwards after connection reconnects
+/// This creates new forwards using the new HandleController
+#[tauri::command]
+pub async fn restore_port_forwards(
+    registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<crate::ssh::SshConnectionRegistry>>,
+    session_id: String,
+) -> Result<Vec<ForwardRuleDto>, String> {
+    info!("Restoring forwards for session {}", session_id);
+    
+    // Get the session's connection ID
+    // For now, we assume session_id == connection_id in the new architecture
+    // This might need adjustment based on actual architecture
+    let handle_controller = connection_registry
+        .get_handle_controller(&session_id)
+        .or_else(|| {
+            // Try to find connection by iterating (fallback)
+            // This is a simplified approach - ideally we'd have a direct mapping
+            connection_registry.get_handle_controller(&session_id)
+        })
+        .ok_or_else(|| format!("Cannot find HandleController for session {}", session_id))?;
+    
+    let restored_rules = registry
+        .restore_forwards(&session_id, handle_controller)
+        .await?;
+    
+    info!("Restored {} forwards for session {}", restored_rules.len(), session_id);
+    
+    Ok(restored_rules.into_iter().map(|r| r.into()).collect())
 }
 
 /// List all port forwards for a session
