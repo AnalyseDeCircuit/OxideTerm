@@ -9,7 +9,15 @@ export type AuthType = 'password' | 'key' | 'default_key' | 'agent';
 /**
  * Connection state in the connection pool
  */
-export type SshConnectionState = 'connecting' | 'active' | 'idle' | 'disconnecting' | 'disconnected' | { error: string };
+export type SshConnectionState = 
+  | 'connecting' 
+  | 'active' 
+  | 'idle' 
+  | 'link_down'      // Heartbeat failed, waiting for reconnect
+  | 'reconnecting'   // Attempting to reconnect
+  | 'disconnecting' 
+  | 'disconnected' 
+  | { error: string };
 
 /**
  * SSH connection info from the connection pool

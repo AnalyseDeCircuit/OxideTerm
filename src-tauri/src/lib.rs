@@ -246,6 +246,16 @@ pub fn run() {
                 }
             }
 
+            // Set AppHandle for SSH connection registry (for event broadcasting)
+            {
+                let registry = ssh_connection_registry.clone();
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    registry.set_app_handle(handle).await;
+                    tracing::info!("SSH connection registry app handle set");
+                });
+            }
+
             // Initialize auto reconnect service
             let reconnect_service = Arc::new(AutoReconnectService::new(
                 registry.clone(),

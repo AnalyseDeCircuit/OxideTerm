@@ -238,6 +238,19 @@ export const Sidebar = () => {
                     .filter(Boolean);
                   const displayName = `${connection.username}@${connection.host}`;
                   
+                  // 状态指示灯样式
+                  const getStatusLight = () => {
+                    const state = connection.state;
+                    if (state === 'active') return 'bg-green-500';
+                    if (state === 'idle') return 'bg-blue-500';
+                    if (state === 'link_down') return 'bg-red-500 animate-pulse';
+                    if (state === 'reconnecting') return 'bg-yellow-500 animate-pulse';
+                    if (state === 'connecting') return 'bg-yellow-500';
+                    if (state === 'disconnecting' || state === 'disconnected') return 'bg-zinc-500';
+                    if (typeof state === 'object' && state.error) return 'bg-red-500';
+                    return 'bg-zinc-500';
+                  };
+                  
                   return (
                     <div key={connection.id} className="space-y-0.5">
                       {/* 连接主行 */}
@@ -252,8 +265,7 @@ export const Sidebar = () => {
                         )}
                         <div className={cn(
                           "w-1.5 h-1.5 rounded-full",
-                          connection.state === 'active' ? 'bg-green-500' : 
-                          connection.state === 'idle' ? 'bg-blue-500' : 'bg-yellow-500'
+                          getStatusLight()
                         )} />
                         <Server className="h-3.5 w-3.5 text-theme-text-muted" />
                         <span className="truncate flex-1">{displayName}</span>

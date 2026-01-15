@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useRef } from 'react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
 
@@ -41,43 +41,15 @@ export const TabBar = () => {
   // Force re-render for countdown
   const [, setTick] = React.useState(0);
   
-  // Scroll state
+  // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-  
-  // Check scroll state
-  const updateScrollState = () => {
+
+  // Handle wheel event - convert vertical scroll to horizontal
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const container = scrollContainerRef.current;
-    if (container) {
-      setCanScrollLeft(container.scrollLeft > 0);
-      setCanScrollRight(
-        container.scrollLeft < container.scrollWidth - container.clientWidth - 1
-      );
-    }
-  };
-  
-  useEffect(() => {
-    updateScrollState();
-    const container = scrollContainerRef.current;
-    if (container) {
-      container.addEventListener('scroll', updateScrollState);
-      window.addEventListener('resize', updateScrollState);
-      return () => {
-        container.removeEventListener('scroll', updateScrollState);
-        window.removeEventListener('resize', updateScrollState);
-      };
-    }
-  }, [tabs]);
-  
-  const scroll = (direction: 'left' | 'right') => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      const scrollAmount = 200;
-      container.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
+    if (container && e.deltaY !== 0) {
+      e.preventDefault();
+      container.scrollLeft += e.deltaY;
     }
   };
 
@@ -139,16 +111,6 @@ export const TabBar = () => {
 
   return (
     <div className="flex items-center h-9 bg-theme-bg border-b border-theme-border">
-      {/* Left scroll button */}
-      {canScrollLeft && (
-        <button
-          onClick={() => scroll('left')}
-          className="flex-shrink-0 h-full px-1 hover:bg-zinc-800 border-r border-theme-border"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-      )}
-      
       {/* Network status indicator */}
       {!networkOnline && (
         <div className="flex-shrink-0 flex items-center gap-1.5 px-3 h-full border-r border-theme-border bg-amber-900/30 text-amber-400 text-xs">
@@ -157,10 +119,11 @@ export const TabBar = () => {
         </div>
       )}
       
-      {/* Scrollable tabs container */}
+      {/* Scrollable tabs container with thin scrollbar */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 flex items-center overflow-x-auto no-scrollbar"
+        onWheel={handleWheel}
+        className="flex-1 min-w-0 flex items-center overflow-x-auto scrollbar-thin"
       >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
@@ -241,16 +204,6 @@ export const TabBar = () => {
         );
       })}
       </div>
-      
-      {/* Right scroll button */}
-      {canScrollRight && (
-        <button
-          onClick={() => scroll('right')}
-          className="flex-shrink-0 h-full px-1 hover:bg-zinc-800 border-l border-theme-border"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      )}
     </div>
   );
 };

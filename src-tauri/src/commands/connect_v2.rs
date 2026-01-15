@@ -338,6 +338,10 @@ pub async fn connect_v2(
             .register_existing(sid.clone(), pool_config, pool_controller, sid.clone())
             .await;
         info!("Connection registered to pool for session {}", sid);
+        
+        // Start heartbeat monitoring for this connection
+        connection_registry.start_heartbeat(&sid);
+        info!("Heartbeat started for session {}", sid);
 
         info!("Connection established: session={}, ws_port={}", sid, port);
 
@@ -517,6 +521,10 @@ pub async fn connect_v2(
             .register_existing(sid.clone(), config, pool_controller, sid.clone())
             .await;
         info!("Connection registered to pool for session {}", sid);
+
+        // Start heartbeat monitoring for this connection
+        connection_registry.start_heartbeat(&sid);
+        info!("Heartbeat started for session {}", sid);
 
         info!("Connection established: session={}, ws_port={}", sid, port);
 

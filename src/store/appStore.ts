@@ -13,6 +13,7 @@ import {
   SessionReconnectFailedPayload,
   SessionReconnectCancelledPayload,
   SshConnectionInfo,
+  SshConnectionState,
   SshConnectRequest,
 } from '../types';
 
@@ -85,6 +86,9 @@ interface AppStore {
   setSelectedGroup: (group: string | null) => void;
   connectToSaved: (connectionId: string) => Promise<void>;
   openConnectionEditor: (connectionId: string) => void;
+  
+  // Actions - Connection status updates (from backend events)
+  updateConnectionState: (connectionId: string, state: SshConnectionState) => void;
   
   // Computed (Helper methods)
   getSession: (sessionId: string) => SessionInfo | undefined;
@@ -765,5 +769,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return get().connections.get(session.connectionId);
     }
     return undefined;
+  },
+
+  updateConnectionState: (connectionId, state) => {
+    set((prev) => {
+      const connection = prev.connections.get(connectionId);
+      if (!connection) {
+        console.warn(`[Store] Connection not found: ${connectionId}`);
+        return prev;
+      }
+
+      const newConnections = new Map(prev.connections);
+      newConnections.set(connectionId, {
+        ...connection,
+        state,
+      });
+
+      console.log(`[Store] Connection ${connectionId} state updated to:`, state);
+      return { connections: newConnections };
+    });
   }
 }));

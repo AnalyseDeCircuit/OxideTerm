@@ -304,6 +304,9 @@ pub struct SessionInfo {
     // Authentication info for reconnection (password is never exposed)
     pub auth_type: String,
     pub key_path: Option<String>,
+    // Connection ID for connection pool tracking
+    #[serde(rename = "connectionId")]
+    pub connection_id: Option<String>,
 }
 
 impl From<&SessionEntry> for SessionInfo {
@@ -330,6 +333,7 @@ impl From<&SessionEntry> for SessionInfo {
             order: entry.order,
             auth_type,
             key_path,
+            connection_id: entry.connection_id.clone(),
         }
     }
 }

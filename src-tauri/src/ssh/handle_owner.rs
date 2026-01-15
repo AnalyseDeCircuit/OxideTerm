@@ -63,6 +63,11 @@ pub enum HandleCommand {
         reply_tx: oneshot::Sender<Result<(), russh::Error>>,
     },
 
+    /// Ping the connection (for keepalive check)
+    Ping {
+        reply_tx: oneshot::Sender<bool>,
+    },
+
     /// Disconnect the SSH connection
     Disconnect,
 }
@@ -189,6 +194,16 @@ impl HandleController {
         let _ = self.cmd_tx.send(HandleCommand::Disconnect).await;
     }
 
+    /// Ping the connection (for keepalive check)
+    /// Returns true if the connection is alive, false otherwise
+    pub async fn ping(&self) -> bool {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.cmd_tx.send(HandleCommand::Ping { reply_tx }).await.is_err() {
+            return false;
+        }
+        reply_rx.await.unwrap_or(false)
+    }
+
     /// Check if the Handle Owner Task is still running
     pub fn is_connected(&self) -> bool {
         !self.cmd_tx.is_closed()
@@ -295,6 +310,25 @@ pub fn spawn_handle_owner_task(
                             }
                         }
 
+                        HandleCommand::Ping { reply_tx } => {
+                            // Try to open a session channel as a keepalive probe
+                            // This validates the SSH connection is still functional
+                            let is_alive = match tokio::time::timeout(
+                                std::time::Duration::from_secs(10),
+                                handle.channel_open_session(),
+                            )
+                            .await
+                            {
+                                Ok(Ok(channel)) => {
+                                    // Successfully opened, close it immediately
+                                    drop(channel);
+                                    true
+                                }
+                                Ok(Err(_)) | Err(_) => false,
+                            };
+                            let _ = reply_tx.send(is_alive);
+                        }
+
                         HandleCommand::Disconnect => {
                             info!("Disconnect requested for session {}", session_id);
                             break;
@@ -342,6 +376,9 @@ fn drain_pending_commands(cmd_rx: &mut mpsc::Receiver<HandleCommand>) {
             }
             HandleCommand::CancelTcpipForward { reply_tx, .. } => {
                 let _ = reply_tx.send(Err(russh::Error::Disconnect));
+            }
+            HandleCommand::Ping { reply_tx } => {
+                let _ = reply_tx.send(false);
             }
             HandleCommand::Disconnect => {
                 // Already disconnecting, ignore
