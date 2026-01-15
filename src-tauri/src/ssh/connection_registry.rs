@@ -657,6 +657,58 @@ impl SshConnectionRegistry {
         result
     }
 
+    /// 注册已存在的连接（用于 connect_v2 集成）
+    ///
+    /// 将 connect_v2 创建的 HandleController 注册到连接池，
+    /// 使连接池面板能够显示这些连接。
+    ///
+    /// # Arguments
+    /// * `connection_id` - 连接 ID（通常使用 session_id）
+    /// * `config` - 会话配置
+    /// * `handle_controller` - 已创建的 HandleController
+    /// * `session_id` - 关联的 terminal session ID
+    ///
+    /// # Returns
+    /// * 返回连接 ID
+    pub async fn register_existing(
+        &self,
+        connection_id: String,
+        config: SessionConfig,
+        handle_controller: HandleController,
+        session_id: String,
+    ) -> String {
+        info!(
+            "Registering existing connection {} for session {}",
+            connection_id, session_id
+        );
+
+        // 创建连接条目
+        let entry = Arc::new(ConnectionEntry {
+            id: connection_id.clone(),
+            config,
+            handle_controller,
+            state: RwLock::new(ConnectionState::Active),
+            ref_count: AtomicU32::new(1), // 初始引用计数为 1（对应 terminal）
+            last_active: AtomicU64::new(Utc::now().timestamp() as u64),
+            keep_alive: RwLock::new(false),
+            created_at: Utc::now(),
+            idle_timer: Mutex::new(None),
+            terminal_ids: RwLock::new(vec![session_id]),
+            sftp_session_id: RwLock::new(None),
+            forward_ids: RwLock::new(Vec::new()),
+        });
+
+        self.connections.insert(connection_id.clone(), entry);
+
+        info!(
+            "Connection {} registered, total connections: {}",
+            connection_id,
+            self.connections.len()
+        );
+
+        connection_id
+    }
+
     /// 获取连接数量
     pub fn connection_count(&self) -> usize {
         self.connections.len()

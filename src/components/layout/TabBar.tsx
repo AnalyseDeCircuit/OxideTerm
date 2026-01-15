@@ -25,8 +25,19 @@ const formatTimeRemaining = (nextRetry: number): string => {
 };
 
 export const TabBar = () => {
-  const { tabs, activeTabId, setActiveTab, closeTab, reconnect, cancelReconnect, sessions, networkOnline } = useAppStore();
+  const { 
+    tabs, 
+    activeTabId, 
+    setActiveTab, 
+    closeTab, 
+    closeTerminalSession,
+    reconnect, 
+    cancelReconnect, 
+    sessions, 
+    networkOnline 
+  } = useAppStore();
   const [reconnecting, setReconnecting] = React.useState<string | null>(null);
+  const [closing, setClosing] = React.useState<string | null>(null);
   // Force re-render for countdown
   const [, setTick] = React.useState(0);
 
@@ -59,6 +70,31 @@ export const TabBar = () => {
   const handleCancelReconnect = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     await cancelReconnect(sessionId);
+  };
+
+  // 关闭 Tab 时释放后端资源
+  const handleCloseTab = async (e: React.MouseEvent, tabId: string, sessionId: string, tabType: string) => {
+    e.stopPropagation();
+    
+    // 如果是终端 Tab，尝试调用新的 closeTerminalSession
+    if (tabType === 'terminal') {
+      setClosing(sessionId);
+      try {
+        // 检查 session 是否使用新的连接池架构
+        const session = sessions.get(sessionId);
+        if (session?.connectionId) {
+          // 使用新 API 释放终端（会减少连接引用计数）
+          await closeTerminalSession(sessionId);
+        }
+      } catch (error) {
+        console.error('Failed to close terminal session:', error);
+      } finally {
+        setClosing(null);
+      }
+    }
+    
+    // 总是移除 Tab（即使后端调用失败）
+    closeTab(tabId);
   };
 
   return (
@@ -133,14 +169,14 @@ export const TabBar = () => {
                   </button>
                 )}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeTab(tab.id);
-                  }}
+                  onClick={(e) => handleCloseTab(e, tab.id, tab.sessionId, tab.type)}
+                  disabled={closing === tab.sessionId}
                   className={cn(
                     "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
-                    isActive && "opacity-100"
+                    isActive && "opacity-100",
+                    closing === tab.sessionId && "opacity-100"
                   )}
+                  title="Close tab"
                 >
                   <X className="h-3 w-3" />
                 </button>

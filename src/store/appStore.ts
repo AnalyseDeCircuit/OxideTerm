@@ -12,21 +12,28 @@ import {
   SessionReconnectedPayload,
   SessionReconnectFailedPayload,
   SessionReconnectCancelledPayload,
+  SshConnectionInfo,
+  SshConnectRequest,
 } from '../types';
 
 interface ModalsState {
   newConnection: boolean;
   settings: boolean;
   editConnection: boolean;
+  connectionManager: boolean; // 新增：连接管理面板
 }
+
+// 侧边栏区域类型
+type SidebarSection = 'sessions' | 'sftp' | 'forwards' | 'connections';
 
 interface AppStore {
   // State
   sessions: Map<string, SessionInfo>;
+  connections: Map<string, SshConnectionInfo>; // 新增：连接池状态
   tabs: Tab[];
   activeTabId: string | null;
   sidebarCollapsed: boolean;
-  sidebarActiveSection: 'sessions' | 'sftp' | 'forwards';
+  sidebarActiveSection: SidebarSection;
   modals: ModalsState;
   savedConnections: ConnectionInfo[];
   groups: string[];
@@ -35,7 +42,7 @@ interface AppStore {
   networkOnline: boolean;
   reconnectPendingSessionId: string | null; // Session awaiting password for reconnect
 
-  // Actions - Sessions
+  // Actions - Sessions (legacy, still working)
   connect: (request: ConnectRequest) => Promise<string>;
   disconnect: (sessionId: string) => Promise<void>;
   reconnect: (sessionId: string) => Promise<void>;
@@ -43,6 +50,14 @@ interface AppStore {
   cancelReconnectDialog: () => void;
   cancelReconnect: (sessionId: string) => Promise<void>;
   updateSessionState: (sessionId: string, state: SessionState, error?: string) => void;
+  
+  // Actions - Connection Pool (新 API)
+  connectSsh: (request: SshConnectRequest) => Promise<string>;
+  disconnectSsh: (connectionId: string) => Promise<void>;
+  createTerminalSession: (connectionId: string, cols?: number, rows?: number) => Promise<SessionInfo>;
+  closeTerminalSession: (sessionId: string) => Promise<void>;
+  refreshConnections: () => Promise<void>;
+  setConnectionKeepAlive: (connectionId: string, keepAlive: boolean) => Promise<void>;
   
   // Actions - Reconnect Events (internal)
   _handleSessionDisconnected: (payload: SessionDisconnectedPayload) => void;
@@ -61,7 +76,7 @@ interface AppStore {
   
   // Actions - UI
   toggleSidebar: () => void;
-  setSidebarSection: (section: 'sessions' | 'sftp' | 'forwards') => void;
+  setSidebarSection: (section: SidebarSection) => void;
   toggleModal: (modal: keyof ModalsState, isOpen: boolean) => void;
   
   // Actions - Connections & Groups
@@ -73,10 +88,13 @@ interface AppStore {
   
   // Computed (Helper methods)
   getSession: (sessionId: string) => SessionInfo | undefined;
+  getConnection: (connectionId: string) => SshConnectionInfo | undefined;
+  getConnectionForSession: (sessionId: string) => SshConnectionInfo | undefined;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
   sessions: new Map(),
+  connections: new Map(), // 新增：连接池状态
   tabs: [],
   activeTabId: null,
   sidebarCollapsed: false,
@@ -86,6 +104,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     newConnection: false,
     settings: false,
     editConnection: false,
+    connectionManager: false, // 新增
   },
   savedConnections: [],
   groups: [],
@@ -116,6 +135,172 @@ export const useAppStore = create<AppStore>((set, get) => ({
       throw error;
     }
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Connection Pool Actions (新架构)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  connectSsh: async (request: SshConnectRequest) => {
+    try {
+      const response = await api.sshConnect(request);
+      
+      // 更新连接池状态
+      set((state) => {
+        const newConnections = new Map(state.connections);
+        newConnections.set(response.connectionId, response.connection);
+        return { connections: newConnections };
+      });
+      
+      console.log(`SSH connected: ${response.connectionId} (reused: ${response.reused})`);
+      return response.connectionId;
+    } catch (error) {
+      console.error('SSH connection failed:', error);
+      throw error;
+    }
+  },
+
+  disconnectSsh: async (connectionId: string) => {
+    try {
+      await api.sshDisconnect(connectionId);
+      
+      set((state) => {
+        const newConnections = new Map(state.connections);
+        newConnections.delete(connectionId);
+        
+        // 关闭所有关联的终端 Tab
+        const connection = state.connections.get(connectionId);
+        const terminalIds = connection?.terminalIds || [];
+        const newSessions = new Map(state.sessions);
+        const newTabs = state.tabs.filter(t => {
+          if (terminalIds.includes(t.sessionId)) {
+            newSessions.delete(t.sessionId);
+            return false;
+          }
+          return true;
+        });
+        
+        let newActiveId = state.activeTabId;
+        if (state.activeTabId && !newTabs.find(t => t.id === state.activeTabId)) {
+          newActiveId = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
+        }
+
+        return { 
+          connections: newConnections,
+          sessions: newSessions,
+          tabs: newTabs,
+          activeTabId: newActiveId
+        };
+      });
+    } catch (error) {
+      console.error('SSH disconnect failed:', error);
+      throw error;
+    }
+  },
+
+  createTerminalSession: async (connectionId: string, cols?: number, rows?: number) => {
+    try {
+      const response = await api.createTerminal({
+        connectionId,
+        cols,
+        rows,
+      });
+      
+      // 更新 sessions 和 connections
+      set((state) => {
+        const newSessions = new Map(state.sessions);
+        newSessions.set(response.sessionId, response.session);
+        
+        // 更新连接的 terminalIds
+        const newConnections = new Map(state.connections);
+        const connection = newConnections.get(connectionId);
+        if (connection) {
+          newConnections.set(connectionId, {
+            ...connection,
+            terminalIds: [...connection.terminalIds, response.sessionId],
+            refCount: connection.refCount + 1,
+            state: 'active',
+          });
+        }
+        
+        return { sessions: newSessions, connections: newConnections };
+      });
+      
+      // 创建终端 Tab
+      get().createTab('terminal', response.sessionId);
+      
+      return response.session;
+    } catch (error) {
+      console.error('Create terminal failed:', error);
+      throw error;
+    }
+  },
+
+  closeTerminalSession: async (sessionId: string) => {
+    try {
+      await api.closeTerminal(sessionId);
+      
+      set((state) => {
+        const newSessions = new Map(state.sessions);
+        const session = newSessions.get(sessionId);
+        newSessions.delete(sessionId);
+        
+        // 更新连接的引用计数
+        const newConnections = new Map(state.connections);
+        if (session?.connectionId) {
+          const connection = newConnections.get(session.connectionId);
+          if (connection) {
+            const newTerminalIds = connection.terminalIds.filter(id => id !== sessionId);
+            newConnections.set(session.connectionId, {
+              ...connection,
+              terminalIds: newTerminalIds,
+              refCount: Math.max(0, connection.refCount - 1),
+              state: newTerminalIds.length === 0 ? 'idle' : 'active',
+            });
+          }
+        }
+        
+        return { sessions: newSessions, connections: newConnections };
+      });
+    } catch (error) {
+      console.error('Close terminal failed:', error);
+      throw error;
+    }
+  },
+
+  refreshConnections: async () => {
+    try {
+      const connectionsList = await api.sshListConnections();
+      set(() => {
+        const newConnections = new Map<string, SshConnectionInfo>();
+        for (const conn of connectionsList) {
+          newConnections.set(conn.id, conn);
+        }
+        return { connections: newConnections };
+      });
+    } catch (error) {
+      console.error('Refresh connections failed:', error);
+    }
+  },
+
+  setConnectionKeepAlive: async (connectionId: string, keepAlive: boolean) => {
+    try {
+      await api.sshSetKeepAlive(connectionId, keepAlive);
+      
+      set((state) => {
+        const newConnections = new Map(state.connections);
+        const connection = newConnections.get(connectionId);
+        if (connection) {
+          newConnections.set(connectionId, { ...connection, keepAlive });
+        }
+        return { connections: newConnections };
+      });
+    } catch (error) {
+      console.error('Set keep alive failed:', error);
+      throw error;
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
 
   disconnect: async (sessionId: string) => {
     try {
@@ -550,5 +735,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   getSession: (sessionId) => {
     return get().sessions.get(sessionId);
+  },
+
+  getConnection: (connectionId) => {
+    return get().connections.get(connectionId);
+  },
+
+  getConnectionForSession: (sessionId) => {
+    const session = get().sessions.get(sessionId);
+    if (session?.connectionId) {
+      return get().connections.get(session.connectionId);
+    }
+    return undefined;
   }
 }));

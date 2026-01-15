@@ -21,7 +21,7 @@ use crate::session::{
     AuthMethod, KeyAuth, SessionConfig, SessionInfo, SessionRegistry, SessionStats,
 };
 use crate::sftp::session::SftpRegistry;
-use crate::ssh::{AuthMethod as SshAuthMethod, SshClient, SshConfig};
+use crate::ssh::{AuthMethod as SshAuthMethod, SshClient, SshConfig, SshConnectionRegistry};
 
 /// Connection timeout settings
 const HANDSHAKE_TIMEOUT_SECS: u64 = 30;
@@ -104,6 +104,7 @@ pub async fn connect_v2(
     request: ConnectRequest,
     registry: State<'_, Arc<SessionRegistry>>,
     forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
 ) -> Result<ConnectResponseV2, String> {
     info!(
         "Connect request: {}@{}:{}",
@@ -189,6 +190,9 @@ pub async fn connect_v2(
             "Multi-hop connection established: {} proxy handles",
             proxy_conn.jump_handles.len()
         );
+
+        // Clone target_auth for later use in connection pool registration
+        let target_auth_for_pool = target_auth.clone();
 
         // Create session config for target
         let config = SessionConfig {
@@ -294,6 +298,8 @@ pub async fn connect_v2(
 
         // Clone the handle controller for the forwarding manager
         let forwarding_controller = handle_controller.clone();
+        // Clone for connection pool registration
+        let pool_controller = handle_controller.clone();
 
         // Update registry with success
         registry
@@ -309,6 +315,29 @@ pub async fn connect_v2(
             .register(sid.to_string(), forwarding_manager)
             .await;
         info!("ForwardingManager registered for session {}", sid);
+
+        // Register to SSH connection pool for visibility in connection panel
+        let pool_config = SessionConfig {
+            host: request.host.clone(),
+            port: request.port,
+            username: request.username.clone(),
+            auth: match target_auth_for_pool {
+                crate::ssh::AuthMethod::Password(p) => AuthMethod::Password { password: p },
+                crate::ssh::AuthMethod::Key { key_path, passphrase } => AuthMethod::Key {
+                    key_path,
+                    passphrase,
+                },
+                crate::ssh::AuthMethod::Agent => AuthMethod::Agent,
+            },
+            name: request.name.clone(),
+            color: None,
+            cols: request.cols,
+            rows: request.rows,
+        };
+        connection_registry
+            .register_existing(sid.clone(), pool_config, pool_controller, sid.clone())
+            .await;
+        info!("Connection registered to pool for session {}", sid);
 
         info!("Connection established: session={}, ws_port={}", sid, port);
 
@@ -465,6 +494,8 @@ pub async fn connect_v2(
 
         // Clone the handle controller for the forwarding manager
         let forwarding_controller = handle_controller.clone();
+        // Clone for connection pool registration
+        let pool_controller = handle_controller.clone();
 
         // Update registry with success
         registry
@@ -480,6 +511,12 @@ pub async fn connect_v2(
             .register(sid.to_string(), forwarding_manager)
             .await;
         info!("ForwardingManager registered for session {}", sid);
+
+        // Register to SSH connection pool for visibility in connection panel
+        connection_registry
+            .register_existing(sid.clone(), config, pool_controller, sid.clone())
+            .await;
+        info!("Connection registered to pool for session {}", sid);
 
         info!("Connection established: session={}, ws_port={}", sid, port);
 
@@ -509,6 +546,7 @@ pub async fn disconnect_v2(
     bridge_manager: State<'_, BridgeManager>,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
     forwarding_registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
 ) -> Result<bool, String> {
     info!("Disconnecting session: {}", session_id);
 
@@ -532,6 +570,15 @@ pub async fn disconnect_v2(
 
     // Drop any cached SFTP handle tied to this session
     sftp_registry.remove(&session_id);
+
+    // Release connection from pool (using session_id as connection_id)
+    // This will decrement ref_count and potentially start idle timer
+    if let Err(e) = connection_registry.release(&session_id).await {
+        warn!("Failed to release connection from pool: {}", e);
+        // Not a fatal error - the connection might not have been in the pool
+    } else {
+        info!("Connection released from pool for session {}", session_id);
+    }
 
     Ok(true)
 }

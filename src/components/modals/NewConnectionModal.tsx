@@ -26,12 +26,19 @@ import {
   SelectTrigger,
   SelectValue
 } from '../ui/select';
-import { ConnectRequest, ProxyHopConfig } from '../../types';
+import { ConnectRequest, ProxyHopConfig, SshConnectRequest } from '../../types';
 import { api } from '../../lib/api';
 import { AddJumpServerDialog } from './AddJumpServerDialog';
-import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
 export const NewConnectionModal = () => {
-  const { modals, toggleModal, connect } = useAppStore();
+  const { 
+    modals, 
+    toggleModal, 
+    connect, 
+    connectSsh, 
+    createTerminalSession, 
+    connections 
+  } = useAppStore();
   const [loading, setLoading] = useState(false);
   
   // Form State
@@ -49,6 +56,11 @@ export const NewConnectionModal = () => {
   const [proxyServers, setProxyServers] = useState<ProxyHopConfig[]>([]);
   const [showAddJumpDialog, setShowAddJumpDialog] = useState(false);
   const [proxyChainExpanded, setProxyChainExpanded] = useState(false);
+  
+  // 新增：连接池模式选项
+  const [useConnectionPool] = useState(true); // TODO: 未来可添加 UI 开关
+  const [reuseConnection, setReuseConnection] = useState(true);
+  const [existingConnectionId, setExistingConnectionId] = useState<string | null>(null);
 
   // Type-safe auth type handler
   const handleAuthTypeChange = (value: string) => {
@@ -63,6 +75,23 @@ export const NewConnectionModal = () => {
       api.getGroups().then(setGroups).catch(() => setGroups([]));
     }
   }, [modals.newConnection]);
+
+  // 检查是否有可复用的连接
+  useEffect(() => {
+    if (modals.newConnection && host && username && useConnectionPool) {
+      const portNum = parseInt(port) || 22;
+      // 查找匹配的活跃连接
+      const matching = Array.from(connections.values()).find(conn => 
+        conn.host === host && 
+        conn.port === portNum && 
+        conn.username === username &&
+        (conn.state === 'active' || conn.state === 'idle')
+      );
+      setExistingConnectionId(matching?.id || null);
+    } else {
+      setExistingConnectionId(null);
+    }
+  }, [modals.newConnection, host, port, username, useConnectionPool, connections]);
 
   const handleBrowseKey = async () => {
     try {
@@ -132,20 +161,61 @@ export const NewConnectionModal = () => {
         save_on_disconnect: settings.bufferSaveOnDisconnect !== false,
       };
 
-      const request: ConnectRequest = {
-        name: name || undefined,
-        host,
-        port: parseInt(port) || 22,
-        username,
-        auth_type: authType,
-        password: authType === 'password' ? password : undefined,
-        key_path: authType === 'key' ? keyPath : undefined,
-        group: saveConnection ? (group || undefined) : undefined,
-        proxy_chain: proxyServers.length > 0 ? proxyServers : undefined,
-        buffer_config: bufferConfig,
-      };
+      // 使用新的连接池 API（无跳板机时）
+      if (useConnectionPool && proxyServers.length === 0) {
+        // 如果选择复用且有现有连接，直接创建终端
+        if (reuseConnection && existingConnectionId) {
+          await createTerminalSession(existingConnectionId);
+        } else {
+          // 创建新连接
+          const sshRequest: SshConnectRequest = {
+            host,
+            port: parseInt(port) || 22,
+            username,
+            authType,
+            password: authType === 'password' ? password : undefined,
+            keyPath: authType === 'key' ? keyPath : undefined,
+            name: name || undefined,
+            reuseConnection: false, // 强制新建
+          };
+          
+          const connectionId = await connectSsh(sshRequest);
+          await createTerminalSession(connectionId);
+        }
+        
+        // 如果需要保存连接配置
+        if (saveConnection) {
+          // default_key 保存时作为 key 类型
+          const saveAuthType = authType === 'default_key' ? 'key' : authType;
+          await api.saveConnection({
+            name: name || `${username}@${host}`,
+            group: group || null,
+            host,
+            port: parseInt(port) || 22,
+            username,
+            auth_type: saveAuthType as 'password' | 'key' | 'agent',
+            password: authType === 'password' ? password : undefined,
+            key_path: authType === 'key' ? keyPath : undefined,
+          });
+        }
+      } else {
+        // 回退到旧 API（有跳板机或禁用连接池）
+        const request: ConnectRequest = {
+          name: name || undefined,
+          host,
+          port: parseInt(port) || 22,
+          username,
+          auth_type: authType,
+          password: authType === 'password' ? password : undefined,
+          key_path: authType === 'key' ? keyPath : undefined,
+          group: saveConnection ? (group || undefined) : undefined,
+          proxy_chain: proxyServers.length > 0 ? proxyServers : undefined,
+          buffer_config: bufferConfig,
+        };
 
-      await connect(request);
+        await connect(request);
+      }
+      
       toggleModal('newConnection', false);
 
       // Reset sensitive fields if not saved
@@ -178,6 +248,31 @@ export const NewConnectionModal = () => {
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
+
+            {/* 连接复用提示 */}
+            {existingConnectionId && useConnectionPool && proxyServers.length === 0 && (
+              <div className="bg-green-900/20 border-l-4 border-green-500 rounded p-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-green-400" />
+                    <span className="font-medium text-green-300">发现活跃连接</span>
+                  </div>
+                  <p className="text-sm text-green-200/80">
+                    已有到 {username}@{host}:{port} 的活跃连接，可以直接复用
+                  </p>
+                  <div className="flex items-center space-x-2 pt-1">
+                    <Checkbox 
+                      id="reuse-conn" 
+                      checked={reuseConnection}
+                      onCheckedChange={(c) => setReuseConnection(!!c)}
+                    />
+                    <Label htmlFor="reuse-conn" className="text-sm text-green-200">
+                      复用现有连接（推荐）
+                    </Label>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {proxyServers.length > 0 && (
               <div className="bg-theme-bg border-l-4 border-theme-border rounded p-3 mb-4">

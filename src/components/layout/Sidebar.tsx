@@ -13,7 +13,8 @@ import {
   Check,
   X,
   Download,
-  Upload
+  Upload,
+  Link2
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../lib/utils';
@@ -23,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { EditConnectionModal } from '../modals/EditConnectionModal';
 import { OxideExportModal } from '../modals/OxideExportModal';
 import { OxideImportModal } from '../modals/OxideImportModal';
+import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { api } from '../../lib/api';
 
 export const Sidebar = () => {
@@ -31,6 +33,7 @@ export const Sidebar = () => {
     sidebarActiveSection, 
     setSidebarSection,
     sessions,
+    connections,
     toggleModal,
     createTab,
     savedConnections,
@@ -161,6 +164,21 @@ export const Sidebar = () => {
           className="rounded-sm"
         >
           <ArrowLeftRight className="h-4 w-4" />
+        </Button>
+        <Button 
+          variant={sidebarActiveSection === 'connections' ? 'secondary' : 'ghost'} 
+          size="icon"
+          onClick={() => setSidebarSection('connections')}
+          title="SSH 连接池"
+          className="rounded-sm relative"
+        >
+          <Link2 className="h-4 w-4" />
+          {/* 连接数角标 */}
+          {connections.size > 0 && (
+            <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+              {connections.size}
+            </span>
+          )}
         </Button>
         <div className="flex-1" />
         <Button 
@@ -441,6 +459,11 @@ export const Sidebar = () => {
               )}
             </div>
           </div>
+        )}
+
+        {/* SSH 连接池面板 */}
+        {sidebarActiveSection === 'connections' && (
+          <ConnectionsPanel />
         )}
       </div>
 

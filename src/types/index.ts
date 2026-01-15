@@ -126,6 +126,8 @@ export interface SessionInfo {
   color: string;
   uptime_secs: number;
   order: number; // Tab order
+  // Connection pool integration (新架构)
+  connectionId?: string; // 关联的 SSH 连接 ID
   // Authentication info for reconnection
   auth_type: AuthType;
   key_path?: string; // Only for key auth (password is never stored)
