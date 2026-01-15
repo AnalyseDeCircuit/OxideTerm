@@ -93,6 +93,13 @@ pub struct HandleController {
 }
 
 impl HandleController {
+    /// Create a new HandleController with the given sender
+    /// 
+    /// This is primarily used for testing. In production, use `spawn_handle_owner_task`.
+    pub fn new(cmd_tx: mpsc::Sender<HandleCommand>) -> Self {
+        Self { cmd_tx }
+    }
+
     /// Get a clone of the command sender for the SessionCommand channel
     /// This is used by AutoReconnectService to get cmd_tx for registry updates
     pub fn cmd_tx_clone(&self) -> mpsc::Sender<crate::ssh::SessionCommand> {

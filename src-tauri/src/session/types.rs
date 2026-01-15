@@ -181,6 +181,9 @@ pub struct SessionEntry {
     pub created_at: Instant,
     /// Tab order (for UI sorting)
     pub order: usize,
+    /// Associated SSH connection ID (for connection pool architecture)
+    /// When set, this session uses a shared connection from SshConnectionRegistry
+    pub connection_id: Option<String>,
 }
 
 impl SessionEntry {
@@ -197,6 +200,7 @@ impl SessionEntry {
             scroll_buffer: Arc::new(ScrollBuffer::new()), // Default 100k lines
             created_at: Instant::now(),
             order,
+            connection_id: None,
         }
     }
 
@@ -218,6 +222,7 @@ impl SessionEntry {
             scroll_buffer: Arc::new(ScrollBuffer::with_capacity(max_lines)),
             created_at: Instant::now(),
             order,
+            connection_id: None,
         }
     }
 

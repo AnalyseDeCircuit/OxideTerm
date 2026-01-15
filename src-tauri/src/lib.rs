@@ -69,6 +69,7 @@ use commands::HealthRegistry;
 use session::{AutoReconnectService, SessionRegistry};
 use sftp::session::SftpRegistry;
 use sftp::{ProgressStore, RedbProgressStore, TransferManager};
+use ssh::SshConnectionRegistry;
 use state::StateStore;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -180,6 +181,9 @@ pub fn run() {
     // Create SFTP registry
     let sftp_registry = Arc::new(SftpRegistry::new());
 
+    // Create SSH connection registry (connection pool)
+    let ssh_connection_registry = Arc::new(SshConnectionRegistry::new());
+
     // Create progress store for transfer resume
     let progress_store = match RedbProgressStore::default_path() {
         Ok(path) => {
@@ -222,6 +226,7 @@ pub fn run() {
         .manage(sftp_registry)
         .manage(transfer_manager)
         .manage(progress_store)
+        .manage(ssh_connection_registry.clone())
         .setup(move |app| {
             // Initialize config state synchronously (blocking)
             tracing::info!("Initializing config state...");
@@ -266,6 +271,15 @@ pub fn run() {
             commands::restore_sessions,
             commands::list_persisted_sessions,
             commands::delete_persisted_session,
+            // SSH connection pool commands (new architecture)
+            commands::ssh_connect,
+            commands::ssh_disconnect,
+            commands::ssh_list_connections,
+            commands::ssh_set_keep_alive,
+            commands::ssh_get_pool_config,
+            commands::ssh_set_pool_config,
+            commands::create_terminal,
+            commands::close_terminal,
             // Scroll buffer commands
             commands::get_scroll_buffer,
             commands::get_buffer_stats,
@@ -385,6 +399,14 @@ pub fn run() {
                     tracing::info!("Closing all SFTP sessions...");
                     tauri::async_runtime::block_on(async {
                         sftp_registry.close_all().await;
+                    });
+                }
+                
+                // Clean up SSH connection registry (connection pool)
+                if let Some(conn_registry) = app_handle.try_state::<Arc<SshConnectionRegistry>>() {
+                    tracing::info!("Disconnecting all pooled SSH connections...");
+                    tauri::async_runtime::block_on(async {
+                        conn_registry.disconnect_all().await;
                     });
                 }
                 

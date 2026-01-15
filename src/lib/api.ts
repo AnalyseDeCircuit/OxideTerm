@@ -21,7 +21,14 @@ import {
   ListFilter,
   SessionStats,
   QuickHealthCheck,
-  IncompleteTransferInfo
+  IncompleteTransferInfo,
+  // New connection pool types
+  SshConnectionInfo,
+  SshConnectRequest,
+  SshConnectResponse,
+  CreateTerminalRequest,
+  CreateTerminalResponse,
+  ConnectionPoolConfig,
 } from '../types';
 
 // Toggle this for development without a backend
@@ -72,6 +79,116 @@ export const api = {
   reorderSessions: async (orderedIds: string[]): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('reorder_sessions', { orderedIds });
+  },
+
+  // ============ SSH Connection Pool (New Architecture) ============
+  
+  /**
+   * Establish a new SSH connection (without creating a terminal)
+   * Returns connection ID for subsequent operations
+   */
+  sshConnect: async (request: SshConnectRequest): Promise<SshConnectResponse> => {
+    if (USE_MOCK) {
+      return {
+        connectionId: 'mock-conn-id',
+        reused: false,
+        connection: {
+          id: 'mock-conn-id',
+          host: request.host,
+          port: request.port,
+          username: request.username,
+          state: 'active',
+          refCount: 0,
+          keepAlive: false,
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+          terminalIds: [],
+          forwardIds: [],
+        }
+      };
+    }
+    return invoke('ssh_connect', { request });
+  },
+
+  /**
+   * Disconnect an SSH connection (force close)
+   */
+  sshDisconnect: async (connectionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ssh_disconnect', { connectionId });
+  },
+
+  /**
+   * List all SSH connections in the pool
+   */
+  sshListConnections: async (): Promise<SshConnectionInfo[]> => {
+    if (USE_MOCK) return [];
+    return invoke('ssh_list_connections');
+  },
+
+  /**
+   * Set connection keep-alive flag
+   */
+  sshSetKeepAlive: async (connectionId: string, keepAlive: boolean): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ssh_set_keep_alive', { connectionId, keepAlive });
+  },
+
+  /**
+   * Get connection pool configuration
+   */
+  sshGetPoolConfig: async (): Promise<ConnectionPoolConfig> => {
+    if (USE_MOCK) {
+      return {
+        idleTimeoutSecs: 1800,
+        maxConnections: 0,
+        protectOnExit: true,
+      };
+    }
+    return invoke('ssh_get_pool_config');
+  },
+
+  /**
+   * Set connection pool configuration
+   */
+  sshSetPoolConfig: async (config: ConnectionPoolConfig): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ssh_set_pool_config', { config });
+  },
+
+  /**
+   * Create a terminal for an existing SSH connection
+   */
+  createTerminal: async (request: CreateTerminalRequest): Promise<CreateTerminalResponse> => {
+    if (USE_MOCK) {
+      return {
+        sessionId: 'mock-session-id',
+        wsUrl: 'ws://localhost:9999',
+        port: 9999,
+        wsToken: 'mock-token',
+        session: {
+          id: 'mock-session-id',
+          name: 'Mock Terminal',
+          host: 'mock.example.com',
+          port: 22,
+          username: 'mockuser',
+          state: 'connected',
+          color: '#ff0000',
+          uptime_secs: 0,
+          auth_type: 'password',
+          order: 0,
+        }
+      };
+    }
+    return invoke('create_terminal', { request });
+  },
+
+  /**
+   * Close a terminal (does not disconnect the SSH connection)
+   */
+  closeTerminal: async (sessionId: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('close_terminal', { sessionId });
   },
 
   // ============ Session Persistence ============
@@ -511,6 +628,7 @@ const mockConnect = async (req: ConnectRequest): Promise<SessionInfo> => {
     state: 'connected',
     color: '#3b82f6',
     uptime_secs: 0,
+    order: 0,
     auth_type: req.auth_type,
     key_path: req.key_path,
   };

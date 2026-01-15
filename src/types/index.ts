@@ -3,6 +3,87 @@ export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error'
 export type AuthType = 'password' | 'key' | 'default_key' | 'agent';
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SSH Connection Pool Types (New Architecture)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Connection state in the connection pool
+ */
+export type SshConnectionState = 'connecting' | 'active' | 'idle' | 'disconnecting' | 'disconnected' | { error: string };
+
+/**
+ * SSH connection info from the connection pool
+ */
+export interface SshConnectionInfo {
+  id: string;
+  host: string;
+  port: number;
+  username: string;
+  state: SshConnectionState;
+  refCount: number;
+  keepAlive: boolean;
+  createdAt: string;
+  lastActive: string;
+  terminalIds: string[];
+  sftpSessionId?: string;
+  forwardIds: string[];
+}
+
+/**
+ * Connection pool configuration
+ */
+export interface ConnectionPoolConfig {
+  idleTimeoutSecs: number;
+  maxConnections: number;
+  protectOnExit: boolean;
+}
+
+/**
+ * SSH connect request (new API)
+ */
+export interface SshConnectRequest {
+  host: string;
+  port: number;
+  username: string;
+  authType: 'password' | 'key' | 'default_key' | 'agent';
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+  name?: string;
+  reuseConnection?: boolean;
+}
+
+/**
+ * SSH connect response
+ */
+export interface SshConnectResponse {
+  connectionId: string;
+  reused: boolean;
+  connection: SshConnectionInfo;
+}
+
+/**
+ * Create terminal request
+ */
+export interface CreateTerminalRequest {
+  connectionId: string;
+  cols?: number;
+  rows?: number;
+  maxBufferLines?: number;
+}
+
+/**
+ * Create terminal response
+ */
+export interface CreateTerminalResponse {
+  sessionId: string;
+  wsUrl: string;
+  port: number;
+  wsToken: string;
+  session: SessionInfo;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Global Event Map Extensions (TS 5.8+ strict typing for custom events)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -44,6 +125,7 @@ export interface SessionInfo {
   ws_token?: string; // Authentication token for WebSocket connection
   color: string;
   uptime_secs: number;
+  order: number; // Tab order
   // Authentication info for reconnection
   auth_type: AuthType;
   key_path?: string; // Only for key auth (password is never stored)

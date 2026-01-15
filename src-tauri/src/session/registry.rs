@@ -199,6 +199,38 @@ impl SessionRegistry {
         Ok(())
     }
 
+    /// Mark session as connected with associated connection ID
+    /// Used by the new connection pool architecture
+    pub fn connect_success_with_connection(
+        &self,
+        session_id: &str,
+        ws_port: u16,
+        cmd_tx: mpsc::Sender<SessionCommand>,
+        handle_controller: HandleController,
+        connection_id: String,
+    ) -> Result<(), RegistryError> {
+        let mut entry = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| RegistryError::SessionNotFound(session_id.to_string()))?;
+
+        entry
+            .state_machine
+            .connect_success()
+            .map_err(|e| RegistryError::StateTransition(e.to_string()))?;
+
+        entry.ws_port = Some(ws_port);
+        entry.cmd_tx = Some(cmd_tx);
+        entry.handle_controller = Some(handle_controller);
+        entry.connection_id = Some(connection_id.clone());
+
+        info!(
+            "Session {} connected on port {} (connection: {})",
+            session_id, ws_port, connection_id
+        );
+        Ok(())
+    }
+
     /// Update WebSocket token for a session (used after reconnection)
     pub fn update_ws_token(&self, session_id: &str, ws_token: String) -> Result<(), RegistryError> {
         let mut entry = self
