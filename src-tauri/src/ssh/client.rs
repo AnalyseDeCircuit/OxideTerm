@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use russh::*;
+use russh_keys::key::PrivateKeyWithHashAlg;
 use russh_keys::PublicKey;
 use tracing::{debug, info, warn};
 
@@ -81,8 +82,11 @@ impl SshClient {
                         .map_err(|e| SshError::KeyError(e.to_string()))?
                 };
 
+                let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key), None)
+                    .map_err(|e| SshError::KeyError(e.to_string()))?;
+
                 handle
-                    .authenticate_publickey(&self.config.username, Arc::new(key))
+                    .authenticate_publickey(&self.config.username, key_with_hash)
                     .await
                     .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
             }

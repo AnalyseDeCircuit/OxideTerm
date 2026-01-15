@@ -27,6 +27,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use russh::client::{self, Handle};
+use russh_keys::key::PrivateKeyWithHashAlg;
 use tracing::{debug, info};
 
 use super::client::ClientHandler;
@@ -215,8 +216,11 @@ async fn direct_connect(
             let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
                 .map_err(|e| SshError::KeyError(e.to_string()))?;
 
+            let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key), None)
+                .map_err(|e| SshError::KeyError(e.to_string()))?;
+
             handle
-                .authenticate_publickey(&hop.username, Arc::new(key))
+                .authenticate_publickey(&hop.username, key_with_hash)
                 .await
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }
@@ -317,8 +321,11 @@ async fn connect_via_stream(
             let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
                 .map_err(|e| SshError::KeyError(e.to_string()))?;
 
+            let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key), None)
+                .map_err(|e| SshError::KeyError(e.to_string()))?;
+
             handle
-                .authenticate_publickey(&hop.username, Arc::new(key))
+                .authenticate_publickey(&hop.username, key_with_hash)
                 .await
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }
