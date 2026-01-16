@@ -101,13 +101,58 @@ interface AppStore {
   getConnectionForSession: (sessionId: string) => SshConnectionInfo | undefined;
 }
 
+// Key for localStorage persistence
+const UI_STATE_STORAGE_KEY = 'oxide-ui-state';
+
+// Load persisted UI state from localStorage
+function loadPersistedUIState(): { tabs: Tab[]; activeTabId: string | null; sidebarCollapsed: boolean; sidebarActiveSection: SidebarSection } {
+  try {
+    const stored = localStorage.getItem(UI_STATE_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return {
+        tabs: Array.isArray(parsed.tabs) ? parsed.tabs : [],
+        activeTabId: parsed.activeTabId ?? null,
+        sidebarCollapsed: typeof parsed.sidebarCollapsed === 'boolean' ? parsed.sidebarCollapsed : false,
+        sidebarActiveSection: parsed.sidebarActiveSection ?? 'sessions',
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to load persisted UI state:', e);
+  }
+  return {
+    tabs: [],
+    activeTabId: null,
+    sidebarCollapsed: false,
+    sidebarActiveSection: 'sessions',
+  };
+}
+
+// Save UI state to localStorage
+export function saveUIState(): void {
+  try {
+    const state = useAppStore.getState();
+    const uiState = {
+      tabs: state.tabs,
+      activeTabId: state.activeTabId,
+      sidebarCollapsed: state.sidebarCollapsed,
+      sidebarActiveSection: state.sidebarActiveSection,
+    };
+    localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(uiState));
+  } catch (e) {
+    console.warn('Failed to save UI state:', e);
+  }
+}
+
+const persistedState = loadPersistedUIState();
+
 export const useAppStore = create<AppStore>((set, get) => ({
   sessions: new Map(),
   connections: new Map(), // 新增：连接池状态
-  tabs: [],
-  activeTabId: null,
-  sidebarCollapsed: false,
-  sidebarActiveSection: 'sessions',
+  tabs: persistedState.tabs,
+  activeTabId: persistedState.activeTabId,
+  sidebarCollapsed: persistedState.sidebarCollapsed,
+  sidebarActiveSection: persistedState.sidebarActiveSection,
   reconnectPendingSessionId: null,
   modals: {
     newConnection: false,

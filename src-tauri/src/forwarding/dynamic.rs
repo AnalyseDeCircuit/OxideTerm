@@ -94,11 +94,26 @@ pub struct DynamicForwardHandle {
 }
 
 impl DynamicForwardHandle {
-    /// Stop the SOCKS5 proxy
+    /// Stop the SOCKS5 proxy and wait for active connections to close
     pub async fn stop(&self) {
         info!("Stopping SOCKS5 proxy on {}", self.bound_addr);
         self.running.store(false, Ordering::SeqCst);
         let _ = self.stop_tx.send(()).await;
+        
+        // 等待所有活跃连接关闭（最多等待 5 秒）
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(5);
+        while self.stats.read().active_connections > 0 {
+            if start.elapsed() > timeout {
+                warn!(
+                    "Timeout waiting for {} active connections to close on {}",
+                    self.stats.read().active_connections,
+                    self.bound_addr
+                );
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 
     /// Check if the proxy is still running

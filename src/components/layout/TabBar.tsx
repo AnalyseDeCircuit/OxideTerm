@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
+import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { cn } from '../../lib/utils';
 
 const TabIcon = ({ type }: { type: string }) => {
@@ -97,6 +98,13 @@ export const TabBar = () => {
         if (session?.connectionId) {
           // 使用新 API 释放终端（会减少连接引用计数）
           await closeTerminalSession(sessionId);
+        }
+        
+        // 同步到 sessionTreeStore：清理终端映射
+        const { terminalNodeMap, closeTerminalForNode } = useSessionTreeStore.getState();
+        const nodeId = terminalNodeMap.get(sessionId);
+        if (nodeId) {
+          await closeTerminalForNode(nodeId, sessionId);
         }
       } catch (error) {
         console.error('Failed to close terminal session:', error);

@@ -579,7 +579,7 @@ impl SshConnectionRegistry {
     /// * `Ok(connection_id)` - 连接成功，返回连接 ID
     /// * `Err(e)` - 连接失败
     pub async fn connect(
-        &self,
+        self: &Arc<Self>,
         config: SessionConfig,
     ) -> Result<String, ConnectionRegistryError> {
         // 检查连接数限制
@@ -662,6 +662,9 @@ impl SshConnectionRegistry {
 
         self.connections.insert(connection_id.clone(), entry);
 
+        // 启动心跳检测
+        self.start_heartbeat(&connection_id);
+
         Ok(connection_id)
     }
 
@@ -682,7 +685,7 @@ impl SshConnectionRegistry {
     /// # Returns
     /// * `Ok(connection_id)` - 新的隧道连接 ID
     pub async fn establish_tunneled_connection(
-        &self,
+        self: &Arc<Self>,
         parent_connection_id: &str,
         target_config: SessionConfig,
     ) -> Result<String, ConnectionRegistryError> {
@@ -881,6 +884,9 @@ impl SshConnectionRegistry {
             parent_connection_id, connection_id
         );
 
+        // 启动心跳检测
+        self.start_heartbeat(&connection_id);
+
         Ok(connection_id)
     }
 
@@ -1025,7 +1031,7 @@ impl SshConnectionRegistry {
         &self,
         connection_id: &str,
     ) -> Result<(), ConnectionRegistryError> {
-        // 1. 先断开所有依赖此连接的子连接
+        // 1. 收集所有依赖此连接的子连接
         let child_ids: Vec<String> = self
             .connections
             .iter()
@@ -1033,18 +1039,44 @@ impl SshConnectionRegistry {
             .map(|e| e.key().clone())
             .collect();
 
+        // 2. 先批量减少当前连接的引用计数（因为这些子连接即将断开）
+        // 这样避免了递归断开时的竞态条件
+        if !child_ids.is_empty() {
+            if let Some(entry) = self.connections.get(connection_id) {
+                let conn = entry.value();
+                for _ in &child_ids {
+                    conn.release();
+                }
+                debug!(
+                    "Pre-released {} ref_counts for connection {} (children about to disconnect)",
+                    child_ids.len(),
+                    connection_id
+                );
+            }
+        }
+
+        // 3. 断开所有子连接（子连接断开时不再减少父引用计数，因为已经预先减少）
         for child_id in &child_ids {
             info!(
                 "Disconnecting child connection {} (parent: {})",
                 child_id, connection_id
             );
-            // 递归断开子连接（使用 Box::pin 避免递归 async 问题）
-            if let Err(e) = Box::pin(self.disconnect(child_id)).await {
+            // 递归断开子连接，但跳过引用计数减少（使用内部方法）
+            if let Err(e) = Box::pin(self.disconnect_without_parent_release(child_id)).await {
                 warn!("Failed to disconnect child connection {}: {}", child_id, e);
             }
         }
 
-        // 2. 获取当前连接
+        // 4. 断开当前连接
+        self.disconnect_single(connection_id).await
+    }
+
+    /// 断开单个连接（内部方法，处理引用计数）
+    async fn disconnect_single(
+        &self,
+        connection_id: &str,
+    ) -> Result<(), ConnectionRegistryError> {
+        // 获取当前连接
         let entry = self
             .connections
             .get(connection_id)
@@ -1073,7 +1105,7 @@ impl SshConnectionRegistry {
 
         info!("Connection {} disconnected and removed", connection_id);
 
-        // 3. 如果是隧道连接，减少父连接的引用计数
+        // 如果是隧道连接，减少父连接的引用计数
         if let Some(parent_id) = parent_id {
             if let Some(parent_entry) = self.connections.get(&parent_id) {
                 let parent_conn = parent_entry.value();
@@ -1085,6 +1117,55 @@ impl SshConnectionRegistry {
             }
         }
 
+        Ok(())
+    }
+
+    /// 断开连接但不减少父连接引用计数（用于批量断开时已预先减少的情况）
+    async fn disconnect_without_parent_release(
+        &self,
+        connection_id: &str,
+    ) -> Result<(), ConnectionRegistryError> {
+        // 先递归处理子连接
+        let child_ids: Vec<String> = self
+            .connections
+            .iter()
+            .filter(|e| e.value().parent_connection_id.as_deref() == Some(connection_id))
+            .map(|e| e.key().clone())
+            .collect();
+
+        // 预先减少引用计数
+        if !child_ids.is_empty() {
+            if let Some(entry) = self.connections.get(connection_id) {
+                let conn = entry.value();
+                for _ in &child_ids {
+                    conn.release();
+                }
+            }
+        }
+
+        // 递归断开子连接
+        for child_id in &child_ids {
+            if let Err(e) = Box::pin(self.disconnect_without_parent_release(child_id)).await {
+                warn!("Failed to disconnect child connection {}: {}", child_id, e);
+            }
+        }
+
+        // 断开当前连接（不减少父引用计数）
+        let entry = self
+            .connections
+            .get(connection_id)
+            .ok_or_else(|| ConnectionRegistryError::NotFound(connection_id.to_string()))?;
+
+        let conn = entry.value().clone();
+        drop(entry);
+
+        conn.cancel_idle_timer().await;
+        conn.set_state(ConnectionState::Disconnecting).await;
+        conn.handle_controller.disconnect().await;
+        conn.set_state(ConnectionState::Disconnected).await;
+        self.connections.remove(connection_id);
+
+        info!("Connection {} disconnected and removed (no parent release)", connection_id);
         Ok(())
     }
 
@@ -1553,9 +1634,32 @@ impl SshConnectionRegistry {
     }
 
     /// 尝试重连
+    /// 
+    /// 支持直连和隧道连接两种模式：
+    /// - 直连：直接建立 SSH 连接
+    /// - 隧道连接：先检查父连接状态，然后通过父连接建立 direct-tcpip 隧道
     async fn try_reconnect(
         &self,
-        _connection_id: &str,
+        connection_id: &str,
+        config: &SessionConfig,
+    ) -> Result<HandleController, String> {
+        // 检查是否为隧道连接
+        let parent_connection_id = self.connections.get(connection_id)
+            .and_then(|e| e.value().parent_connection_id.clone());
+
+        if let Some(parent_id) = parent_connection_id {
+            // 隧道连接：需要通过父连接重连
+            return self.try_reconnect_tunneled(connection_id, &parent_id, config).await;
+        }
+
+        // 直连模式
+        self.try_reconnect_direct(connection_id, config).await
+    }
+
+    /// 直连模式重连
+    async fn try_reconnect_direct(
+        &self,
+        connection_id: &str,
         config: &SessionConfig,
     ) -> Result<HandleController, String> {
         // 转换 SessionConfig 到 SshConfig
@@ -1589,7 +1693,129 @@ impl SshConnectionRegistry {
             .map_err(|e| e.to_string())?;
 
         // 启动 Handle Owner Task
-        let handle_controller = session.start(_connection_id.to_string());
+        let handle_controller = session.start(connection_id.to_string());
+
+        Ok(handle_controller)
+    }
+
+    /// 隧道连接模式重连
+    async fn try_reconnect_tunneled(
+        &self,
+        connection_id: &str,
+        parent_connection_id: &str,
+        config: &SessionConfig,
+    ) -> Result<HandleController, String> {
+        // 1. 获取父连接
+        let parent_entry = self.connections.get(parent_connection_id)
+            .ok_or_else(|| format!("Parent connection {} not found", parent_connection_id))?;
+        
+        let parent_conn = parent_entry.value().clone();
+        drop(parent_entry);
+
+        // 2. 检查父连接状态
+        let parent_state = parent_conn.state().await;
+        if parent_state != ConnectionState::Active && parent_state != ConnectionState::Idle {
+            return Err(format!(
+                "Parent connection {} is not available (state: {:?}), cannot reconnect tunneled connection",
+                parent_connection_id, parent_state
+            ));
+        }
+
+        info!(
+            "Reconnecting tunneled connection {} via parent {}",
+            connection_id, parent_connection_id
+        );
+
+        // 3. 通过父连接打开 direct-tcpip 隧道
+        let channel = parent_conn
+            .handle_controller
+            .open_direct_tcpip(
+                &config.host,
+                config.port as u32,
+                "127.0.0.1",
+                0,
+            )
+            .await
+            .map_err(|e| format!("Failed to open direct-tcpip channel: {}", e))?;
+
+        debug!("Direct-tcpip channel opened to {}:{}", config.host, config.port);
+
+        // 4. 将 channel 转换为 stream 用于 SSH-over-SSH
+        let stream = channel.into_stream();
+
+        // 5. 在隧道上建立新的 SSH 连接
+        let ssh_config = russh::client::Config {
+            inactivity_timeout: Some(std::time::Duration::from_secs(300)),
+            keepalive_interval: Some(std::time::Duration::from_secs(30)),
+            keepalive_max: 3,
+            ..Default::default()
+        };
+
+        let handler = super::client::ClientHandler::new(
+            config.host.clone(),
+            config.port,
+            false, // 隧道连接不严格检查主机密钥
+        );
+
+        // 使用 russh::connect_stream 在隧道上建立 SSH
+        let mut handle = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            russh::client::connect_stream(std::sync::Arc::new(ssh_config), stream, handler),
+        )
+        .await
+        .map_err(|_| format!(
+            "Reconnection to {}:{} via tunnel timed out",
+            config.host, config.port
+        ))?
+        .map_err(|e| format!("Failed to reconnect via tunnel: {}", e))?;
+
+        debug!("SSH handshake via tunnel completed for reconnection");
+
+        // 6. 认证
+        let authenticated = match &config.auth {
+            AuthMethod::Password { password } => {
+                handle
+                    .authenticate_password(&config.username, password)
+                    .await
+                    .map_err(|e| format!("Authentication failed: {}", e))?
+            }
+            AuthMethod::Key { key_path, passphrase } => {
+                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                    .map_err(|e| format!("Failed to load key: {}", e))?;
+
+                let key_with_hash =
+                    russh_keys::key::PrivateKeyWithHashAlg::new(std::sync::Arc::new(key), None)
+                        .map_err(|e| format!("Failed to prepare key: {}", e))?;
+
+                handle
+                    .authenticate_publickey(&config.username, key_with_hash)
+                    .await
+                    .map_err(|e| format!("Authentication failed: {}", e))?
+            }
+            AuthMethod::Agent => {
+                let mut agent = crate::ssh::agent::SshAgentClient::connect()
+                    .await
+                    .map_err(|e| format!("Failed to connect to SSH agent: {}", e))?;
+                
+                agent.authenticate(&handle, &config.username)
+                    .await
+                    .map_err(|e| format!("Agent authentication failed: {}", e))?;
+                true
+            }
+        };
+
+        if !authenticated {
+            return Err(format!("Authentication to {} rejected", config.host));
+        }
+
+        info!(
+            "Tunneled connection {} reconnected successfully via {}",
+            connection_id, parent_connection_id
+        );
+
+        // 7. 创建 SshSession 并启动 Handle Owner Task
+        let session = super::session::SshSession::new(handle, config.cols, config.rows);
+        let handle_controller = session.start(connection_id.to_string());
 
         Ok(handle_controller)
     }

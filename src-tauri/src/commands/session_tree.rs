@@ -604,15 +604,17 @@ pub async fn disconnect_tree_node(
             }
         }
         
-        // 更新节点状态
+        // 更新节点状态和清除所有会话元数据
         let mut tree = state.tree.write().await;
         if let Err(e) = tree.update_state(&nid, NodeState::Disconnected) {
             tracing::warn!("Failed to update node {} state: {}", nid, e);
         }
         
-        // 清除 SSH 连接 ID
+        // 清除所有关联的会话 ID
         if let Some(node) = tree.get_node_mut(&nid) {
             node.ssh_connection_id = None;
+            node.terminal_session_id = None;
+            node.sftp_session_id = None;
         }
         
         disconnected_ids.push(nid);

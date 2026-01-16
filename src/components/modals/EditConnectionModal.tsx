@@ -98,7 +98,13 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
   if (!connection) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(open) => {
+      // 关闭 modal 时清除敏感数据
+      if (!open) {
+        setPassword('');
+      }
+      onOpenChange(open);
+    }}>
       <DialogContent className="sm:max-w-[500px] bg-theme-bg-panel border-theme-border text-theme-text">
         <DialogHeader>
           <DialogTitle className="text-theme-text">Connect to {connection.name}</DialogTitle>

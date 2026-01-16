@@ -86,22 +86,46 @@ impl ConfigStorage {
 
     /// Load configuration from disk
     /// Returns default config if file doesn't exist
+    /// If config is corrupted, creates a backup and returns default config
     pub async fn load(&self) -> Result<ConfigFile, StorageError> {
         match fs::read_to_string(&self.path).await {
             Ok(contents) => {
-                let config: ConfigFile = serde_json::from_str(&contents)?;
-
-                // Check version
-                if config.version > CONFIG_VERSION {
-                    return Err(StorageError::VersionTooNew {
-                        found: config.version,
-                        supported: CONFIG_VERSION,
-                    });
+                match serde_json::from_str::<ConfigFile>(&contents) {
+                    Ok(config) => {
+                        // Check version
+                        if config.version > CONFIG_VERSION {
+                            return Err(StorageError::VersionTooNew {
+                                found: config.version,
+                                supported: CONFIG_VERSION,
+                            });
+                        }
+                        // TODO: Run migrations if config.version < CONFIG_VERSION
+                        Ok(config)
+                    }
+                    Err(e) => {
+                        // JSON 解析失败 - 配置文件损坏
+                        tracing::warn!("Config file corrupted: {}", e);
+                        
+                        // 创建备份
+                        match self.backup().await {
+                            Ok(backup_path) => {
+                                tracing::warn!(
+                                    "Corrupted config backed up to {:?}, using defaults",
+                                    backup_path
+                                );
+                            }
+                            Err(backup_err) => {
+                                tracing::error!(
+                                    "Failed to backup corrupted config: {}",
+                                    backup_err
+                                );
+                            }
+                        }
+                        
+                        // 返回默认配置
+                        Ok(ConfigFile::default())
+                    }
                 }
-
-                // TODO: Run migrations if config.version < CONFIG_VERSION
-
-                Ok(config)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ConfigFile::default()),
             Err(e) => Err(StorageError::Io(e)),

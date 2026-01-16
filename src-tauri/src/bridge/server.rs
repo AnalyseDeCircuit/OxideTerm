@@ -507,6 +507,27 @@ impl WsBridge {
         );
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+        
+        // 发送 scroll_buffer 中的历史数据给新连接的客户端
+        // 这样重连后用户可以看到断开期间的输出
+        let history_lines = scroll_buffer.get_all().await;
+        if !history_lines.is_empty() {
+            debug!(
+                "Sending {} history lines to reconnected client for session {}",
+                history_lines.len(),
+                session_handle.id
+            );
+            // 将历史行重新组合为原始数据发送
+            let history_data: String = history_lines
+                .iter()
+                .map(|line| format!("{}\r\n", line.text))
+                .collect();
+            let frame = data_frame(Bytes::from(history_data));
+            if let Err(e) = ws_sender.send(Message::Binary(frame.encode().to_vec())).await {
+                warn!("Failed to send history data: {}", e);
+            }
+        }
+        
         // Extract parts from handle, consuming it properly
         let (id, stdin_tx, mut stdout_rx) = session_handle.into_parts();
 

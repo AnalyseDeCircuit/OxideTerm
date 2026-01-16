@@ -170,8 +170,25 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       set({ isLoading: true, error: null });
       try {
         const rawNodes = await api.getSessionTree();
-        // 默认展开所有有子节点的节点
-        const expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
+        
+        // 尝试从 localStorage 恢复展开状态
+        let expandedIds: Set<string>;
+        try {
+          const saved = localStorage.getItem('oxide-tree-expanded');
+          if (saved) {
+            const savedIds = JSON.parse(saved) as string[];
+            // 只保留仍然存在的节点
+            const existingIds = new Set(rawNodes.map(n => n.id));
+            expandedIds = new Set(savedIds.filter(id => existingIds.has(id)));
+          } else {
+            // 首次加载，默认展开所有有子节点的节点
+            expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
+          }
+        } catch {
+          // localStorage 读取失败，使用默认值
+          expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
+        }
+        
         set({ rawNodes, expandedIds, isLoading: false });
         get().rebuildUnifiedNodes();
       } catch (e) {
@@ -204,6 +221,18 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     },
     
     drillDown: async (request: DrillDownRequest) => {
+      // 前置校验：检查父节点状态
+      const parentNode = get().getNode(request.parentNodeId);
+      if (!parentNode) {
+        throw new Error(`Parent node ${request.parentNodeId} not found`);
+      }
+      if (parentNode.runtime.status === 'link-down') {
+        throw new Error('Cannot drill down from a link-down node');
+      }
+      if (parentNode.runtime.status !== 'connected') {
+        throw new Error(`Parent node is not connected (status: ${parentNode.runtime.status})`);
+      }
+      
       set({ isLoading: true, error: null });
       try {
         const nodeId = await api.treeDrillDown(request);
@@ -244,15 +273,31 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         const newTerminalMap = new Map(nodeTerminalMap);
         const newNodeMap = new Map(terminalNodeMap);
         
+        // 收集所有需要关闭的终端 ID
+        const terminalIdsToClose: string[] = [];
+        
         for (const node of nodesToRemove) {
           const terminals = newTerminalMap.get(node.id) || [];
           for (const termId of terminals) {
+            terminalIdsToClose.push(termId);
             newNodeMap.delete(termId);
           }
           newTerminalMap.delete(node.id);
         }
         
         set({ nodeTerminalMap: newTerminalMap, terminalNodeMap: newNodeMap });
+        
+        // 关闭关联的 Tab（异步导入 appStore 避免循环依赖）
+        if (terminalIdsToClose.length > 0) {
+          const { useAppStore } = await import('./appStore');
+          const appState = useAppStore.getState();
+          for (const termId of terminalIdsToClose) {
+            const tab = appState.tabs.find(t => t.sessionId === termId);
+            if (tab) {
+              appState.closeTab(tab.id);
+            }
+          }
+        }
         
         const removedIds = await api.removeTreeNode(nodeId);
         await get().fetchTree();
@@ -296,12 +341,15 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       const node = get().getRawNode(nodeId);
       if (!node) throw new Error(`Node ${nodeId} not found`);
       
+      // 检查前端状态，避免重复连接
+      if (node.state.status === 'connecting' || node.state.status === 'connected') {
+        console.log(`Node ${nodeId} is already ${node.state.status}, skipping connect`);
+        return;
+      }
+      
       try {
-        // 更新状态为 connecting
-        await api.updateTreeNodeState(nodeId, 'connecting');
-        get().rebuildUnifiedNodes();
-        
-        // 调用后端连接 API
+        // 后端 connect_tree_node 会自动设置状态为 connecting
+        // 不需要前端预设，避免状态竞争
         const response = await api.connectTreeNode({ nodeId });
         
         // 更新连接 ID
@@ -318,10 +366,36 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       const node = get().getNode(nodeId);
       if (!node) return;
       
-      // 1. 获取所有子节点
+      // 1. 获取所有子节点 (包括当前节点)
       const descendants = get().getDescendants(nodeId);
+      const allAffectedNodes = [node, ...descendants];
       
-      // 2. 标记所有子节点为 link-down
+      // 2. 收集所有需要关闭的 Tab sessionId
+      const sessionIdsToClose: string[] = [];
+      for (const n of allAffectedNodes) {
+        // 收集终端 ID
+        if (n.runtime.terminalIds) {
+          sessionIdsToClose.push(...n.runtime.terminalIds);
+        }
+        // 收集 SFTP 会话 ID
+        if (n.runtime.sftpSessionId) {
+          sessionIdsToClose.push(n.runtime.sftpSessionId);
+        }
+      }
+      
+      // 3. 关闭 appStore 中的相关 Tab
+      if (sessionIdsToClose.length > 0) {
+        const { useAppStore } = await import('./appStore');
+        const appStore = useAppStore.getState();
+        const sessionIdSet = new Set(sessionIdsToClose);
+        for (const tab of appStore.tabs) {
+          if (sessionIdSet.has(tab.sessionId)) {
+            appStore.closeTab(tab.id);
+          }
+        }
+      }
+      
+      // 4. 标记所有子节点为 link-down
       const { linkDownNodeIds } = get();
       const newLinkDownIds = new Set(linkDownNodeIds);
       for (const child of descendants) {
@@ -329,7 +403,7 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       }
       set({ linkDownNodeIds: newLinkDownIds });
       
-      // 3. 断开当前节点的 SSH 连接
+      // 5. 断开当前节点的 SSH 连接
       if (node.runtime.connectionId) {
         try {
           await api.sshDisconnect(node.runtime.connectionId);
@@ -338,7 +412,7 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         }
       }
       
-      // 4. 刷新树状态
+      // 6. 刷新树状态
       await get().fetchTree();
     },
     
@@ -367,21 +441,40 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         return { sessions: newSessions };
       });
       
-      // 更新终端映射
+      // 获取当前映射状态（用于可能的回滚）
       const { nodeTerminalMap, terminalNodeMap } = get();
+      const existing = nodeTerminalMap.get(nodeId) || [];
+      
+      // 通知后端更新节点终端 (使用第一个终端作为主终端)
+      // 先调用后端 API，成功后再更新本地映射
+      try {
+        if (existing.length === 0) {
+          await api.setTreeNodeTerminal(nodeId, terminalId);
+        }
+      } catch (e) {
+        // 后端 API 失败，回滚：关闭刚创建的终端和 session
+        console.error('Failed to set tree node terminal, rolling back:', e);
+        try {
+          await api.closeTerminal(terminalId);
+          useAppStore.setState((state) => {
+            const newSessions = new Map(state.sessions);
+            newSessions.delete(terminalId);
+            return { sessions: newSessions };
+          });
+        } catch (rollbackError) {
+          console.error('Rollback failed:', rollbackError);
+        }
+        throw e;
+      }
+      
+      // 后端成功后，更新本地终端映射
       const newTerminalMap = new Map(nodeTerminalMap);
       const newNodeMap = new Map(terminalNodeMap);
       
-      const existing = newTerminalMap.get(nodeId) || [];
       newTerminalMap.set(nodeId, [...existing, terminalId]);
       newNodeMap.set(terminalId, nodeId);
       
       set({ nodeTerminalMap: newTerminalMap, terminalNodeMap: newNodeMap });
-      
-      // 通知后端更新节点终端 (使用第一个终端作为主终端)
-      if (existing.length === 0) {
-        await api.setTreeNodeTerminal(nodeId, terminalId);
-      }
       
       // 重建统一节点
       get().rebuildUnifiedNodes();
@@ -438,13 +531,29 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         throw new Error(`Node ${nodeId} is not connected`);
       }
       
+      // 检查节点状态
+      if (node.runtime.status === 'link-down') {
+        throw new Error('Cannot open SFTP on a link-down node');
+      }
+      
       // 调用 API 初始化 SFTP (使用终端会话 ID)
       // 注意: SFTP 需要一个关联的终端会话
       const terminalIds = get().getTerminalsForNode(nodeId);
       if (terminalIds.length === 0) {
         throw new Error('No terminal session found for SFTP initialization');
       }
-      const sftpId = await api.sftpInit(terminalIds[0]);
+      
+      // 验证终端会话是否在 appStore 中存在（避免使用已关闭的会话）
+      const { useAppStore } = await import('./appStore');
+      const validTerminalId = terminalIds.find(id => 
+        useAppStore.getState().sessions.has(id)
+      );
+      
+      if (!validTerminalId) {
+        throw new Error('No valid terminal session found. Please create a new terminal first.');
+      }
+      
+      const sftpId = await api.sftpInit(validTerminalId);
       
       // 更新后端节点状态
       await api.setTreeNodeSftp(nodeId, sftpId);
@@ -518,14 +627,23 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     },
     
     clearLinkDown: (nodeId: string) => {
-      const { linkDownNodeIds } = get();
+      const { linkDownNodeIds, rawNodes } = get();
       const newLinkDownIds = new Set(linkDownNodeIds);
       newLinkDownIds.delete(nodeId);
       
-      // 如果父节点不再是 link-down，子节点也可以清除
+      // 只清除子节点中那些自身连接已恢复的节点
+      // 如果子节点有自己的连接且仍处于 link-down，保留其标记
       const descendants = get().getDescendants(nodeId);
       for (const child of descendants) {
-        newLinkDownIds.delete(child.id);
+        // 查找原始节点数据
+        const rawChild = rawNodes.find(n => n.id === child.id);
+        // 如果子节点有自己的连接 ID，检查其状态
+        // 如果没有自己的连接或连接状态正常，清除 link-down
+        if (!rawChild?.sshConnectionId) {
+          // 子节点没有自己的连接，继承父节点状态
+          newLinkDownIds.delete(child.id);
+        }
+        // 如果子节点有自己的连接，保留其 link-down 标记（需要等待自己的连接恢复）
       }
       
       set({ linkDownNodeIds: newLinkDownIds });
@@ -548,6 +666,13 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       }
       set({ expandedIds: newExpanded });
       get().rebuildUnifiedNodes();
+      
+      // 持久化到 localStorage
+      try {
+        localStorage.setItem('oxide-tree-expanded', JSON.stringify([...newExpanded]));
+      } catch (e) {
+        console.warn('Failed to persist expanded state:', e);
+      }
     },
     
     expandAll: () => {

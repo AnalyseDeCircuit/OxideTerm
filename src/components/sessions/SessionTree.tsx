@@ -362,7 +362,7 @@ const SessionNode: React.FC<SessionNodeProps> = ({
   const hasTerminals = terminalIds.length > 0;
   const hasChildren = childNodes.length > 0;
   
-  // 双击处理
+  // 双击处理 - 仅在已连接状态下操作终端
   const handleDoubleClick = useCallback(() => {
     if (isConnected) {
       if (terminalIds.length > 0) {
@@ -370,12 +370,9 @@ const SessionNode: React.FC<SessionNodeProps> = ({
       } else {
         onNewTerminal();
       }
-    } else if (status === 'idle') {
-      onConnect();
-    } else if (isError && onReconnect) {
-      onReconnect();
     }
-  }, [isConnected, isError, status, terminalIds, onSelectTerminal, onNewTerminal, onConnect, onReconnect]);
+    // 其他状态不响应双击，防止误操作
+  }, [isConnected, terminalIds, onSelectTerminal, onNewTerminal]);
 
   // 节点头部
   const nodeHeader = (
@@ -390,30 +387,21 @@ const SessionNode: React.FC<SessionNodeProps> = ({
         )}
         onClick={() => {
           onSelect();
-          // 未连接状态：单击直接连接
-          if (status === 'idle') {
-            onConnect();
-            return;
-          }
-          // 已连接或有子节点：展开/折叠
-          if (isConnected || hasChildren) {
-            onToggleExpand();
-          }
+          // 所有状态都支持展开/折叠
+          // idle 状态需要展开才能看到 Connect 按钮
+          // connected 状态展开可以看到终端/SFTP 等操作
+          onToggleExpand();
         }}
         onDoubleClick={handleDoubleClick}
       >
-        {/* 展开/折叠箭头 */}
-        {(isConnected || hasChildren) ? (
-          <span className="w-4 h-4 flex items-center justify-center mr-1">
-            {node.isExpanded ? (
-              <ChevronDown className="w-3 h-3" />
-            ) : (
-              <ChevronRight className="w-3 h-3" />
-            )}
-          </span>
-        ) : (
-          <span className="w-4 h-4 mr-1" />
-        )}
+        {/* 展开/折叠箭头 - 所有状态都显示，因为都有子项可展开 */}
+        <span className="w-4 h-4 flex items-center justify-center mr-1">
+          {node.isExpanded ? (
+            <ChevronDown className="w-3 h-3" />
+          ) : (
+            <ChevronRight className="w-3 h-3" />
+          )}
+        </span>
         
         {/* 服务器图标 */}
         <Server className={cn("w-4 h-4 mr-2", styles.text)} />
@@ -457,8 +445,8 @@ const SessionNode: React.FC<SessionNodeProps> = ({
     
     if (isConnected) {
       // 已连接状态：按"路径直觉"顺序
-      // 1. 操作项 → 2. 已有终端 → 3. Drill In → 4. 子节点
-      const actionCount = onOpenForwards ? 3 : 2; // New Terminal, SFTP, (Forwards)
+      // 1. 操作项 → 2. 已有终端 → 3. Drill In → 4. Disconnect → 5. 子节点
+      const actionCount = onOpenForwards ? 4 : 3; // New Terminal, SFTP, (Forwards), Disconnect (after Drill In)
       const totalItems = actionCount + terminalIds.length + 1 + childNodes.length; // +1 for Drill In
       let itemIndex = 0;
       
@@ -520,7 +508,21 @@ const SessionNode: React.FC<SessionNodeProps> = ({
         );
       });
       
-      // 5. Drill In（引导用户继续深入）
+      // 5 Disconnect（断开连接）
+      items.push(
+        <ActionItem
+          key="disconnect"
+          depth={subDepth}
+          icon={<Unplug className="w-3.5 h-3.5" />}
+          label="Disconnect"
+          onClick={onDisconnect}
+          lineColor={styles.line}
+          isLast={++itemIndex === totalItems}
+          variant="danger"
+        />
+      );
+      
+      // 6. Drill In（引导用户继续深入）
       items.push(
         <ActionItem
           key="drill-in"
@@ -534,7 +536,8 @@ const SessionNode: React.FC<SessionNodeProps> = ({
         />
       );
       
-      // 6. 子节点（最终的延伸）
+      
+      // 7. 子节点（最终的延伸）
       childNodes.forEach((child) => {
         itemIndex++;
         items.push(

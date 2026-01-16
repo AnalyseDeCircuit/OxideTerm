@@ -226,7 +226,15 @@ export const NewConnectionModal = () => {
   };
 
   return (
-    <Dialog open={modals.newConnection} onOpenChange={(open) => toggleModal('newConnection', open)}>
+    <Dialog open={modals.newConnection} onOpenChange={(open) => {
+      // 关闭 modal 时清除敏感数据
+      if (!open) {
+        setPassword('');
+        // 清除代理链中的密码
+        setProxyServers(prev => prev.map(p => ({ ...p, password: undefined, passphrase: undefined })));
+      }
+      toggleModal('newConnection', open);
+    }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby="new-connection-description">
         <DialogHeader>
           <DialogTitle>New Connection</DialogTitle>

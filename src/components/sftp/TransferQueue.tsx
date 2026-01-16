@@ -86,10 +86,9 @@ export const TransferQueue = ({ sessionId }: { sessionId: string }) => {
       return;
     }
     
-    // Otherwise, cancel the active transfer
+    // Otherwise, cancel the active transfer (cancelTransfer now calls backend API internally)
     try {
-      await api.sftpCancelTransfer(item.id);
-      cancelTransfer(item.id);
+      await cancelTransfer(item.id);
     } catch (e) {
       console.error('Failed to cancel transfer:', e);
     }
@@ -97,8 +96,7 @@ export const TransferQueue = ({ sessionId }: { sessionId: string }) => {
 
   const handlePause = async (item: TransferItem) => {
     try {
-      await api.sftpPauseTransfer(item.id);
-      pauseTransfer(item.id);
+      await pauseTransfer(item.id);
     } catch (e) {
       console.error('Failed to pause transfer:', e);
     }
@@ -106,8 +104,7 @@ export const TransferQueue = ({ sessionId }: { sessionId: string }) => {
 
   const handleResume = async (item: TransferItem) => {
     try {
-      await api.sftpResumeTransfer(item.id);
-      resumeTransfer(item.id);
+      await resumeTransfer(item.id);
     } catch (e) {
       console.error('Failed to resume transfer:', e);
     }

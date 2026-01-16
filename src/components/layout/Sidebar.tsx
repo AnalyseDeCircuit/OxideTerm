@@ -144,8 +144,20 @@ export const Sidebar = () => {
   }, [fetchTree, refreshConnections, createTab]);
 
   const handleTreeDisconnect = useCallback(async (nodeId: string) => {
+    const node = getNode(nodeId);
+    const displayName = node?.displayName || `${node?.username}@${node?.host}`;
+    
+    // 确认断开
+    if (!window.confirm(`断开 "${displayName}" 及其所有子节点的连接？`)) {
+      return;
+    }
+    
     try {
-      await api.disconnectTreeNode(nodeId);
+      // 调用后端递归断开所有子节点
+      const disconnectedIds = await api.disconnectTreeNode(nodeId);
+      console.log(`Disconnected ${disconnectedIds.length} nodes`);
+      
+      // 刷新树和连接池状态
       await Promise.all([
         fetchTree(),
         refreshConnections(),
@@ -153,68 +165,72 @@ export const Sidebar = () => {
     } catch (err) {
       console.error('Failed to disconnect tree node:', err);
     }
-  }, [fetchTree, refreshConnections]);
+  }, [getNode, fetchTree, refreshConnections]);
 
   const handleTreeOpenSftp = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);
     if (!node) return;
     
-    // 如果已有 SFTP 会话
-    if (node.sftpSessionId) {
-      const existingTab = tabs.find(t => t.sessionId === node.sftpSessionId && t.type === 'sftp');
+    const terminalIds = node.runtime?.terminalIds || [];
+    const connectionId = node.runtime?.connectionId || node.sshConnectionId;
+    
+    // 如果已有终端会话，用第一个打开 SFTP
+    if (terminalIds.length > 0) {
+      const sessionId = terminalIds[0];
+      const existingTab = tabs.find(t => t.sessionId === sessionId && t.type === 'sftp');
       if (existingTab) {
         setActiveTab(existingTab.id);
       } else {
-        createTab('sftp', node.sftpSessionId);
+        createTab('sftp', sessionId);
       }
+      setSidebarSection('sftp');
       return;
     }
     
-    // 如果已有终端会话，用它打开 SFTP
-    if (node.terminalSessionId) {
-      createTab('sftp', node.terminalSessionId);
-      return;
-    }
-    
-    // 如果节点已连接但没有会话，先创建终端会话再打开 SFTP
-    if (node.state.status === 'connected' && node.sshConnectionId) {
+    // 如果节点已连接但没有终端会话，先创建终端会话再打开 SFTP
+    if (connectionId && (node.runtime.status === 'connected' || node.runtime.status === 'active')) {
       try {
-        const terminalResponse = await api.createTerminal({
-          connectionId: node.sshConnectionId,
-          cols: 80,
-          rows: 24,
-        });
-        
-        await api.setTreeNodeTerminal(nodeId, terminalResponse.sessionId);
-        await Promise.all([
-          fetchTree(),
-          refreshConnections(),
-        ]);
-        
-        createTab('sftp', terminalResponse.sessionId);
+        const terminalId = await createTerminalForNode(nodeId, 80, 24);
+        createTab('sftp', terminalId);
+        setSidebarSection('sftp');
       } catch (err) {
         console.error('Failed to create session for SFTP:', err);
       }
     }
-  }, [getNode, tabs, setActiveTab, createTab, fetchTree, refreshConnections]);
+  }, [getNode, tabs, setActiveTab, createTab, setSidebarSection, createTerminalForNode]);
 
   // 打开端口转发
-  const handleTreeOpenForwards = useCallback((nodeId: string) => {
+  const handleTreeOpenForwards = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);
     if (!node) return;
     
-    // 如果已有终端会话，用它打开转发
-    if (node.terminalSessionId) {
-      createTab('forwards', node.terminalSessionId);
+    const terminalIds = node.runtime?.terminalIds || [];
+    const connectionId = node.runtime?.connectionId || node.sshConnectionId;
+    
+    // 如果节点有终端，用第一个
+    if (terminalIds.length > 0) {
+      const sessionId = terminalIds[0];
+      const existingTab = tabs.find(t => t.sessionId === sessionId && t.type === 'forwards');
+      if (existingTab) {
+        setActiveTab(existingTab.id);
+      } else {
+        createTab('forwards', sessionId);
+      }
+      setSidebarSection('forwards');
       return;
     }
     
-    // 如果节点有终端，用第一个
-    const terminalIds = node.runtime?.terminalIds || [];
-    if (terminalIds.length > 0) {
-      createTab('forwards', terminalIds[0]);
+    // 如果节点已连接但没有终端会话，先创建终端会话再打开转发
+    if (connectionId && (node.runtime.status === 'connected' || node.runtime.status === 'active')) {
+      try {
+        const terminalId = await createTerminalForNode(nodeId, 80, 24);
+        createTab('forwards', terminalId);
+        setSidebarSection('forwards');
+      } catch (err) {
+        console.error('Failed to create session for forwards:', err);
+      }
     }
-  }, [getNode, createTab]);
+  }, [getNode, tabs, setActiveTab, createTab, setSidebarSection, createTerminalForNode]);
 
   const handleTreeRemove = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);
@@ -336,8 +352,11 @@ export const Sidebar = () => {
       await api.markConnectionUsed(connectionId);
     } catch (error) {
       console.error('Failed to connect to saved connection:', error);
-      // 出错时打开编辑器
-      openConnectionEditor(connectionId);
+      // 只有真正的连接错误才打开编辑器，不包括 "already connecting"
+      const errorMsg = String(error);
+      if (!errorMsg.includes('already connecting') && !errorMsg.includes('already connected')) {
+        openConnectionEditor(connectionId);
+      }
     }
   }, [addRootNode, connectNode, openConnectionEditor]);
 

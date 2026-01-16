@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { api } from '../lib/api';
 
 export type TransferState = 'pending' | 'active' | 'paused' | 'completed' | 'cancelled' | 'error';
 export type TransferDirection = 'upload' | 'download';
@@ -30,9 +31,9 @@ interface TransferStore {
   clearCompleted: () => void;
   pauseAll: () => void;
   resumeAll: () => void;
-  pauseTransfer: (id: string) => void;
-  resumeTransfer: (id: string) => void;
-  cancelTransfer: (id: string) => void;
+  pauseTransfer: (id: string) => Promise<void>;
+  resumeTransfer: (id: string) => Promise<void>;
+  cancelTransfer: (id: string) => Promise<void>;
   interruptTransfersBySession: (sessionId: string, errorMessage?: string) => void;
   
   // Computed helpers
@@ -151,29 +152,59 @@ export const useTransferStore = create<TransferStore>((set, get) => ({
     });
   },
   
-  pauseTransfer: (id) => {
-    set((state) => {
-      const transfer = state.transfers.get(id);
-      if (!transfer || (transfer.state !== 'active' && transfer.state !== 'pending')) return state;
+  pauseTransfer: async (id) => {
+    const state = get();
+    const transfer = state.transfers.get(id);
+    if (!transfer || (transfer.state !== 'active' && transfer.state !== 'pending')) return;
+    
+    try {
+      // 调用后端 API 实际暂停传输
+      await api.sftpPauseTransfer(id);
       
-      const newTransfers = new Map(state.transfers);
-      newTransfers.set(id, { ...transfer, state: 'paused' });
-      return { transfers: newTransfers };
-    });
+      set((state) => {
+        const newTransfers = new Map(state.transfers);
+        const t = newTransfers.get(id);
+        if (t) {
+          newTransfers.set(id, { ...t, state: 'paused' });
+        }
+        return { transfers: newTransfers };
+      });
+    } catch (e) {
+      console.error('Failed to pause transfer:', e);
+    }
   },
   
-  resumeTransfer: (id) => {
-    set((state) => {
-      const transfer = state.transfers.get(id);
-      if (!transfer || transfer.state !== 'paused') return state;
+  resumeTransfer: async (id) => {
+    const state = get();
+    const transfer = state.transfers.get(id);
+    if (!transfer || transfer.state !== 'paused') return;
+    
+    try {
+      // 调用后端 API 实际恢复传输
+      await api.sftpResumeTransfer(id);
       
-      const newTransfers = new Map(state.transfers);
-      newTransfers.set(id, { ...transfer, state: 'pending' });
-      return { transfers: newTransfers };
-    });
+      set((state) => {
+        const newTransfers = new Map(state.transfers);
+        const t = newTransfers.get(id);
+        if (t) {
+          newTransfers.set(id, { ...t, state: 'pending' });
+        }
+        return { transfers: newTransfers };
+      });
+    } catch (e) {
+      console.error('Failed to resume transfer:', e);
+    }
   },
   
-  cancelTransfer: (id) => {
+  cancelTransfer: async (id) => {
+    // Call backend API first to actually cancel the transfer
+    try {
+      await api.sftpCancelTransfer(id);
+    } catch (e) {
+      console.error('Failed to cancel transfer on backend:', e);
+      // Continue to update UI state even if backend call fails
+    }
+    
     set((state) => {
       const transfer = state.transfers.get(id);
       if (!transfer) return state;
