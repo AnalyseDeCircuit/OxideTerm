@@ -151,19 +151,56 @@ export const useAppStore = create<AppStore>((set, get) => ({
   editingConnection: null,
   networkOnline: true,
 
+  /** @deprecated Use connectSsh() + createTerminalSession() instead */
   connect: async (request: ConnectRequest) => {
     try {
-      // Use API layer
-      const sessionInfo = await api.connect(request);
+      // 🔄 迁移到新 API: sshConnect + createTerminal
+      const connResponse = await api.sshConnect({
+        host: request.host,
+        port: request.port,
+        username: request.username,
+        authType: request.auth_type,
+        password: request.password,
+        keyPath: request.key_path,
+        passphrase: request.passphrase,
+        name: request.name,
+      });
+
+      // 更新连接池状态
+      set((state) => {
+        const newConnections = new Map(state.connections);
+        newConnections.set(connResponse.connectionId, connResponse.connection);
+        return { connections: newConnections };
+      });
+
+      // 创建终端
+      const termResponse = await api.createTerminal({
+        connectionId: connResponse.connectionId,
+        cols: request.cols,
+        rows: request.rows,
+      });
+
+      // 合并 ws_token 到 session
+      const sessionInfo = { ...termResponse.session, ws_token: termResponse.wsToken };
       
       set((state) => {
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionInfo.id, sessionInfo);
-        return { sessions: newSessions };
+        
+        // 更新连接的 terminalIds
+        const newConnections = new Map(state.connections);
+        const conn = newConnections.get(connResponse.connectionId);
+        if (conn) {
+          newConnections.set(connResponse.connectionId, {
+            ...conn,
+            terminalIds: [...conn.terminalIds, sessionInfo.id],
+            refCount: conn.refCount + 1,
+            state: 'active',
+          });
+        }
+        
+        return { sessions: newSessions, connections: newConnections };
       });
-
-      // State is managed by the backend - no fake timeout needed
-      // The session state will be updated via WebSocket events or API responses
 
       // Open terminal tab by default
       get().createTab('terminal', sessionInfo.id);
@@ -341,13 +378,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /** @deprecated Use closeTerminalSession() instead */
   disconnect: async (sessionId: string) => {
     try {
-      await api.disconnect(sessionId);
+      // 🔄 迁移到新 API: closeTerminal
+      await api.closeTerminal(sessionId);
       
       set((state) => {
         const newSessions = new Map(state.sessions);
+        const session = newSessions.get(sessionId);
         newSessions.delete(sessionId);
+        
+        // 更新连接的 terminalIds
+        const newConnections = new Map(state.connections);
+        if (session?.connectionId) {
+          const conn = newConnections.get(session.connectionId);
+          if (conn) {
+            const newTerminalIds = conn.terminalIds.filter(id => id !== sessionId);
+            newConnections.set(session.connectionId, {
+              ...conn,
+              terminalIds: newTerminalIds,
+              refCount: Math.max(0, conn.refCount - 1),
+              state: newTerminalIds.length === 0 ? 'idle' : 'active',
+            });
+          }
+        }
         
         // Close associated tabs
         const newTabs = state.tabs.filter(t => t.sessionId !== sessionId);
@@ -359,6 +414,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
         return { 
           sessions: newSessions,
+          connections: newConnections,
           tabs: newTabs,
           activeTabId: newActiveId
         };
@@ -383,7 +439,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       // Disconnect existing session first
-      await api.disconnect(sessionId).catch(() => {});
+      // 🔄 迁移到新 API: closeTerminal
+      await api.closeTerminal(sessionId).catch(() => {});
       
       // Determine auth_type for reconnection:
       // - 'agent' -> use agent
@@ -402,14 +459,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // else: default_key fallback
 
       // Reconnect with saved authentication info
-      const newSession = await api.connect({
+      // 🔄 迁移到新 API: sshConnect + createTerminal
+      const connResponse = await api.sshConnect({
         host: session.host,
         port: session.port,
         username: session.username,
-        auth_type: reconnectAuthType,
-        key_path: reconnectKeyPath,
+        authType: reconnectAuthType,
+        keyPath: reconnectKeyPath,
         name: session.name,
       });
+      
+      const termResponse = await api.createTerminal({
+        connectionId: connResponse.connectionId,
+      });
+      
+      const newSession = { ...termResponse.session, ws_token: termResponse.wsToken };
 
       // Update session map with new session info but keep same sessionId in tabs
       set((state) => {
@@ -449,17 +513,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       // Disconnect existing session first
-      await api.disconnect(sessionId).catch(() => {});
+      // 🔄 迁移到新 API: closeTerminal
+      await api.closeTerminal(sessionId).catch(() => {});
       
       // Reconnect with password
-      const newSession = await api.connect({
+      // 🔄 迁移到新 API: sshConnect + createTerminal
+      const connResponse = await api.sshConnect({
         host: session.host,
         port: session.port,
         username: session.username,
-        auth_type: 'password',
+        authType: 'password',
         password,
         name: session.name,
       });
+      
+      const termResponse = await api.createTerminal({
+        connectionId: connResponse.connectionId,
+      });
+      
+      const newSession = { ...termResponse.session, ws_token: termResponse.wsToken };
 
       // Update session map with new session info
       set((state) => {

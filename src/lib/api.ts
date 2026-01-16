@@ -37,6 +37,11 @@ const USE_MOCK = false;
 // --- API Implementation ---
 
 export const api = {
+  /**
+   * @deprecated Use sshConnect() + createTerminal() instead.
+   * This legacy API creates a connection AND terminal in one call.
+   * The new API separates these concerns for better resource management.
+   */
   connect: async (request: ConnectRequest): Promise<SessionInfo> => {
     if (USE_MOCK) return mockConnect(request);
     // Backend returns ConnectResponseV2, extract session info and add ws_token
@@ -51,6 +56,11 @@ export const api = {
     return session;
   },
 
+  /**
+   * @deprecated Use closeTerminal() instead.
+   * This legacy API closes both terminal AND connection.
+   * The new API only closes the terminal, leaving the connection for reuse.
+   */
   disconnect: async (sessionId: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('disconnect_v2', { sessionId });
