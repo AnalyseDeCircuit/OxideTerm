@@ -105,14 +105,16 @@ interface AppStore {
 const UI_STATE_STORAGE_KEY = 'oxide-ui-state';
 
 // Load persisted UI state from localStorage
+// NOTE: We don't persist tabs/activeTabId because sessions are memory-only.
+// Persisting tabs would create ghost tabs referencing non-existent sessions.
 function loadPersistedUIState(): { tabs: Tab[]; activeTabId: string | null; sidebarCollapsed: boolean; sidebarActiveSection: SidebarSection } {
   try {
     const stored = localStorage.getItem(UI_STATE_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        tabs: Array.isArray(parsed.tabs) ? parsed.tabs : [],
-        activeTabId: parsed.activeTabId ?? null,
+        tabs: [], // Don't restore tabs - sessions are not persisted
+        activeTabId: null, // Don't restore activeTabId
         sidebarCollapsed: typeof parsed.sidebarCollapsed === 'boolean' ? parsed.sidebarCollapsed : false,
         sidebarActiveSection: parsed.sidebarActiveSection ?? 'sessions',
       };
@@ -129,12 +131,12 @@ function loadPersistedUIState(): { tabs: Tab[]; activeTabId: string | null; side
 }
 
 // Save UI state to localStorage
+// NOTE: We don't persist tabs/activeTabId because sessions are memory-only.
 export function saveUIState(): void {
   try {
     const state = useAppStore.getState();
     const uiState = {
-      tabs: state.tabs,
-      activeTabId: state.activeTabId,
+      // Don't save tabs/activeTabId - they reference sessions which are not persisted
       sidebarCollapsed: state.sidebarCollapsed,
       sidebarActiveSection: state.sidebarActiveSection,
     };

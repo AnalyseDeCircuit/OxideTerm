@@ -1399,7 +1399,7 @@ impl SshConnectionRegistry {
 
     /// 启动连接的心跳监控任务
     ///
-    /// 每 30 秒发送一次心跳，连续 3 次失败后标记为 LinkDown 并启动重连
+    /// 每 15 秒发送一次心跳，连续 2 次失败后标记为 LinkDown 并启动重连
     pub fn start_heartbeat(self: &Arc<Self>, connection_id: &str) {
         let Some(entry) = self.connections.get(connection_id) else {
             warn!("Cannot start heartbeat for non-existent connection {}", connection_id);

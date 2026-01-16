@@ -174,32 +174,25 @@ export const Sidebar = () => {
     const terminalIds = node.runtime?.terminalIds || [];
     const connectionId = node.runtime?.connectionId || node.sshConnectionId;
     
-    // 如果已有终端会话，用第一个打开 SFTP
+    // 如果已有终端会话，用第一个打开 SFTP 标签页
     if (terminalIds.length > 0) {
       const sessionId = terminalIds[0];
-      const existingTab = tabs.find(t => t.sessionId === sessionId && t.type === 'sftp');
-      if (existingTab) {
-        setActiveTab(existingTab.id);
-      } else {
-        createTab('sftp', sessionId);
-      }
-      setSidebarSection('sftp');
+      createTab('sftp', sessionId);
       return;
     }
     
-    // 如果节点已连接但没有终端会话，先创建终端会话再打开 SFTP
+    // 如果节点已连接但没有终端会话，先创建终端会话再打开 SFTP 标签页
     if (connectionId && (node.runtime.status === 'connected' || node.runtime.status === 'active')) {
       try {
         const terminalId = await createTerminalForNode(nodeId, 80, 24);
         createTab('sftp', terminalId);
-        setSidebarSection('sftp');
       } catch (err) {
         console.error('Failed to create session for SFTP:', err);
       }
     }
-  }, [getNode, tabs, setActiveTab, createTab, setSidebarSection, createTerminalForNode]);
+  }, [getNode, createTab, createTerminalForNode]);
 
-  // 打开端口转发
+  // 打开端口转发标签页
   const handleTreeOpenForwards = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);
     if (!node) return;
@@ -210,27 +203,20 @@ export const Sidebar = () => {
     // 如果节点有终端，用第一个
     if (terminalIds.length > 0) {
       const sessionId = terminalIds[0];
-      const existingTab = tabs.find(t => t.sessionId === sessionId && t.type === 'forwards');
-      if (existingTab) {
-        setActiveTab(existingTab.id);
-      } else {
-        createTab('forwards', sessionId);
-      }
-      setSidebarSection('forwards');
+      createTab('forwards', sessionId);
       return;
     }
     
-    // 如果节点已连接但没有终端会话，先创建终端会话再打开转发
+    // 如果节点已连接但没有终端会话，先创建终端会话再打开转发标签页
     if (connectionId && (node.runtime.status === 'connected' || node.runtime.status === 'active')) {
       try {
         const terminalId = await createTerminalForNode(nodeId, 80, 24);
         createTab('forwards', terminalId);
-        setSidebarSection('forwards');
       } catch (err) {
         console.error('Failed to create session for forwards:', err);
       }
     }
-  }, [getNode, tabs, setActiveTab, createTab, setSidebarSection, createTerminalForNode]);
+  }, [getNode, createTab, createTerminalForNode]);
 
   const handleTreeRemove = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);

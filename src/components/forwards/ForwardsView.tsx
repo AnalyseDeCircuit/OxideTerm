@@ -9,6 +9,8 @@ import { Checkbox } from '../ui/checkbox';
 import { api } from '../../lib/api';
 import { createTypeGuard } from '../../lib/utils';
 import { ForwardRule, ForwardType } from '../../types';
+import { useAppStore } from '../../store/appStore';
+import { useToast } from '../../hooks/useToast';
 
 // Type guard for ForwardType using const type parameter (TS 5.0+)
 const FORWARD_TYPES = ['local', 'remote', 'dynamic'] as const;
@@ -30,6 +32,7 @@ const formatBytes = (bytes: number): string => {
 };
 
 export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
+  const session = useAppStore((state) => state.sessions.get(sessionId));
   const [forwards, setForwards] = useState<ForwardRule[]>([]);
   const [forwardStats, setForwardStats] = useState<Record<string, ForwardStats>>({});
   const [loading, setLoading] = useState(false);
@@ -71,11 +74,16 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   };
 
   useEffect(() => {
+    // 只在 session 存在且连接状态为 active 时轮询
+    if (!session || session.state !== 'active') {
+      return;
+    }
+    
     fetchForwards();
     // Poll every 5 seconds for status updates
     const interval = setInterval(fetchForwards, 5000);
     return () => clearInterval(interval);
-  }, [sessionId]);
+  }, [sessionId, session?.state]);
 
   const handleCreateQuick = async (type: 'jupyter' | 'tensorboard' | 'vscode') => {
       try {

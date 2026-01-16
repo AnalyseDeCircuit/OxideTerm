@@ -347,17 +347,26 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         return;
       }
       
+      // 乐观更新：立即在本地设置为 connecting，阻止竞态重复调用
+      set((state) => ({
+        rawNodes: state.rawNodes.map(n => 
+          n.id === nodeId 
+            ? { ...n, state: { ...n.state, status: 'connecting' as const } }
+            : n
+        )
+      }));
+      get().rebuildUnifiedNodes();
+      
       try {
-        // 后端 connect_tree_node 会自动设置状态为 connecting
-        // 不需要前端预设，避免状态竞争
         const response = await api.connectTreeNode({ nodeId });
         
         // 更新连接 ID
         await api.setTreeNodeConnection(nodeId, response.sshConnectionId);
         await get().fetchTree();
       } catch (e) {
+        // 失败时回滚到 failed 状态
         await api.updateTreeNodeState(nodeId, 'failed', String(e));
-        get().rebuildUnifiedNodes();
+        await get().fetchTree();
         throw e;
       }
     },
