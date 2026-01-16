@@ -29,7 +29,7 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
   connection,
   onConnect
 }) => {
-  const { groups, loadGroups } = useAppStore();
+  const { groups, loadGroups, connect } = useAppStore();
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState('');
@@ -67,7 +67,6 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
         save_on_disconnect: settings.bufferSaveOnDisconnect !== false,
       };
 
-      const { connect } = useAppStore.getState();
       await connect({
         host: connection.host,
         port: connection.port,

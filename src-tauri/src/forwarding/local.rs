@@ -247,6 +247,9 @@ pub async fn start_local_forward(
 }
 
 /// Handle a single forwarded connection
+/// Idle timeout for forwarded connections (5 minutes)
+const FORWARD_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
 async fn handle_forward_connection(
     handle_controller: HandleController,
     mut local_stream: TcpStream,
@@ -276,13 +279,14 @@ async fn handle_forward_connection(
     let stats_for_send = stats.clone();
     let stats_for_recv = stats.clone();
 
-    // Local -> Remote task
+    // Local -> Remote task with idle timeout
     let local_to_remote = async {
         let mut buf = vec![0u8; 32768];
         loop {
-            match local_read.read(&mut buf).await {
-                Ok(0) => break, // EOF
-                Ok(n) => {
+            // Add idle timeout to local read
+            match tokio::time::timeout(FORWARD_IDLE_TIMEOUT, local_read.read(&mut buf)).await {
+                Ok(Ok(0)) => break, // EOF
+                Ok(Ok(n)) => {
                     let ch = channel_for_write.lock().await;
                     if let Err(e) = ch.data(&buf[..n]).await {
                         debug!("Channel write error: {}", e);
@@ -291,8 +295,12 @@ async fn handle_forward_connection(
                     // Update bytes sent
                     stats_for_send.write().bytes_sent += n as u64;
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     debug!("Local read error: {}", e);
+                    break;
+                }
+                Err(_) => {
+                    debug!("Local read idle timeout ({}s), closing forward connection", FORWARD_IDLE_TIMEOUT.as_secs());
                     break;
                 }
             }
@@ -302,12 +310,13 @@ async fn handle_forward_connection(
         let _ = ch.eof().await;
     };
 
-    // Remote -> Local task
+    // Remote -> Local task with idle timeout
     let remote_to_local = async {
         loop {
             let mut ch = channel_for_read.lock().await;
-            match ch.wait().await {
-                Some(russh::ChannelMsg::Data { data }) => {
+            // Add idle timeout to channel wait
+            match tokio::time::timeout(FORWARD_IDLE_TIMEOUT, ch.wait()).await {
+                Ok(Some(russh::ChannelMsg::Data { data })) => {
                     let data_len = data.len();
                     drop(ch); // Release lock before writing
                     if let Err(e) = local_write.write_all(&data).await {
@@ -317,19 +326,23 @@ async fn handle_forward_connection(
                     // Update bytes received
                     stats_for_recv.write().bytes_received += data_len as u64;
                 }
-                Some(russh::ChannelMsg::Eof) => {
+                Ok(Some(russh::ChannelMsg::Eof)) => {
                     debug!("Channel EOF received");
                     break;
                 }
-                Some(russh::ChannelMsg::Close) => {
+                Ok(Some(russh::ChannelMsg::Close)) => {
                     debug!("Channel closed");
                     break;
                 }
-                None => {
+                Ok(None) => {
                     debug!("Channel ended");
                     break;
                 }
-                _ => continue,
+                Ok(_) => continue,
+                Err(_) => {
+                    debug!("Remote read idle timeout ({}s), closing forward connection", FORWARD_IDLE_TIMEOUT.as_secs());
+                    break;
+                }
             }
         }
     };

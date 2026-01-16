@@ -269,6 +269,9 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         const currentNode = get().getNode(nodeId);
         const nodesToRemove = currentNode ? [currentNode, ...descendants] : descendants;
         
+        // 在调用 API 前记录本地计算的待删除 ID（用于后续清理 selectedNodeId）
+        const localRemovedIds = nodesToRemove.map(n => n.id);
+        
         const { nodeTerminalMap, terminalNodeMap } = get();
         const newTerminalMap = new Map(nodeTerminalMap);
         const newNodeMap = new Map(terminalNodeMap);
@@ -299,13 +302,14 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
           }
         }
         
-        const removedIds = await api.removeTreeNode(nodeId);
-        await get().fetchTree();
-        
+        // 使用本地计算的 ID 清理 selectedNodeId（在 API 调用前，避免后端返回不完整）
         const { selectedNodeId } = get();
-        if (selectedNodeId && removedIds.includes(selectedNodeId)) {
+        if (selectedNodeId && localRemovedIds.includes(selectedNodeId)) {
           set({ selectedNodeId: null });
         }
+        
+        const removedIds = await api.removeTreeNode(nodeId);
+        await get().fetchTree();
         
         set({ isLoading: false });
         return removedIds;
@@ -575,8 +579,15 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       const node = get().getNode(nodeId);
       if (!node || !node.runtime.sftpSessionId) return;
       
-      // SFTP 会话会随终端关闭自动清理，这里只更新状态
-      // 注意: 当前 API 没有显式的 closeSftpSession 方法
+      // 显式关闭 SFTP 会话
+      const terminalIds = node.runtime.terminalIds || [];
+      if (terminalIds.length > 0) {
+        try {
+          await api.sftpClose(terminalIds[0]);
+        } catch (e) {
+          console.error('Failed to close SFTP session:', e);
+        }
+      }
       
       // 刷新树
       await get().fetchTree();

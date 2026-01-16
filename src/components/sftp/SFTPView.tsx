@@ -702,7 +702,15 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
 
   // Event Listeners for Transfer Progress
   useEffect(() => {
-      const unlistenProgress = listen<TransferProgressEvent>(`sftp:progress:${sessionId}`, (event) => {
+      // 使用 mounted 标志防止组件卸载后仍处理事件
+      let mounted = true;
+      let unlistenProgressFn: (() => void) | null = null;
+      let unlistenCompleteFn: (() => void) | null = null;
+      
+      const setupListeners = async () => {
+        unlistenProgressFn = await listen<TransferProgressEvent>(`sftp:progress:${sessionId}`, (event) => {
+          if (!mounted) return; // 组件已卸载，忽略事件
+          
           const { remote_path, local_path, transferred_bytes, total_bytes } = event.payload;
           // Find matching transfer by path (normalize paths for comparison)
           const transfers = getAllTransfers();
@@ -723,9 +731,11 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           } else {
             console.log('[SFTP Progress] No match found for:', { remote_path, local_path, transfers: transfers.map(t => ({ remotePath: t.remotePath, localPath: t.localPath })) });
           }
-      });
-      
-      const unlistenComplete = listen<TransferCompleteEvent>(`sftp:complete:${sessionId}`, (event) => {
+        });
+        
+        unlistenCompleteFn = await listen<TransferCompleteEvent>(`sftp:complete:${sessionId}`, (event) => {
+          if (!mounted) return; // 组件已卸载，忽略事件
+          
           const { transfer_id, success, error } = event.payload;
           if (success) {
               setTransferState(transfer_id, 'completed');
@@ -735,13 +745,17 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
           } else {
               setTransferState(transfer_id, 'error', error || 'Transfer failed');
           }
-      });
+        });
+      };
+      
+      setupListeners();
       
       return () => { 
-          unlistenProgress.then(f => f()); 
-          unlistenComplete.then(f => f());
+          mounted = false;
+          if (unlistenProgressFn) unlistenProgressFn();
+          if (unlistenCompleteFn) unlistenCompleteFn();
       };
-  }, [sessionId, updateProgress, setTransferState, refreshLocalFiles, remotePath]);
+  }, [sessionId, updateProgress, setTransferState, refreshLocalFiles, remotePath, getAllTransfers]);
 
   // Toast notifications
   const { success: toastSuccess, error: toastError } = useToast();

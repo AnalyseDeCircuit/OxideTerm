@@ -1382,6 +1382,10 @@ impl WsBridge {
             "network_error" | "send_timeout" => {
                 DisconnectReason::NetworkError(reason_str.to_string())
             }
+            "channel_full" => {
+                // Channel full means server is overloaded, not client disconnect
+                DisconnectReason::NetworkError("server_overloaded".to_string())
+            }
             _ => DisconnectReason::ClientClosed,
         };
 

@@ -33,6 +33,7 @@ const formatBytes = (bytes: number): string => {
 
 export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   const session = useAppStore((state) => state.sessions.get(sessionId));
+  const { toast } = useToast();
   const [forwards, setForwards] = useState<ForwardRule[]>([]);
   const [forwardStats, setForwardStats] = useState<Record<string, ForwardStats>>({});
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,13 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [skipHealthCheck, setSkipHealthCheck] = useState(false);
+
+  // Edit Forward Form State (独立状态，避免与创建表单冲突)
+  const [editBindAddress, setEditBindAddress] = useState('localhost');
+  const [editBindPort, setEditBindPort] = useState('');
+  const [editTargetHost, setEditTargetHost] = useState('localhost');
+  const [editTargetPort, setEditTargetPort] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   const fetchForwards = async () => {
     try {
@@ -89,14 +97,22 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
       try {
           if (type === 'jupyter') {
             await api.forwardJupyter(sessionId, 8888, 8888);
+            toast({ title: 'Jupyter forward created', description: 'localhost:8888 → remote:8888' });
           } else if (type === 'tensorboard') {
             await api.forwardTensorboard(sessionId, 6006, 6006);
+            toast({ title: 'TensorBoard forward created', description: 'localhost:6006 → remote:6006' });
           } else if (type === 'vscode') {
             await api.forwardVscode(sessionId, 8080, 8080);
+            toast({ title: 'VS Code Server forward created', description: 'localhost:8080 → remote:8080' });
           }
           fetchForwards();
       } catch (e) {
           console.error(e);
+          toast({ 
+            title: 'Failed to create forward', 
+            description: e instanceof Error ? e.message : String(e),
+            variant: 'destructive'
+          });
       }
   };
 
@@ -264,10 +280,12 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                               title="Edit forward"
                               onClick={() => {
                                 setEditingForward(fw);
-                                setBindAddress(fw.bind_address);
-                                setBindPort(fw.bind_port.toString());
-                                setTargetHost(fw.target_host);
-                                setTargetPort(fw.target_port.toString());
+                                // 使用独立的编辑状态，不影响创建表单
+                                setEditBindAddress(fw.bind_address);
+                                setEditBindPort(fw.bind_port.toString());
+                                setEditTargetHost(fw.target_host);
+                                setEditTargetPort(fw.target_port.toString());
+                                setEditError(null);
                               }}
                             >
                               <Pencil className="h-3 w-3" />
@@ -437,14 +455,14 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                             <div className="flex gap-2">
                                 <Input 
                                     placeholder="Host" 
-                                    value={bindAddress}
-                                    onChange={(e) => setBindAddress(e.target.value)}
+                                    value={editBindAddress}
+                                    onChange={(e) => setEditBindAddress(e.target.value)}
                                     className="font-mono"
                                 />
                                 <Input 
                                     placeholder="Port" 
-                                    value={bindPort}
-                                    onChange={(e) => setBindPort(e.target.value)}
+                                    value={editBindPort}
+                                    onChange={(e) => setEditBindPort(e.target.value)}
                                     className="w-24 font-mono"
                                 />
                             </div>
@@ -460,14 +478,14 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                                 <div className="flex gap-2">
                                     <Input 
                                         placeholder="Host" 
-                                        value={targetHost}
-                                        onChange={(e) => setTargetHost(e.target.value)}
+                                        value={editTargetHost}
+                                        onChange={(e) => setEditTargetHost(e.target.value)}
                                         className="font-mono"
                                     />
                                     <Input 
                                         placeholder="Port" 
-                                        value={targetPort}
-                                        onChange={(e) => setTargetPort(e.target.value)}
+                                        value={editTargetPort}
+                                        onChange={(e) => setEditTargetPort(e.target.value)}
                                         className="w-24 font-mono"
                                     />
                                 </div>
@@ -475,27 +493,27 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
                         )}
                     </div>
 
-                    {createError && (
-                        <div className="text-red-400 text-xs">{createError}</div>
+                    {editError && (
+                        <div className="text-red-400 text-xs">{editError}</div>
                     )}
 
                     <div className="flex justify-end gap-2">
                         <Button variant="ghost" onClick={() => setEditingForward(null)}>Cancel</Button>
                         <Button onClick={async () => {
-                            setCreateError(null);
+                            setEditError(null);
                             try {
                                 await api.updatePortForward({
                                     session_id: sessionId,
                                     forward_id: editingForward.id,
-                                    bind_address: bindAddress,
-                                    bind_port: parseInt(bindPort),
-                                    target_host: targetHost,
-                                    target_port: parseInt(targetPort),
+                                    bind_address: editBindAddress,
+                                    bind_port: parseInt(editBindPort),
+                                    target_host: editTargetHost,
+                                    target_port: parseInt(editTargetPort),
                                 });
                                 setEditingForward(null);
                                 fetchForwards();
                             } catch (e: unknown) {
-                                setCreateError(e instanceof Error ? e.message : String(e));
+                                setEditError(e instanceof Error ? e.message : String(e));
                             }
                         }}>
                             Save Changes
