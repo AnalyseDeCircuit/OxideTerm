@@ -69,6 +69,7 @@ export const Sidebar = () => {
     createTerminalForNode,
     closeTerminalForNode,
     connectNode,
+    disconnectNode,
     addRootNode,
   } = useSessionTreeStore();
 
@@ -153,19 +154,18 @@ export const Sidebar = () => {
     }
     
     try {
-      // 调用后端递归断开所有子节点
-      const disconnectedIds = await api.disconnectTreeNode(nodeId);
-      console.log(`Disconnected ${disconnectedIds.length} nodes`);
+      // 调用前端 store 的 disconnectNode，它会：
+      // 1. 关闭相关的 Tab
+      // 2. 断开 SSH 连接
+      // 3. 刷新树状态
+      await disconnectNode(nodeId);
       
-      // 刷新树和连接池状态
-      await Promise.all([
-        fetchTree(),
-        refreshConnections(),
-      ]);
+      // 刷新连接池状态
+      await refreshConnections();
     } catch (err) {
       console.error('Failed to disconnect tree node:', err);
     }
-  }, [getNode, fetchTree, refreshConnections]);
+  }, [getNode, disconnectNode, refreshConnections]);
 
   const handleTreeOpenSftp = useCallback(async (nodeId: string) => {
     const node = getNode(nodeId);

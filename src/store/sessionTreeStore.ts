@@ -412,13 +412,11 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       }
       set({ linkDownNodeIds: newLinkDownIds });
       
-      // 5. 断开当前节点的 SSH 连接
-      if (node.runtime.connectionId) {
-        try {
-          await api.sshDisconnect(node.runtime.connectionId);
-        } catch (e) {
-          console.error('Failed to disconnect SSH:', e);
-        }
+      // 5. 调用后端断开节点（会递归断开子节点并更新状态）
+      try {
+        await api.disconnectTreeNode(nodeId);
+      } catch (e) {
+        console.error('Failed to disconnect tree node:', e);
       }
       
       // 6. 刷新树状态
