@@ -44,12 +44,10 @@ jobs:
           workspaces: './src-tauri -> target'
           # 为不同的编译目标使用不同的缓存（不包含 commit hash）
           key: ${{ matrix.platform }}-${{ matrix.target }}
-          # 共享缓存：只在 Cargo.lock 变化时更新
-          env: {
-            RUST_CACHE_COMPRESS: true
-          }
           # 编译失败时不保存损坏的缓存
           cache-on-failure: false
+        env:
+          RUST_CACHE_COMPRESS: true
 
       - name: Install Node.js
         uses: actions/setup-node@v4
