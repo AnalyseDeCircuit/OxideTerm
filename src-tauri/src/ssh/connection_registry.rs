@@ -2203,6 +2203,7 @@ mod tests {
             reconnect_attempts: AtomicU32::new(0),
             current_attempt_id: AtomicU64::new(0),
             last_emitted_status: RwLock::new(None),
+            parent_connection_id: None,
         };
 
         assert_eq!(entry.ref_count(), 0);
