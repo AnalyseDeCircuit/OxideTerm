@@ -117,7 +117,7 @@ pub async fn connect_v2(
 
         // Convert target auth
         let target_auth = match request.auth {
-            AuthRequest::Password { password } => crate::ssh::AuthMethod::Password(password),
+            AuthRequest::Password { password } => crate::ssh::AuthMethod::Password { password },
             AuthRequest::Key {
                 key_path,
                 passphrase,
@@ -143,7 +143,7 @@ pub async fn connect_v2(
         for hop_req in &proxy_chain_req {
             let hop_auth = match &hop_req.auth {
                 AuthRequest::Password { password } => {
-                    crate::ssh::AuthMethod::Password(password.clone())
+                    crate::ssh::AuthMethod::Password { password: password.clone() }
                 }
                 AuthRequest::Key {
                     key_path,
@@ -199,7 +199,7 @@ pub async fn connect_v2(
             port: request.port,
             username: request.username.clone(),
             auth: match target_auth {
-                crate::ssh::AuthMethod::Password(p) => AuthMethod::Password { password: p },
+                crate::ssh::AuthMethod::Password { password } => AuthMethod::Password { password },
                 crate::ssh::AuthMethod::Key {
                     key_path,
                     passphrase,
@@ -313,7 +313,7 @@ pub async fn connect_v2(
             port: request.port,
             username: request.username.clone(),
             auth: match target_auth_for_pool {
-                crate::ssh::AuthMethod::Password(p) => AuthMethod::Password { password: p },
+                crate::ssh::AuthMethod::Password { password } => AuthMethod::Password { password },
                 crate::ssh::AuthMethod::Key { key_path, passphrase } => AuthMethod::Key {
                     key_path,
                     passphrase,
@@ -393,7 +393,7 @@ pub async fn connect_v2(
 
         // Build SSH config
         let ssh_auth = match &auth {
-            AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
+            AuthMethod::Password { password } => SshAuthMethod::Password { password: password.clone() },
             AuthMethod::Key {
                 key_path,
                 passphrase,

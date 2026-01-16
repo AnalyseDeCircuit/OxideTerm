@@ -9,37 +9,8 @@ use super::scroll_buffer::ScrollBuffer;
 use super::state::{SessionState, SessionStateMachine};
 use crate::ssh::{HandleController, SessionCommand};
 
-/// Authentication method for SSH connection
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum AuthMethod {
-    /// Password authentication
-    Password { password: String },
-    /// Public key authentication
-    Key {
-        /// Path to private key file (e.g., ~/.ssh/id_rsa)
-        key_path: String,
-        /// Optional passphrase for encrypted keys
-        passphrase: Option<String>,
-    },
-    /// SSH Agent authentication (future)
-    Agent,
-}
-
-impl AuthMethod {
-    pub fn password(password: impl Into<String>) -> Self {
-        Self::Password {
-            password: password.into(),
-        }
-    }
-
-    pub fn key(key_path: impl Into<String>, passphrase: Option<String>) -> Self {
-        Self::Key {
-            key_path: key_path.into(),
-            passphrase,
-        }
-    }
-}
+// Re-export AuthMethod from ssh module (single source of truth)
+pub use crate::ssh::AuthMethod;
 
 /// Configuration for establishing an SSH connection
 #[derive(Debug, Clone, Serialize, Deserialize)]

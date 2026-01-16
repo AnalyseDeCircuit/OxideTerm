@@ -220,7 +220,7 @@ impl AutoReconnectService {
         // Build SSH config from session config
         let ssh_auth = match &config.auth {
             super::types::AuthMethod::Password { password } => {
-                SshAuthMethod::Password(password.clone())
+                SshAuthMethod::Password { password: password.clone() }
             }
             super::types::AuthMethod::Key {
                 key_path,

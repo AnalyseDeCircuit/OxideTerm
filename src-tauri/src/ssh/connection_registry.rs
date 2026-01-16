@@ -608,7 +608,7 @@ impl SshConnectionRegistry {
             port: config.port,
             username: config.username.clone(),
             auth: match &config.auth {
-                AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
+                AuthMethod::Password { password } => SshAuthMethod::Password { password: password.clone() },
                 AuthMethod::Key {
                     key_path,
                     passphrase,
@@ -1680,7 +1680,7 @@ impl SshConnectionRegistry {
             port: config.port,
             username: config.username.clone(),
             auth: match &config.auth {
-                AuthMethod::Password { password } => SshAuthMethod::Password(password.clone()),
+                AuthMethod::Password { password } => SshAuthMethod::Password { password: password.clone() },
                 AuthMethod::Key {
                     key_path,
                     passphrase,

@@ -60,10 +60,10 @@ pub struct ProxyHopConfig {
 
 /// Authentication methods supported
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthMethod {
     /// Password authentication
-    Password(String),
+    Password { password: String },
 
     /// SSH key authentication
     Key {
@@ -75,6 +75,21 @@ pub enum AuthMethod {
 
     /// SSH agent authentication
     Agent,
+}
+
+impl AuthMethod {
+    pub fn password(password: impl Into<String>) -> Self {
+        Self::Password {
+            password: password.into(),
+        }
+    }
+
+    pub fn key(key_path: impl Into<String>, passphrase: Option<String>) -> Self {
+        Self::Key {
+            key_path: key_path.into(),
+            passphrase,
+        }
+    }
 }
 
 fn default_port() -> u16 {
@@ -99,7 +114,7 @@ impl Default for SshConfig {
             host: String::new(),
             port: 22,
             username: String::new(),
-            auth: AuthMethod::Password(String::new()),
+            auth: AuthMethod::Password { password: String::new() },
             timeout_secs: 30,
             cols: 80,
             rows: 24,

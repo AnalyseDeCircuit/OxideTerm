@@ -58,7 +58,7 @@ impl ProxyHop {
             host: host.into(),
             port: 22,
             username: username.into(),
-            auth: AuthMethod::Password(password.into()),
+            auth: AuthMethod::Password { password: password.into() },
         }
     }
 
@@ -201,7 +201,7 @@ async fn direct_connect(
 
     // Authenticate
     let authenticated = match &hop.auth {
-        AuthMethod::Password(password) => {
+        AuthMethod::Password { password } => {
             info!("Authenticating to jump host with password");
             handle
                 .authenticate_password(&hop.username, password)
@@ -306,7 +306,7 @@ async fn connect_via_stream(
 
     // Authenticate
     let authenticated = match &hop.auth {
-        AuthMethod::Password(password) => {
+        AuthMethod::Password { password } => {
             info!("Authenticating via stream with password");
             handle
                 .authenticate_password(&hop.username, password)
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(hop.username, "admin");
         assert_eq!(hop.port, 22);
         match hop.auth {
-            AuthMethod::Password(p) => assert_eq!(p, "secret123"),
+            AuthMethod::Password { password } => assert_eq!(password, "secret123"),
             _ => panic!("Expected password auth"),
         }
     }

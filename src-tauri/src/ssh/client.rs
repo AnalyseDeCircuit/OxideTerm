@@ -66,7 +66,7 @@ impl SshClient {
 
         // Authenticate
         let authenticated = match &self.config.auth {
-            AuthMethod::Password(password) => handle
+            AuthMethod::Password { password } => handle
                 .authenticate_password(&self.config.username, password)
                 .await
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?,
