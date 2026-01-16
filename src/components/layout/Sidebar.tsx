@@ -29,6 +29,7 @@ import { SessionTree } from '../sessions/SessionTree';
 import { DrillDownDialog } from '../modals/DrillDownDialog';
 import { SavePathAsPresetDialog } from '../modals/SavePathAsPresetDialog';
 import { AddRootNodeDialog } from '../modals/AddRootNodeDialog';
+import { TopologyDialog } from '../topology';
 import { api } from '../../lib/api';
 import type { UnifiedFlatNode } from '../../types';
 
@@ -451,21 +452,25 @@ export const Sidebar = () => {
         >
           <ArrowLeftRight className="h-4 w-4" />
         </Button>
-        <Button 
-          variant={sidebarActiveSection === 'connections' ? 'secondary' : 'ghost'} 
+        <Button
+          variant={sidebarActiveSection === 'connections' ? 'secondary' : 'ghost'}
           size="icon"
           onClick={() => setSidebarSection('connections')}
-          title="SSH 连接池"
+          title="SSH Connection Pool"
           className="rounded-sm relative"
         >
           <Terminal className="h-4 w-4" />
-          {/* 连接数角标 */}
+          {/* Connection badge */}
           {connections.size > 0 && (
             <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
               {connections.size}
             </span>
           )}
         </Button>
+
+        {/* Topology Button */}
+        <TopologyDialog />
+
         <div className="flex-1" />
         <Button 
           variant="ghost" 

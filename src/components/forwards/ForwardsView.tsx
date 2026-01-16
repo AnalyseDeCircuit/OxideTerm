@@ -50,7 +50,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [skipHealthCheck, setSkipHealthCheck] = useState(false);
 
-  // Edit Forward Form State (独立状态，避免与创建表单冲突)
+  // Edit Forward Form State (Independent state to avoid conflict with create form)
   const [editBindAddress, setEditBindAddress] = useState('localhost');
   const [editBindPort, setEditBindPort] = useState('');
   const [editTargetHost, setEditTargetHost] = useState('localhost');
@@ -82,7 +82,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   };
 
   useEffect(() => {
-    // 只在 session 存在且连接状态为 active 时轮询
+    // Only poll when session exists and connection state is active
     if (!session || session.state !== 'active') {
       return;
     }

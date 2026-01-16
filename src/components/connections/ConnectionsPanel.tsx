@@ -14,42 +14,42 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { SshConnectionInfo, SshConnectionState } from '../../types';
 
-// 格式化连接状态
+// Format connection state
 const formatState = (state: SshConnectionState): { text: string; color: string } => {
   if (typeof state === 'object' && 'error' in state) {
-    return { text: `错误: ${state.error}`, color: 'text-red-400' };
+    return { text: `Error: ${state.error}`, color: 'text-red-400' };
   }
   switch (state) {
     case 'connecting':
-      return { text: '连接中...', color: 'text-yellow-400' };
+      return { text: 'Connecting...', color: 'text-yellow-400' };
     case 'active':
-      return { text: '活跃', color: 'text-green-400' };
+      return { text: 'Active', color: 'text-green-400' };
     case 'idle':
-      return { text: '空闲', color: 'text-amber-400' };
+      return { text: 'Idle', color: 'text-amber-400' };
     case 'disconnecting':
-      return { text: '断开中...', color: 'text-orange-400' };
+      return { text: 'Disconnecting...', color: 'text-orange-400' };
     case 'disconnected':
-      return { text: '已断开', color: 'text-zinc-500' };
+      return { text: 'Disconnected', color: 'text-zinc-500' };
     default:
       return { text: String(state), color: 'text-zinc-400' };
   }
 };
 
-// 格式化时间
+// Format time
 const formatTime = (isoString: string): string => {
   const date = new Date(isoString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins} 分钟前`;
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} mins ago`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} 小时前`;
+  if (diffHours < 24) return `${diffHours} hrs ago`;
   return date.toLocaleDateString();
 };
 
-// 单个连接卡片
+// Single Connection Card
 const ConnectionCard: React.FC<{
   connection: SshConnectionInfo;
   onToggleKeepAlive: (connectionId: string, keepAlive: boolean) => void;
@@ -64,7 +64,7 @@ const ConnectionCard: React.FC<{
       "bg-theme-bg-panel hover:border-zinc-600 transition-colors",
       isIdle && "border-amber-500/30"
     )}>
-      {/* 头部：主机信息和状态 */}
+      {/* Header: Host Info and State */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <Server className={cn("h-5 w-5", isActive ? "text-green-400" : isIdle ? "text-amber-400" : "text-zinc-500")} />
@@ -78,13 +78,13 @@ const ConnectionCard: React.FC<{
           </div>
         </div>
         
-        {/* Keep Alive 按钮 */}
+        {/* Keep Alive Button */}
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
           onClick={() => onToggleKeepAlive(connection.id, !connection.keepAlive)}
-          title={connection.keepAlive ? "关闭保活 (30分钟空闲后断开)" : "启用保活 (永不自动断开)"}
+          title={connection.keepAlive ? "Disable Keep Alive (Disconnect after 30m idle)" : "Enable Keep Alive (Never disconnect)"}
         >
           {connection.keepAlive ? (
             <Shield className="h-4 w-4 text-green-400" />
@@ -94,11 +94,11 @@ const ConnectionCard: React.FC<{
         </Button>
       </div>
       
-      {/* 统计信息 */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-2 text-xs text-zinc-400">
         <div className="flex items-center gap-1">
           <Terminal className="h-3 w-3" />
-          <span>{connection.terminalIds.length} 终端</span>
+          <span>{connection.terminalIds.length} Terminals</span>
         </div>
         <div className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3" />
@@ -106,19 +106,19 @@ const ConnectionCard: React.FC<{
         </div>
         <div className="flex items-center gap-1">
           <GitFork className="h-3 w-3" />
-          <span>{connection.forwardIds.length} 转发</span>
+          <span>{connection.forwardIds.length} Forwards</span>
         </div>
       </div>
       
-      {/* 时间信息 */}
+      {/* Time Info */}
       <div className="flex items-center justify-between text-xs text-zinc-500">
         <div className="flex items-center gap-1">
           <Clock className="h-3 w-3" />
-          <span>创建: {formatTime(connection.createdAt)}</span>
+          <span>Created: {formatTime(connection.createdAt)}</span>
         </div>
         {isIdle && (
           <span className="text-amber-400">
-            空闲中 - {connection.keepAlive ? '保活' : '30分钟后断开'}
+            Idle - {connection.keepAlive ? 'Keep Alive' : 'Disconnect in 30m'}
           </span>
         )}
       </div>
@@ -126,7 +126,7 @@ const ConnectionCard: React.FC<{
   );
 };
 
-// 连接管理面板主组件
+// Connection Management Panel Main Component
 export const ConnectionsPanel: React.FC = () => {
   const { 
     connections, 
@@ -136,7 +136,7 @@ export const ConnectionsPanel: React.FC = () => {
   
   const [loading, setLoading] = React.useState(false);
   
-  // 加载连接列表
+  // Load connection list
   useEffect(() => {
     refreshConnections();
   }, [refreshConnections]);
@@ -166,12 +166,12 @@ export const ConnectionsPanel: React.FC = () => {
   
   return (
     <div className="h-full flex flex-col">
-      {/* 头部 */}
+      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-theme-border">
         <div>
-          <h2 className="text-lg font-semibold">SSH 连接池</h2>
+          <h2 className="text-lg font-semibold">SSH Connection Pool</h2>
           <p className="text-xs text-zinc-500">
-            {activeCount} 活跃 · {idleCount} 空闲
+            {activeCount} Active · {idleCount} Idle
           </p>
         </div>
         <Button
@@ -184,13 +184,13 @@ export const ConnectionsPanel: React.FC = () => {
         </Button>
       </div>
       
-      {/* 连接列表 */}
+      {/* Connection List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {connectionList.length === 0 ? (
           <div className="text-center text-zinc-500 py-8">
             <Server className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>没有活跃的 SSH 连接</p>
-            <p className="text-xs mt-1">创建新连接后会在这里显示</p>
+            <p>No active SSH connections</p>
+            <p className="text-xs mt-1">New connections will appear here</p>
           </div>
         ) : (
           connectionList.map(conn => (
@@ -203,15 +203,15 @@ export const ConnectionsPanel: React.FC = () => {
         )}
       </div>
       
-      {/* 底部说明 */}
+      {/* Footer Instructions */}
       <div className="p-3 border-t border-theme-border bg-theme-bg text-xs text-zinc-500">
         <div className="flex items-center gap-2">
           <Shield className="h-3.5 w-3.5 text-green-400" />
-          <span>保活：连接将永远保持</span>
+          <span>Keep Alive: Connection persists indefinitely</span>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <ShieldOff className="h-3.5 w-3.5 text-zinc-500" />
-          <span>非保活：空闲 30 分钟后自动断开</span>
+          <span>Standard: Auto-disconnect after 30 mins idle</span>
         </div>
       </div>
     </div>

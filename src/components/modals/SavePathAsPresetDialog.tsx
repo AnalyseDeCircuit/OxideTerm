@@ -1,8 +1,8 @@
 /**
  * Save Path As Preset Dialog
  * 
- * 将动态钻入路径（模式3）保存为预设连接（模式1）
- * 遍历从根节点到目标节点的完整路径，构建 proxy_chain
+ * Save dynamic drill-down path (Mode 3) as preset connection (Mode 1)
+ * Iterate through the full path from root to target to build proxy_chain
  */
 
 import React, { useState, useMemo } from 'react';
@@ -29,7 +29,7 @@ export const SavePathAsPresetDialog: React.FC<SavePathAsPresetDialogProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 构建从根到目标节点的路径
+  // Build path from root to target node
   const pathNodes = useMemo(() => {
     const path: FlatNode[] = [];
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
@@ -43,10 +43,10 @@ export const SavePathAsPresetDialog: React.FC<SavePathAsPresetDialogProps> = ({
     return path;
   }, [targetNodeId, nodes]);
 
-  // 目标节点
+  // Target Node
   const targetNode = pathNodes[pathNodes.length - 1];
 
-  // 默认名称
+  // Default Name
   const defaultName = useMemo(() => {
     if (!targetNode) return '';
     return targetNode.displayName || `${targetNode.username}@${targetNode.host}`;
