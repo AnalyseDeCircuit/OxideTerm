@@ -533,7 +533,7 @@ export interface IncompleteTransferInfo {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * 节点状态
+ * 节点状态 (原有类型，用于后端兼容)
  */
 export type TreeNodeState = 
   | { status: 'pending' }
@@ -541,6 +541,50 @@ export type TreeNodeState =
   | { status: 'connected' }
   | { status: 'disconnected' }
   | { status: 'failed'; error: string };
+
+/**
+ * 统一节点状态 (前端扩展)
+ * NodeState = f(ConnectionStatus, TerminalSessionCount)
+ */
+export type UnifiedNodeStatus = 
+  | 'idle'         // 灰色 - 未连接
+  | 'connecting'   // 蓝色脉冲 - 正在连接
+  | 'connected'    // 绿色空心 - 已连接无终端
+  | 'active'       // 绿色实心 - 已连接有终端
+  | 'link-down'    // 橙色 - 父节点断开
+  | 'error';       // 红色 - 连接失败
+
+/**
+ * 节点运行时状态 (非持久化)
+ * 作为 Single Source of Truth 的核心数据结构
+ */
+export interface NodeRuntimeState {
+  /** 临时挂载的 SSH 连接句柄 (后端生成) */
+  connectionId: string | null;
+  /** 计算后的统一状态 */
+  status: UnifiedNodeStatus;
+  /** 关联的终端会话ID列表 */
+  terminalIds: string[];
+  /** SFTP 会话ID */
+  sftpSessionId: string | null;
+  /** 错误信息 */
+  errorMessage?: string;
+  /** 上次连接时间 */
+  lastConnectedAt?: number;
+}
+
+/**
+ * 扩展的 FlatNode - 包含运行时状态
+ * 用于 UI 渲染的完整节点信息
+ */
+export interface UnifiedFlatNode extends FlatNode {
+  /** 运行时状态 (前端管理) */
+  runtime: NodeRuntimeState;
+  /** 是否展开 */
+  isExpanded: boolean;
+  /** 连接线指示器 */
+  lineGuides: boolean[];
+}
 
 /**
  * 节点来源类型

@@ -219,7 +219,13 @@ pub struct ConnectionEntry {
 impl ConnectionEntry {
     /// 增加引用计数
     pub fn add_ref(&self) -> u32 {
-        let count = self.ref_count.fetch_add(1, Ordering::SeqCst) + 1;
+        let current = self.ref_count.load(Ordering::SeqCst);
+        // 防止溢出
+        if current >= u32::MAX - 1 {
+            warn!("Connection {} ref count at maximum, not incrementing", self.id);
+            return current;
+        }
+        let count = self.ref_count.fetch_add(1, Ordering::SeqCst).saturating_add(1);
         debug!("Connection {} ref count increased to {}", self.id, count);
         self.update_activity();
         count
@@ -227,6 +233,12 @@ impl ConnectionEntry {
 
     /// 减少引用计数
     pub fn release(&self) -> u32 {
+        let current = self.ref_count.load(Ordering::SeqCst);
+        // 防止下溢
+        if current == 0 {
+            warn!("Connection {} ref count already 0, not decrementing", self.id);
+            return 0;
+        }
         let prev = self.ref_count.fetch_sub(1, Ordering::SeqCst);
         let count = prev.saturating_sub(1);
         debug!("Connection {} ref count decreased to {}", self.id, count);
