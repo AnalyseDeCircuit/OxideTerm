@@ -409,36 +409,6 @@ export interface HealthMetrics {
 
 export type HealthStatus = 'Healthy' | 'Degraded' | 'Unresponsive' | 'Disconnected' | 'Unknown';
 
-// Reconnection Event Types (from Tauri backend)
-export interface SessionDisconnectedPayload {
-  session_id: string;
-  reason: string;
-  recoverable: boolean; // Whether auto-reconnect will be attempted
-}
-
-export interface SessionReconnectingPayload {
-  session_id: string;
-  attempt: number;
-  max_attempts: number;
-  delay_ms: number;
-  next_attempt_at?: number; // Unix timestamp in milliseconds
-}
-
-export interface SessionReconnectedPayload {
-  session_id: string;
-  attempt: number;
-}
-
-export interface SessionReconnectFailedPayload {
-  session_id: string;
-  total_attempts: number;
-  error: string;
-}
-
-export interface SessionReconnectCancelledPayload {
-  session_id: string;
-}
-
 // SSH Types
 export interface SshHostInfo {
     alias: string;

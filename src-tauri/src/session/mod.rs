@@ -24,10 +24,7 @@ pub mod types;
 
 pub use auth::{load_private_key, KeyAuth};
 pub use auto_reconnect::AutoReconnectService;
-pub use events::{
-    event_names, NetworkStatusPayload, SessionDisconnectedPayload, SessionReconnectFailedPayload,
-    SessionReconnectedPayload, SessionReconnectingPayload,
-};
+pub use events::{event_names, NetworkStatusPayload};
 pub use health::{HealthMetrics, HealthStatus, HealthThresholds, HealthTracker, QuickHealthCheck};
 pub use parser::{parse_terminal_output, parse_terminal_output_simple, BatchParser};
 pub use reconnect::{

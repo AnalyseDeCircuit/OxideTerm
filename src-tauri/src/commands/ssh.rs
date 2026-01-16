@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use tokio::time::timeout;
 use tracing::{info, warn};
 
@@ -22,7 +22,6 @@ use super::ForwardingRegistry;
 use crate::bridge::{BridgeManager, WsBridge};
 use crate::forwarding::ForwardingManager;
 use crate::session::{
-    events::{event_names, SessionDisconnectedPayload},
     AuthMethod, KeyAuth, SessionConfig, SessionInfo, SessionRegistry,
 };
 use crate::sftp::session::SftpRegistry;
@@ -299,7 +298,7 @@ pub struct CreateTerminalResponse {
 /// 为已有 SSH 连接创建终端
 #[tauri::command]
 pub async fn create_terminal(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     request: CreateTerminalRequest,
     connection_registry: State<'_, Arc<SshConnectionRegistry>>,
     session_registry: State<'_, Arc<SessionRegistry>>,
@@ -489,33 +488,17 @@ pub async fn create_terminal(
                 format!("Failed to start WebSocket bridge: {}", e)
             })?;
 
-    // 处理断开事件
-    let app_handle_clone = app_handle.clone();
+    // 处理 WebSocket 断开事件
+    // Note: connection_status_changed events are emitted by heartbeat monitoring
+    // Important: 不要在这里移除 terminal_id 或释放连接，因为重连时需要这些信息
     let session_id_clone = session_id.clone();
-    let connection_id_clone = request.connection_id.clone();
     let registry_clone = session_registry.inner().clone();
-    let conn_registry_clone = connection_registry.inner().clone();
     tokio::spawn(async move {
         if let Ok(reason) = disconnect_rx.await {
-            warn!("Session {} disconnected: {:?}", session_id_clone, reason);
-            // 更新 registry 状态
+            warn!("Session {} WebSocket bridge disconnected: {:?}", session_id_clone, reason);
+            // 只更新 session registry 状态，不移除终端关联
+            // 终端关联由 close_terminal 命令显式移除
             let _ = registry_clone.disconnect_complete(&session_id_clone, false);
-
-            // 释放连接引用
-            let _ = conn_registry_clone.release(&connection_id_clone).await;
-
-            // 从连接中移除终端关联
-            let _ = conn_registry_clone
-                .remove_terminal(&connection_id_clone, &session_id_clone)
-                .await;
-
-            // 发送断开事件到前端
-            let payload = SessionDisconnectedPayload {
-                session_id: session_id_clone.clone(),
-                reason: reason.description(),
-                recoverable: reason.is_recoverable(),
-            };
-            let _ = app_handle_clone.emit(event_names::SESSION_DISCONNECTED, &payload);
         }
     });
 
@@ -631,7 +614,7 @@ pub async fn close_terminal(
 /// 这会创建新的 shell channel 和 WebSocket bridge，并返回新的 ws_url 和 ws_token。
 #[tauri::command]
 pub async fn recreate_terminal_pty(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     session_id: String,
     connection_registry: State<'_, Arc<SshConnectionRegistry>>,
     session_registry: State<'_, Arc<SessionRegistry>>,
@@ -752,27 +735,16 @@ pub async fn recreate_terminal_pty(
             .await
             .map_err(|e| format!("Failed to start WebSocket bridge: {}", e))?;
 
-    // 处理断开事件
-    let app_handle_clone = app_handle.clone();
+    // 处理 WebSocket 断开事件
+    // Note: connection_status_changed events are emitted by heartbeat monitoring
+    // Important: 不要在这里移除 terminal_id 或释放连接，因为重连时需要这些信息
     let session_id_clone = session_id.clone();
-    let connection_id_clone = connection_id.clone();
     let registry_clone = session_registry.inner().clone();
-    let conn_registry_clone = connection_registry.inner().clone();
     tokio::spawn(async move {
         if let Ok(reason) = disconnect_rx.await {
-            warn!("Recreated session {} disconnected: {:?}", session_id_clone, reason);
+            warn!("Recreated session {} WebSocket bridge disconnected: {:?}", session_id_clone, reason);
+            // 只更新 session registry 状态，不移除终端关联
             let _ = registry_clone.disconnect_complete(&session_id_clone, false);
-            let _ = conn_registry_clone.release(&connection_id_clone).await;
-            let _ = conn_registry_clone
-                .remove_terminal(&connection_id_clone, &session_id_clone)
-                .await;
-
-            let payload = SessionDisconnectedPayload {
-                session_id: session_id_clone.clone(),
-                reason: reason.description(),
-                recoverable: reason.is_recoverable(),
-            };
-            let _ = app_handle_clone.emit(event_names::SESSION_DISCONNECTED, &payload);
         }
     });
 

@@ -191,6 +191,27 @@ export const api = {
     return invoke('close_terminal', { sessionId });
   },
 
+  /**
+   * Recreate terminal PTY after connection reconnect
+   * Returns new WebSocket URL and token for the existing session
+   */
+  recreateTerminalPty: async (sessionId: string): Promise<{
+    sessionId: string;
+    wsUrl: string;
+    port: number;
+    wsToken: string;
+  }> => {
+    if (USE_MOCK) {
+      return {
+        sessionId,
+        wsUrl: 'ws://localhost:9999',
+        port: 9999,
+        wsToken: 'mock-token-refreshed',
+      };
+    }
+    return invoke('recreate_terminal_pty', { sessionId });
+  },
+
   // ============ Session Persistence ============
   restoreSessions: async (): Promise<PersistedSessionInfo[]> => {
     if (USE_MOCK) return [];

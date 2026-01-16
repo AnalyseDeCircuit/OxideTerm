@@ -43,6 +43,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
+
 use super::handle_owner::HandleController;
 use super::{AuthMethod as SshAuthMethod, SshClient, SshConfig};
 use crate::session::{AuthMethod, SessionConfig};
@@ -1538,6 +1539,14 @@ impl SshConnectionRegistry {
                     attempt_id
                 );
 
+                // 发送重连进度事件
+                registry.emit_reconnect_progress(
+                    &connection_id,
+                    attempt,
+                    if is_pinned { None } else { Some(max_attempts) },
+                    delay.as_millis() as u64,
+                ).await;
+
                 // 等待延迟（首次 200ms，后续指数退避）
                 tokio::time::sleep(delay).await;
 
@@ -1593,6 +1602,9 @@ impl SshConnectionRegistry {
 
                         // 重新启动心跳
                         registry.start_heartbeat(&connection_id);
+
+                        // 🔴 新增：触发子连接级联重连
+                        registry.cascade_reconnect_children(&connection_id).await;
 
                         break;
                     }
@@ -1828,6 +1840,27 @@ impl SshConnectionRegistry {
     /// # AppHandle 生命周期
     /// 如果 AppHandle 未就绪，事件会被缓存，待 AppHandle 设置后立即发送
     async fn emit_connection_status_changed(&self, connection_id: &str, status: &str) {
+        // 对于 link_down 状态，使用带子连接的版本
+        if status == "link_down" {
+            let affected_children = self.collect_all_children(connection_id);
+            self.emit_connection_status_changed_with_children(connection_id, status, affected_children).await;
+            return;
+        }
+        
+        // 其他状态使用空的 affected_children
+        self.emit_connection_status_changed_with_children(connection_id, status, vec![]).await;
+    }
+
+    /// 广播连接状态变更事件（带受影响的子连接列表）
+    /// 
+    /// # 状态守卫
+    /// 只有当状态真正变化时才发送事件，避免重复发送相同状态导致前端性能问题
+    async fn emit_connection_status_changed_with_children(
+        &self, 
+        connection_id: &str, 
+        status: &str,
+        affected_children: Vec<String>,
+    ) {
         // === 状态守卫：检查是否需要发送 ===
         if let Some(entry) = self.connections.get(connection_id) {
             let conn = entry.value();
@@ -1854,11 +1887,18 @@ impl SshConnectionRegistry {
             struct ConnectionStatusEvent {
                 connection_id: String,
                 status: String,
+                affected_children: Vec<String>,
+                timestamp: u64,
             }
 
             let event = ConnectionStatusEvent {
                 connection_id: connection_id.to_string(),
                 status: status.to_string(),
+                affected_children,
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
             };
 
             if let Err(e) = handle.emit("connection_status_changed", event) {
@@ -1941,6 +1981,169 @@ impl SshConnectionRegistry {
                 error!("Failed to emit connection_reconnected: {}", e);
             } else {
                 info!("Emitted connection_reconnected for {}", connection_id);
+            }
+        }
+    }
+
+    /// 广播重连进度事件（让前端显示重连进度）
+    async fn emit_reconnect_progress(
+        &self,
+        connection_id: &str,
+        attempt: u32,
+        max_attempts: Option<u32>,
+        next_retry_ms: u64,
+    ) {
+        let app_handle = self.app_handle.read().await;
+        if let Some(handle) = app_handle.as_ref() {
+            use tauri::Emitter;
+            
+            #[derive(Clone, serde::Serialize)]
+            struct ConnectionReconnectProgressEvent {
+                connection_id: String,
+                attempt: u32,
+                max_attempts: Option<u32>,
+                next_retry_ms: u64,
+                timestamp: u64,
+            }
+
+            let event = ConnectionReconnectProgressEvent {
+                connection_id: connection_id.to_string(),
+                attempt,
+                max_attempts,
+                next_retry_ms,
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            };
+
+            if let Err(e) = handle.emit("connection_reconnect_progress", event) {
+                error!("Failed to emit connection_reconnect_progress: {}", e);
+            } else {
+                debug!("Emitted reconnect progress for {}: attempt {}", connection_id, attempt);
+            }
+        }
+    }
+
+    /// 收集所有后代连接（递归）
+    /// 用于级联传播 link-down 状态
+    fn collect_all_children(&self, connection_id: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        let mut stack = vec![connection_id.to_string()];
+        
+        while let Some(current_id) = stack.pop() {
+            for entry in self.connections.iter() {
+                if entry.value().parent_connection_id.as_deref() == Some(&current_id) {
+                    let child_id = entry.key().clone();
+                    result.push(child_id.clone());
+                    stack.push(child_id);
+                }
+            }
+        }
+        
+        result
+    }
+
+    /// 父连接恢复后触发子连接级联重连
+    /// 
+    /// # Jitter 抖动
+    /// 使用 50-200ms 随机延迟防止重连风暴（Reconnect Storm）
+    async fn cascade_reconnect_children(self: &Arc<Self>, parent_connection_id: &str) {
+        // 收集处于 LinkDown 状态的直接子连接
+        let children: Vec<String> = self.connections.iter()
+            .filter(|e| e.value().parent_connection_id.as_deref() == Some(parent_connection_id))
+            .filter(|e| {
+                // 只处理 LinkDown 状态的子连接
+                // 使用 try_read 避免死锁，如果读取失败则跳过
+                if let Ok(guard) = e.value().state.try_read() {
+                    *guard == ConnectionState::LinkDown
+                } else {
+                    false
+                }
+            })
+            .map(|e| e.key().clone())
+            .collect();
+        
+        if children.is_empty() {
+            return;
+        }
+        
+        info!("Starting cascade reconnect for {} children of {}", children.len(), parent_connection_id);
+        
+        for child_id in children {
+            let registry = Arc::clone(self);
+            let child_id_clone = child_id.clone();
+            
+            tokio::spawn(async move {
+                // 🔴 关键：随机抖动防止重连风暴
+                let jitter = rand::random::<u64>() % 150 + 50; // 50-200ms
+                tokio::time::sleep(Duration::from_millis(jitter)).await;
+                
+                info!("Cascade reconnecting child {} (jitter: {}ms)", child_id_clone, jitter);
+                
+                // 尝试级联重连
+                if let Err(e) = registry.try_cascade_reconnect_single(&child_id_clone).await {
+                    warn!("Cascade reconnect failed for {}: {}", child_id_clone, e);
+                }
+            });
+        }
+    }
+
+    /// 单个子连接的级联重连
+    async fn try_cascade_reconnect_single(&self, connection_id: &str) -> Result<(), String> {
+        let entry = self.connections.get(connection_id)
+            .ok_or_else(|| format!("Connection {} not found", connection_id))?;
+        
+        let conn = entry.value().clone();
+        let config = conn.config.clone();
+        let parent_id = conn.parent_connection_id.clone()
+            .ok_or_else(|| "Not a tunneled connection".to_string())?;
+        drop(entry);
+        
+        // 检查父连接状态
+        let parent_entry = self.connections.get(&parent_id)
+            .ok_or_else(|| format!("Parent connection {} not found", parent_id))?;
+        let parent_state = parent_entry.value().state().await;
+        if parent_state != ConnectionState::Active {
+            return Err(format!("Parent {} is not active: {:?}", parent_id, parent_state));
+        }
+        drop(parent_entry);
+        
+        // 更新状态为重连中
+        conn.set_state(ConnectionState::Reconnecting).await;
+        self.emit_connection_status_changed(connection_id, "reconnecting").await;
+        
+        // 通过父连接重建隧道
+        match self.try_reconnect(connection_id, &config).await {
+            Ok(new_controller) => {
+                info!("Cascade reconnect successful for {}", connection_id);
+                
+                // 获取关联资源
+                let terminal_ids = conn.terminal_ids().await;
+                let forward_ids = conn.forward_ids().await;
+                
+                // 重置状态
+                conn.reset_heartbeat_failures();
+                conn.reset_reconnect_state();
+                conn.set_state(ConnectionState::Active).await;
+                
+                // 替换 HandleController
+                self.replace_handle_controller(connection_id, new_controller).await;
+                
+                // 发送事件
+                self.emit_connection_reconnected(connection_id, terminal_ids, forward_ids).await;
+                self.emit_connection_status_changed(connection_id, "connected").await;
+                
+                // 注意：心跳由 on_reconnect_success 统一启动
+                // 子连接的级联重连由 cascade_reconnect_children 递归处理
+                
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Cascade reconnect failed for {}: {}", connection_id, e);
+                // 保持 LinkDown 状态，等待下次机会
+                conn.set_state(ConnectionState::LinkDown).await;
+                Err(e)
             }
         }
     }

@@ -1,21 +1,18 @@
 //! Auto Reconnect Service
 //!
 //! Provides automatic reconnection for SSH sessions when connections drop.
-//! Integrates with Tauri events to notify the frontend of reconnection progress.
+//! Note: The primary reconnection mechanism is now in SshConnectionRegistry via heartbeat.
+//! This service provides supplementary network status management.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use parking_lot::RwLock;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tracing::{error, info, warn};
 
-use super::events::{
-    event_names, SessionDisconnectedPayload, SessionReconnectCancelledPayload,
-    SessionReconnectFailedPayload, SessionReconnectedPayload, SessionReconnectingPayload,
-};
 use super::reconnect::{ReconnectConfig, ReconnectError};
 use super::registry::SessionRegistry;
 use super::types::SessionConfig;
@@ -29,7 +26,8 @@ pub struct AutoReconnectService {
     registry: Arc<SessionRegistry>,
     /// Forwarding registry for restoring port forwards after reconnection
     forwarding_registry: Arc<ForwardingRegistry>,
-    /// Tauri app handle for emitting events
+    /// Tauri app handle (kept for potential future use)
+    #[allow(dead_code)]
     app_handle: AppHandle,
     /// Active reconnection tasks (session_id -> cancel flag)
     active_reconnects: RwLock<HashMap<String, Arc<AtomicBool>>>,
@@ -62,6 +60,7 @@ impl AutoReconnectService {
     }
 
     /// Trigger reconnection for a disconnected session
+    /// Note: Frontend events are now handled by connection_status_changed in SshConnectionRegistry
     pub async fn trigger_reconnect(
         self: &Arc<Self>,
         session_id: String,
@@ -77,15 +76,10 @@ impl AutoReconnectService {
             return;
         }
 
-        // Emit disconnected event
-        let payload = SessionDisconnectedPayload {
-            session_id: session_id.clone(),
-            reason: reason.clone(),
-            recoverable,
-        };
-        let _ = self
-            .app_handle
-            .emit(event_names::SESSION_DISCONNECTED, &payload);
+        info!(
+            "Session {} disconnect triggered: reason={}, recoverable={}",
+            session_id, reason, recoverable
+        );
 
         if !recoverable {
             info!(
@@ -140,6 +134,7 @@ impl AutoReconnectService {
     }
 
     /// Run the reconnection loop with exponential backoff
+    /// Note: Frontend events are now handled by connection_status_changed in SshConnectionRegistry
     async fn run_reconnect_loop(
         &self,
         session_id: &str,
@@ -153,12 +148,7 @@ impl AutoReconnectService {
         for attempt in 1..=max_attempts {
             // Check cancel flag
             if cancel_flag.load(Ordering::SeqCst) {
-                let payload = SessionReconnectCancelledPayload {
-                    session_id: session_id.to_string(),
-                };
-                let _ = self
-                    .app_handle
-                    .emit(event_names::SESSION_RECONNECT_CANCELLED, &payload);
+                info!("Session {}: reconnection cancelled by user", session_id);
                 return Err(ReconnectError::Cancelled);
             }
 
@@ -169,24 +159,6 @@ impl AutoReconnectService {
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
-
-            // Calculate next attempt timestamp
-            let next_attempt_at = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64 + current_delay)
-                .ok();
-
-            // Emit reconnecting event
-            let payload = SessionReconnectingPayload {
-                session_id: session_id.to_string(),
-                attempt,
-                max_attempts,
-                delay_ms: current_delay,
-                next_attempt_at,
-            };
-            let _ = self
-                .app_handle
-                .emit(event_names::SESSION_RECONNECTING, &payload);
 
             info!(
                 "Session {}: reconnect attempt {}/{} in {}ms",
@@ -215,15 +187,6 @@ impl AutoReconnectService {
             // Attempt reconnection
             match self.try_reconnect(session_id, &config).await {
                 Ok(()) => {
-                    // Success!
-                    let payload = SessionReconnectedPayload {
-                        session_id: session_id.to_string(),
-                        attempt,
-                    };
-                    let _ = self
-                        .app_handle
-                        .emit(event_names::SESSION_RECONNECTED, &payload);
-
                     info!(
                         "Session {}: reconnected successfully on attempt {}",
                         session_id, attempt
@@ -244,14 +207,10 @@ impl AutoReconnectService {
         }
 
         // All attempts exhausted
-        let payload = SessionReconnectFailedPayload {
-            session_id: session_id.to_string(),
-            total_attempts: max_attempts,
-            error: "All reconnection attempts exhausted".to_string(),
-        };
-        let _ = self
-            .app_handle
-            .emit(event_names::SESSION_RECONNECT_FAILED, &payload);
+        error!(
+            "Session {}: all {} reconnection attempts exhausted",
+            session_id, max_attempts
+        );
 
         Err(ReconnectError::MaxAttemptsReached(max_attempts))
     }

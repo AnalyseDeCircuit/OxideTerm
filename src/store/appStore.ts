@@ -7,20 +7,10 @@ import {
   TabType,
   SessionState,
   ConnectionInfo,
-  SessionDisconnectedPayload,
-  SessionReconnectingPayload,
-  SessionReconnectedPayload,
-  SessionReconnectFailedPayload,
-  SessionReconnectCancelledPayload,
   SshConnectionInfo,
   SshConnectionState,
   SshConnectRequest,
 } from '../types';
-
-// 重连 UI 防抖定时器（避免瞬时断网恢复时 overlay 闪烁）
-// 设计：收到 reconnecting 事件后延迟 1.5s 再显示 overlay，期间恢复则跳过
-const RECONNECT_OVERLAY_DELAY_MS = 1500;
-const reconnectDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 interface ModalsState {
   newConnection: boolean;
@@ -64,13 +54,6 @@ interface AppStore {
   closeTerminalSession: (sessionId: string) => Promise<void>;
   refreshConnections: () => Promise<void>;
   setConnectionKeepAlive: (connectionId: string, keepAlive: boolean) => Promise<void>;
-  
-  // Actions - Reconnect Events (internal)
-  _handleSessionDisconnected: (payload: SessionDisconnectedPayload) => void;
-  _handleSessionReconnecting: (payload: SessionReconnectingPayload) => void;
-  _handleSessionReconnected: (payload: SessionReconnectedPayload) => void;
-  _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => void;
-  _handleSessionReconnectCancelled: (payload: SessionReconnectCancelledPayload) => void;
   
   // Actions - Network
   setNetworkOnline: (online: boolean) => void;
@@ -524,169 +507,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
   },
 
-  // Internal event handlers for Tauri events
-  _handleSessionDisconnected: (payload: SessionDisconnectedPayload) => {
-    console.log('Session disconnected:', payload);
-    set((s) => {
-      const session = s.sessions.get(payload.session_id);
-      if (!session) return {};
-      
-      const newSessions = new Map(s.sessions);
-      newSessions.set(payload.session_id, {
-        ...session,
-        state: payload.recoverable ? 'reconnecting' : 'disconnected',
-        error: payload.reason,
-        reconnectAttempt: payload.recoverable ? 0 : undefined,
-      });
-      return { sessions: newSessions };
-    });
-  },
-
-  _handleSessionReconnecting: (payload: SessionReconnectingPayload) => {
-    console.log('Session reconnecting:', payload);
-    
-    // 防抖：延迟显示 reconnecting overlay，避免瞬时恢复时闪烁
-    // 如果已有定时器（之前的重连尝试），先清除
-    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-    
-    // 延迟 1.5s 后再更新状态（如果期间恢复，定时器会被取消）
-    const timer = setTimeout(() => {
-      reconnectDebounceTimers.delete(payload.session_id);
-      
-      set((s) => {
-        const session = s.sessions.get(payload.session_id);
-        if (!session) return {};
-        
-        // 如果已经恢复了，不要再设置 reconnecting 状态
-        if (session.state === 'connected') {
-          console.log('Session already reconnected, skipping overlay update');
-          return {};
-        }
-        
-        const newSessions = new Map(s.sessions);
-        newSessions.set(payload.session_id, {
-          ...session,
-          state: 'reconnecting',
-          reconnectAttempt: payload.attempt,
-          reconnectMaxAttempts: payload.max_attempts,
-          reconnectNextRetry: payload.next_attempt_at,
-        });
-        return { sessions: newSessions };
-      });
-    }, RECONNECT_OVERLAY_DELAY_MS);
-    
-    reconnectDebounceTimers.set(payload.session_id, timer);
-  },
-
-  _handleSessionReconnected: async (payload: SessionReconnectedPayload) => {
-    console.log('Session reconnected:', payload);
-    
-    // 取消防抖定时器（如果存在），立即更新状态为 connected
-    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      reconnectDebounceTimers.delete(payload.session_id);
-      console.log('Reconnect debounce timer cancelled - fast recovery');
-    }
-    
-    // Fetch updated session info to get new ws_url and ws_token
-    try {
-      const updatedSession = await api.getSession(payload.session_id);
-      console.log('Fetched updated session info after reconnect:', updatedSession);
-      
-      set((s) => {
-        const session = s.sessions.get(payload.session_id);
-        if (!session) return {};
-        
-        const newSessions = new Map(s.sessions);
-        newSessions.set(payload.session_id, {
-          ...session,
-          state: 'connected',
-          ws_url: updatedSession.ws_url,
-          ws_token: updatedSession.ws_token,
-          error: undefined,
-          reconnectAttempt: undefined,
-          reconnectMaxAttempts: undefined,
-          reconnectNextRetry: undefined,
-        });
-        return { sessions: newSessions };
-      });
-    } catch (error) {
-      console.error('Failed to fetch updated session after reconnect:', error);
-      // Still update the state even if we couldn't fetch new info
-      set((s) => {
-        const session = s.sessions.get(payload.session_id);
-        if (!session) return {};
-        
-        const newSessions = new Map(s.sessions);
-        newSessions.set(payload.session_id, {
-          ...session,
-          state: 'connected',
-          error: undefined,
-          reconnectAttempt: undefined,
-          reconnectMaxAttempts: undefined,
-          reconnectNextRetry: undefined,
-        });
-        return { sessions: newSessions };
-      });
-    }
-  },
-
-  _handleSessionReconnectFailed: (payload: SessionReconnectFailedPayload) => {
-    console.log('Session reconnect failed:', payload);
-    
-    // 清除防抖定时器
-    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      reconnectDebounceTimers.delete(payload.session_id);
-    }
-    
-    set((s) => {
-      const session = s.sessions.get(payload.session_id);
-      if (!session) return {};
-      
-      const newSessions = new Map(s.sessions);
-      newSessions.set(payload.session_id, {
-        ...session,
-        state: 'error',
-        error: `Reconnect failed after ${payload.total_attempts} attempts: ${payload.error}`,
-        reconnectAttempt: undefined,
-        reconnectMaxAttempts: undefined,
-        reconnectNextRetry: undefined,
-      });
-      return { sessions: newSessions };
-    });
-  },
-
-  _handleSessionReconnectCancelled: (payload: SessionReconnectCancelledPayload) => {
-    console.log('Session reconnect cancelled:', payload);
-    
-    // 清除防抖定时器
-    const existingTimer = reconnectDebounceTimers.get(payload.session_id);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      reconnectDebounceTimers.delete(payload.session_id);
-    }
-    
-    set((s) => {
-      const session = s.sessions.get(payload.session_id);
-      if (!session) return {};
-      
-      const newSessions = new Map(s.sessions);
-      newSessions.set(payload.session_id, {
-        ...session,
-        state: 'disconnected',
-        reconnectAttempt: undefined,
-        reconnectMaxAttempts: undefined,
-        reconnectNextRetry: undefined,
-      });
-      return { sessions: newSessions };
-    });
-  },
+  // 旧的 session_* 事件处理函数已废弃
+  // 现在由 useConnectionEvents 统一处理 connection_* 事件
 
   setNetworkOnline: (online: boolean) => {
     set({ networkOnline: online });

@@ -12,6 +12,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { api } from '../lib/api';
+import { topologyResolver } from '../lib/topologyResolver';
 import type { 
   FlatNode, 
   SessionTreeSummary,
@@ -23,6 +24,17 @@ import type {
   NodeRuntimeState,
   TreeNodeState,
 } from '../types';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/** 重连进度信息 */
+export interface ReconnectProgress {
+  attempt: number;
+  maxAttempts: number | null;
+  nextRetryMs?: number;
+}
 
 // ============================================================================
 // Helper Functions
@@ -83,6 +95,8 @@ interface SessionTreeStore {
   terminalNodeMap: Map<string, string>;
   /** 链路断开的节点 ID 集合 */
   linkDownNodeIds: Set<string>;
+  /** 重连进度 (nodeId -> ReconnectProgress) */
+  reconnectProgress: Map<string, ReconnectProgress>;
   
   // ========== Data Actions ==========
   fetchTree: () => Promise<void>;
@@ -127,9 +141,14 @@ interface SessionTreeStore {
   /** 设置节点 SFTP (向后端同步) */
   setNodeSftp: (nodeId: string, sessionId: string) => Promise<void>;
   /** 标记节点为 link-down (级联) */
+  /** 标记节点为 link-down (级联) */
   markLinkDown: (nodeId: string) => void;
+  /** 批量标记节点为 link-down */
+  markLinkDownBatch: (nodeIds: string[]) => void;
   /** 清除 link-down 标记 */
   clearLinkDown: (nodeId: string) => void;
+  /** 设置重连进度 */
+  setReconnectProgress: (nodeId: string, progress: ReconnectProgress | null) => void;
   
   // ========== UI Actions ==========
   selectNode: (nodeId: string | null) => void;
@@ -163,6 +182,7 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     nodeTerminalMap: new Map<string, string[]>(),
     terminalNodeMap: new Map<string, string>(),
     linkDownNodeIds: new Set<string>(),
+    reconnectProgress: new Map<string, ReconnectProgress>(),
     
     // ========== Data Actions ==========
     
@@ -308,6 +328,11 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
           set({ selectedNodeId: null });
         }
         
+        // 🔴 清理拓扑映射（在 API 调用前）
+        for (const node of nodesToRemove) {
+          topologyResolver.unregister(node.id);
+        }
+        
         const removedIds = await api.removeTreeNode(nodeId);
         await get().fetchTree();
         
@@ -366,6 +391,21 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         
         // 更新连接 ID
         await api.setTreeNodeConnection(nodeId, response.sshConnectionId);
+        
+        // 🔴 注册连接映射 (connectionId -> nodeId)
+        topologyResolver.register(response.sshConnectionId, nodeId);
+        
+        // 连接成功后，清除该节点及其所有子节点的 link-down 标记
+        // 因为父节点已恢复连接，子节点现在可以尝试连接了
+        const descendants = get().getDescendants(nodeId);
+        const allAffectedNodes = [node, ...descendants];
+        const { linkDownNodeIds } = get();
+        const newLinkDownIds = new Set(linkDownNodeIds);
+        for (const n of allAffectedNodes) {
+          newLinkDownIds.delete(n.id);
+        }
+        set({ linkDownNodeIds: newLinkDownIds });
+        
         await get().fetchTree();
       } catch (e) {
         // 失败时回滚到 failed 状态
@@ -408,7 +448,8 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         }
       }
       
-      // 4. 标记所有子节点为 link-down
+      // 4. 标记所有子节点为 link-down（表示链路断开，需要父节点先恢复才能连接）
+      // 注意：不标记父节点本身，只标记子节点
       const { linkDownNodeIds } = get();
       const newLinkDownIds = new Set(linkDownNodeIds);
       for (const child of descendants) {
@@ -416,14 +457,19 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       }
       set({ linkDownNodeIds: newLinkDownIds });
       
-      // 5. 调用后端断开节点（会递归断开子节点并更新状态）
+      // 5. 清理拓扑映射
+      for (const n of allAffectedNodes) {
+        topologyResolver.unregister(n.id);
+      }
+      
+      // 6. 调用后端断开节点（会递归断开子节点并更新状态）
       try {
         await api.disconnectTreeNode(nodeId);
       } catch (e) {
         console.error('Failed to disconnect tree node:', e);
       }
       
-      // 6. 刷新树状态
+      // 7. 刷新树状态
       await get().fetchTree();
     },
     
@@ -644,6 +690,20 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       get().rebuildUnifiedNodes();
     },
     
+    markLinkDownBatch: (nodeIds: string[]) => {
+      if (nodeIds.length === 0) return;
+      
+      const { linkDownNodeIds } = get();
+      const newLinkDownIds = new Set(linkDownNodeIds);
+      
+      for (const nodeId of nodeIds) {
+        newLinkDownIds.add(nodeId);
+      }
+      
+      set({ linkDownNodeIds: newLinkDownIds });
+      get().rebuildUnifiedNodes();
+    },
+    
     clearLinkDown: (nodeId: string) => {
       const { linkDownNodeIds, rawNodes } = get();
       const newLinkDownIds = new Set(linkDownNodeIds);
@@ -666,6 +726,19 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       
       set({ linkDownNodeIds: newLinkDownIds });
       get().rebuildUnifiedNodes();
+    },
+    
+    setReconnectProgress: (nodeId: string, progress: ReconnectProgress | null) => {
+      const { reconnectProgress } = get();
+      const newProgress = new Map(reconnectProgress);
+      
+      if (progress) {
+        newProgress.set(nodeId, progress);
+      } else {
+        newProgress.delete(nodeId);
+      }
+      
+      set({ reconnectProgress: newProgress });
     },
     
     // ========== UI Actions ==========

@@ -344,16 +344,77 @@ pub async fn set_tree_node_sftp(
 }
 
 /// 移除节点（递归移除所有子节点）
+/// 
+/// 此命令会：
+/// 1. 收集要移除的节点及其关联的 SSH 连接 ID
+/// 2. 断开所有关联的 SSH 连接（从 ConnectionRegistry 中移除）
+/// 3. 从会话树中移除节点
+/// 
+/// 这确保了节点删除后不会有残留的连接在 Registry 中继续运行心跳/重连
 #[tauri::command]
 pub async fn remove_tree_node(
     state: State<'_, Arc<SessionTreeState>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
     node_id: String,
 ) -> Result<Vec<String>, String> {
+    // 1. 收集要移除的节点及其 connection_id（先不从树中移除）
+    let nodes_to_remove: Vec<(String, Option<String>)> = {
+        let tree = state.tree.read().await;
+        
+        fn collect_subtree(
+            tree: &SessionTree, 
+            node_id: &str, 
+            result: &mut Vec<(String, Option<String>)>
+        ) {
+            if let Some(node) = tree.get_node(node_id) {
+                // 先处理子节点（自底向上的顺序收集）
+                for child_id in &node.children_ids {
+                    collect_subtree(tree, child_id, result);
+                }
+                // 最后处理自己
+                result.push((node_id.to_string(), node.ssh_connection_id.clone()));
+            }
+        }
+        
+        let mut nodes = Vec::new();
+        collect_subtree(&tree, &node_id, &mut nodes);
+        nodes
+    };
+    
+    if nodes_to_remove.is_empty() {
+        return Err(format!("Node not found: {}", node_id));
+    }
+    
+    // 2. 断开所有关联的 SSH 连接（自底向上，先断子连接再断父连接）
+    for (nid, ssh_id) in &nodes_to_remove {
+        if let Some(ssh_connection_id) = ssh_id {
+            tracing::info!(
+                "Disconnecting SSH connection {} for node {} before removal", 
+                ssh_connection_id, 
+                nid
+            );
+            if let Err(e) = connection_registry.disconnect(ssh_connection_id).await {
+                // 只记录警告，不中断删除流程（连接可能已经断开）
+                tracing::warn!(
+                    "Failed to disconnect SSH connection {} for node {}: {}", 
+                    ssh_connection_id, 
+                    nid, 
+                    e
+                );
+            }
+        }
+    }
+    
+    // 3. 从树中移除节点
     let mut tree = state.tree.write().await;
     let removed = tree.remove_node(&node_id)
         .map_err(|e| e.to_string())?;
     
-    tracing::info!("Removed {} nodes starting from {}", removed.len(), node_id);
+    tracing::info!(
+        "Removed {} nodes starting from {} (connections cleaned up)", 
+        removed.len(), 
+        node_id
+    );
     Ok(removed)
 }
 
