@@ -36,6 +36,26 @@ export interface ReconnectProgress {
   nextRetryMs?: number;
 }
 
+/** 状态漂移报告 */
+export interface StateDriftReport {
+  /** 检测到漂移的节点数 */
+  driftCount: number;
+  /** 修复的节点详情 */
+  fixed: Array<{
+    nodeId: string;
+    field: string;
+    localValue: unknown;
+    backendValue: unknown;
+  }>;
+  /** 同步耗时 (ms) */
+  syncDuration: number;
+  /** 同步时间戳 */
+  timestamp: number;
+}
+
+// 周期性同步定时器
+let syncIntervalId: ReturnType<typeof setInterval> | null = null;
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -114,6 +134,8 @@ interface SessionTreeStore {
   connectNode: (nodeId: string) => Promise<void>;
   /** 断开节点 (级联断开所有子节点) */
   disconnectNode: (nodeId: string) => Promise<void>;
+  /** 级联重连节点及其之前已连接的子节点 */
+  reconnectCascade: (nodeId: string, options?: { skipChildren?: boolean }) => Promise<string[]>;
   
   // ========== Terminal Management (新增) ==========
   /** 为节点创建新终端 */
@@ -149,6 +171,14 @@ interface SessionTreeStore {
   clearLinkDown: (nodeId: string) => void;
   /** 设置重连进度 */
   setReconnectProgress: (nodeId: string, progress: ReconnectProgress | null) => void;
+  
+  // ========== State Drift Detection ==========
+  /** 从后端同步状态并修复漂移 */
+  syncFromBackend: () => Promise<StateDriftReport>;
+  /** 启动周期性同步（默认 30s） */
+  startPeriodicSync: (intervalMs?: number) => void;
+  /** 停止周期性同步 */
+  stopPeriodicSync: () => void;
   
   // ========== UI Actions ==========
   selectNode: (nodeId: string | null) => void;
@@ -473,6 +503,65 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       await get().fetchTree();
     },
     
+    /**
+     * 级联重连节点及其之前已连接的子节点
+     * 
+     * @param nodeId 要重连的节点 ID
+     * @param options 配置选项
+     * @returns 成功重连的节点 ID 列表
+     */
+    reconnectCascade: async (nodeId: string, options?: { skipChildren?: boolean }) => {
+      const node = get().getNode(nodeId);
+      if (!node) throw new Error(`Node ${nodeId} not found`);
+      
+      const reconnected: string[] = [];
+      
+      // 1. 首先重连目标节点本身
+      try {
+        await get().connectNode(nodeId);
+        reconnected.push(nodeId);
+      } catch (e) {
+        console.error(`Failed to reconnect node ${nodeId}:`, e);
+        throw e; // 父节点重连失败，不继续重连子节点
+      }
+      
+      // 2. 如果不跳过子节点，且有 link-down 的子节点，尝试重连它们
+      if (!options?.skipChildren) {
+        const descendants = get().getDescendants(nodeId);
+        const { linkDownNodeIds } = get();
+        
+        // 按深度排序，确保从上到下依次重连
+        const sortedDescendants = [...descendants].sort((a, b) => a.depth - b.depth);
+        
+        for (const child of sortedDescendants) {
+          // 只重连之前标记为 link-down 的子节点
+          if (linkDownNodeIds.has(child.id)) {
+            // 检查父节点是否已连接（确保链路畅通）
+            const parent = get().getNode(child.parentId!);
+            if (parent?.runtime.status !== 'connected' && parent?.runtime.status !== 'active') {
+              // 父节点未连接，跳过此子节点
+              continue;
+            }
+            
+            try {
+              await get().connectNode(child.id);
+              reconnected.push(child.id);
+              // 短暂延迟，避免同时发起太多连接
+              await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (e) {
+              console.warn(`Failed to reconnect child node ${child.id}:`, e);
+              // 子节点重连失败不中断流程，继续尝试其他节点
+            }
+          }
+        }
+      }
+      
+      // 3. 刷新树状态
+      await get().fetchTree();
+      
+      return reconnected;
+    },
+    
     // ========== Terminal Management ==========
     
     createTerminalForNode: async (nodeId: string, cols?: number, rows?: number) => {
@@ -741,6 +830,181 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       set({ reconnectProgress: newProgress });
     },
     
+    // ========== State Drift Detection ==========
+    
+    syncFromBackend: async () => {
+      const startTime = performance.now();
+      const fixed: StateDriftReport['fixed'] = [];
+      
+      try {
+        // 从后端获取最新的节点数据
+        const backendNodes = await api.getSessionTree();
+        const { rawNodes, nodeTerminalMap, linkDownNodeIds } = get();
+        
+        // 创建后端节点的映射表，便于快速查找
+        const backendMap = new Map(backendNodes.map(n => [n.id, n]));
+        const localMap = new Map(rawNodes.map(n => [n.id, n]));
+        
+        let hasDrift = false;
+        
+        // 检测漂移并收集修复信息
+        for (const [nodeId, backendNode] of backendMap) {
+          const localNode = localMap.get(nodeId);
+          
+          if (!localNode) {
+            // 本地缺少该节点（后端新增）
+            fixed.push({
+              nodeId,
+              field: 'node',
+              localValue: null,
+              backendValue: 'exists',
+            });
+            hasDrift = true;
+            continue;
+          }
+          
+          // 检查状态字段
+          if (localNode.state.status !== backendNode.state.status) {
+            fixed.push({
+              nodeId,
+              field: 'state.status',
+              localValue: localNode.state.status,
+              backendValue: backendNode.state.status,
+            });
+            hasDrift = true;
+          }
+          
+          // 检查连接 ID
+          if (localNode.sshConnectionId !== backendNode.sshConnectionId) {
+            fixed.push({
+              nodeId,
+              field: 'sshConnectionId',
+              localValue: localNode.sshConnectionId,
+              backendValue: backendNode.sshConnectionId,
+            });
+            hasDrift = true;
+          }
+          
+          // 检查终端会话 ID
+          if (localNode.terminalSessionId !== backendNode.terminalSessionId) {
+            fixed.push({
+              nodeId,
+              field: 'terminalSessionId',
+              localValue: localNode.terminalSessionId,
+              backendValue: backendNode.terminalSessionId,
+            });
+            hasDrift = true;
+          }
+          
+          // 检查 SFTP 会话 ID
+          if (localNode.sftpSessionId !== backendNode.sftpSessionId) {
+            fixed.push({
+              nodeId,
+              field: 'sftpSessionId',
+              localValue: localNode.sftpSessionId,
+              backendValue: backendNode.sftpSessionId,
+            });
+            hasDrift = true;
+          }
+        }
+        
+        // 检查本地有但后端没有的节点（孤儿节点）
+        for (const [nodeId] of localMap) {
+          if (!backendMap.has(nodeId)) {
+            fixed.push({
+              nodeId,
+              field: 'node',
+              localValue: 'exists',
+              backendValue: null,
+            });
+            hasDrift = true;
+          }
+        }
+        
+        // 如果检测到漂移，使用后端数据覆盖本地
+        if (hasDrift) {
+          console.warn(`[StateDrift] Detected ${fixed.length} drift(s), auto-fixing...`);
+          
+          // 保留本地的展开状态和 link-down 标记
+          const { expandedIds } = get();
+          
+          // 清理孤儿节点的 link-down 标记
+          const validNodeIds = new Set(backendNodes.map(n => n.id));
+          const newLinkDownIds = new Set(
+            [...linkDownNodeIds].filter(id => validNodeIds.has(id))
+          );
+          
+          // 清理孤儿节点的终端映射
+          const newTerminalMap = new Map(
+            [...nodeTerminalMap].filter(([nodeId]) => validNodeIds.has(nodeId))
+          );
+          const newNodeMap = new Map<string, string>();
+          for (const [nodeId, terminals] of newTerminalMap) {
+            for (const termId of terminals) {
+              newNodeMap.set(termId, nodeId);
+            }
+          }
+          
+          set({
+            rawNodes: backendNodes,
+            linkDownNodeIds: newLinkDownIds,
+            nodeTerminalMap: newTerminalMap,
+            terminalNodeMap: newNodeMap,
+          });
+          
+          get().rebuildUnifiedNodes();
+        }
+        
+        const syncDuration = performance.now() - startTime;
+        
+        const report: StateDriftReport = {
+          driftCount: fixed.length,
+          fixed,
+          syncDuration: Math.round(syncDuration),
+          timestamp: Date.now(),
+        };
+        
+        if (fixed.length > 0) {
+          console.info('[StateDrift] Sync complete:', report);
+        }
+        
+        return report;
+        
+      } catch (e) {
+        console.error('[StateDrift] Sync failed:', e);
+        return {
+          driftCount: 0,
+          fixed: [],
+          syncDuration: Math.round(performance.now() - startTime),
+          timestamp: Date.now(),
+        };
+      }
+    },
+    
+    startPeriodicSync: (intervalMs = 30000) => {
+      // 先停止已有的定时器
+      if (syncIntervalId !== null) {
+        clearInterval(syncIntervalId);
+      }
+      
+      console.info(`[StateDrift] Starting periodic sync every ${intervalMs}ms`);
+      
+      syncIntervalId = setInterval(async () => {
+        const report = await get().syncFromBackend();
+        if (report.driftCount > 0) {
+          console.warn(`[StateDrift] Auto-fixed ${report.driftCount} drift(s)`);
+        }
+      }, intervalMs);
+    },
+    
+    stopPeriodicSync: () => {
+      if (syncIntervalId !== null) {
+        clearInterval(syncIntervalId);
+        syncIntervalId = null;
+        console.info('[StateDrift] Periodic sync stopped');
+      }
+    },
+    
     // ========== UI Actions ==========
     
     selectNode: (nodeId: string | null) => {
@@ -872,11 +1136,39 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
 // Subscriptions & Side Effects
 // ============================================================================
 
-// 监听后端事件并同步状态
-// 这部分需要在 App 初始化时设置
+/**
+ * 初始化 SessionTreeStore 订阅和副作用
+ * 
+ * 应在 App 初始化时调用此函数，启用：
+ * 1. 周期性状态同步（检测和修复前后端漂移）
+ * 2. 后端事件监听
+ */
 export function setupTreeStoreSubscriptions() {
-  // 可以在这里添加 Tauri 事件监听器
+  const store = useSessionTreeStore.getState();
+  
+  // 启动周期性状态同步（每 30 秒）
+  // 可以通过 stopPeriodicSync() 停止
+  store.startPeriodicSync(30000);
+  
+  // 首次启动时立即进行一次同步
+  store.syncFromBackend().then(report => {
+    if (report.driftCount > 0) {
+      console.info(`[SessionTree] Initial sync fixed ${report.driftCount} drift(s)`);
+    }
+  });
+  
+  // TODO: 添加 Tauri 事件监听器
   // listen('ssh-connection-state-changed', (event) => { ... })
+}
+
+/**
+ * 清理 SessionTreeStore 订阅
+ * 
+ * 应在 App 卸载时调用
+ */
+export function cleanupTreeStoreSubscriptions() {
+  const store = useSessionTreeStore.getState();
+  store.stopPeriodicSync();
 }
 
 export default useSessionTreeStore;

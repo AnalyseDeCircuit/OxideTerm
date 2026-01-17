@@ -2,9 +2,14 @@
  * Topology Dialog Component
  *
  * 显示当前连接拓扑的对话框
+ * 
+ * Enhanced with:
+ * - D3-force layout (prevents node overlap)
+ * - Zoom & Pan (navigate large topologies)
+ * - Double-click menu (quick actions)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,8 +18,8 @@ import {
 } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
-import { TopologyView } from './TopologyView';
-import { buildTopologyTree } from '../../lib/topologyUtils';
+import { TopologyViewEnhanced } from './TopologyViewEnhanced';
+import { buildTopologyTreeCached } from '../../lib/topologyUtils';
 import type { TopologyNode } from '../../lib/topologyUtils';
 import { Network, X } from 'lucide-react';
 
@@ -24,8 +29,31 @@ import { Network, X } from 'lucide-react';
 export const TopologyDialog: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [tree, setTree] = useState<TopologyNode[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 900, height: 500 });
 
   const { rawNodes } = useSessionTreeStore();
+
+  // Track container size when open
+  useEffect(() => {
+    if (!open) return;
+    
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setDimensions({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [open]);
 
   // 打开对话框时构建树
   const handleOpen = () => {
@@ -34,7 +62,7 @@ export const TopologyDialog: React.FC = () => {
       node => node.state.status === 'connected' || node.state.status === 'connecting'
     );
 
-    const topologyTree = buildTopologyTree(connectedNodes);
+    const topologyTree = buildTopologyTreeCached(connectedNodes);
     setTree(topologyTree);
     setOpen(true);
   };
@@ -78,7 +106,7 @@ export const TopologyDialog: React.FC = () => {
           </DialogHeader>
 
           {/* 拓扑图容器 - Main Canvas */}
-          <div className="relative bg-[#0c0d0f] min-h-[500px] flex flex-col">
+          <div ref={containerRef} className="relative bg-[#0c0d0f] min-h-[500px] flex flex-col">
             
             {/* Legend Overlay */}
             <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 p-3 rounded-lg bg-black/40 backdrop-blur-sm border border-white/5">
@@ -97,8 +125,12 @@ export const TopologyDialog: React.FC = () => {
                 </div>
             </div>
 
-            {/* View Component */}
-            <TopologyView nodes={tree} />
+            {/* View Component - Enhanced with force layout, zoom/pan, and menus */}
+            <TopologyViewEnhanced 
+              nodes={tree} 
+              width={dimensions.width}
+              height={dimensions.height}
+            />
           
           </div>
         </DialogContent>

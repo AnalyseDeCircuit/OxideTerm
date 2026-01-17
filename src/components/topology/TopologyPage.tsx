@@ -2,17 +2,44 @@
  * Topology Page Component
  *
  * Full page view for the Topology visualization
+ * 
+ * Enhanced with:
+ * - D3-force layout (prevents node overlap)
+ * - Zoom & Pan (navigate large topologies)
+ * - Double-click menu (quick actions)
+ * - State animations (connecting pulse, disconnect shake)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
-import { TopologyView } from './TopologyView';
-import { buildTopologyTree } from '../../lib/topologyUtils';
+import { TopologyViewEnhanced } from './TopologyViewEnhanced';
+import { buildTopologyTreeCached } from '../../lib/topologyUtils';
 import type { TopologyNode } from '../../lib/topologyUtils';
 
 export const TopologyPage: React.FC = () => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const [tree, setTree] = useState<TopologyNode[]>([]);
+    const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
     const { rawNodes } = useSessionTreeStore();
+
+    // Track container size
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry) {
+                setDimensions({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height,
+                });
+            }
+        });
+
+        resizeObserver.observe(container);
+        return () => resizeObserver.disconnect();
+    }, []);
 
     useEffect(() => {
         // Build topology tree from connected nodes
@@ -26,7 +53,7 @@ export const TopologyPage: React.FC = () => {
             node => node.state.status === 'connected' || node.state.status === 'connecting'
         );
 
-        const topologyTree = buildTopologyTree(connectedNodes);
+        const topologyTree = buildTopologyTreeCached(connectedNodes);
         setTree(topologyTree);
     }, [rawNodes]);
 
@@ -36,9 +63,13 @@ export const TopologyPage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-zinc-100 mb-2">Connection Matrix</h1>
                 <p className="text-zinc-500 text-sm">Visual topology of active SSH tunnels and jump hosts.</p>
             </div>
-            <div className="flex-1 overflow-hidden relative">
+            <div ref={containerRef} className="flex-1 overflow-hidden relative">
                 {tree.length > 0 ? (
-                    <TopologyView nodes={tree} />
+                    <TopologyViewEnhanced 
+                        nodes={tree} 
+                        width={dimensions.width}
+                        height={dimensions.height}
+                    />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-zinc-500">
                         <div className="text-lg">No active connections</div>
