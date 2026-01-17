@@ -26,7 +26,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { EditConnectionModal } from '../modals/EditConnectionModal';
 import { OxideExportModal } from '../modals/OxideExportModal';
 import { OxideImportModal } from '../modals/OxideImportModal';
-import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { SessionTree } from '../sessions/SessionTree';
 import { DrillDownDialog } from '../modals/DrillDownDialog';
 import { SavePathAsPresetDialog } from '../modals/SavePathAsPresetDialog';
@@ -454,15 +453,17 @@ export const Sidebar = () => {
         >
           <ArrowLeftRight className="h-5 w-5" />
         </Button>
+        
+        {/* SSH Connection Pool (Tab) */}
         <div className="relative">
           <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_monitor' ? 'secondary' : 'ghost'}
+            variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_pool' ? 'secondary' : 'ghost'}
             size="icon"
-            onClick={() => createTab('connection_monitor')}
-            title="Connection Monitor"
+            onClick={() => createTab('connection_pool')}
+            title="Connection Pool"
             className="rounded-md h-9 w-9"
           >
-            <Activity className="h-5 w-5" />
+            <Terminal className="h-5 w-5" />
           </Button>
           {connections.size > 0 && (
             <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
@@ -470,6 +471,17 @@ export const Sidebar = () => {
             </span>
           )}
         </div>
+
+        {/* Connection Monitor (Full Tab) */}
+        <Button
+          variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_monitor' ? 'secondary' : 'ghost'}
+          size="icon"
+          onClick={() => createTab('connection_monitor')}
+          title="Connection Monitor"
+          className="rounded-md h-9 w-9"
+        >
+          <Activity className="h-5 w-5" />
+        </Button>
 
         {/* Topology Button */}
         <div className="flex justify-center w-full">
@@ -747,8 +759,6 @@ export const Sidebar = () => {
             </div>
           </div>
         )}
-
-        {/* SSH Connection Pool Panel Removed - moved to Tab */}
       </div>
       </div>
 

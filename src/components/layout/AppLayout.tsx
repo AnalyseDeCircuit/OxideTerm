@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { NewConnectionModal } from '../modals/NewConnectionModal';
 import { SettingsView } from '../settings/SettingsView';
 import { ConnectionPoolMonitor } from '../connections/ConnectionPoolMonitor';
+import { ConnectionsPanel } from '../connections/ConnectionsPanel';
 import { TopologyPage } from '../topology/TopologyPage';
 import { Plus } from 'lucide-react';
 
@@ -74,6 +75,7 @@ export const AppLayout = () => {
                            </div>
                        </div>
                    )}
+                   {tab.type === 'connection_pool' && <ConnectionsPanel />}
                    {tab.type === 'topology' && <TopologyPage />}
                  </div>
               ))}

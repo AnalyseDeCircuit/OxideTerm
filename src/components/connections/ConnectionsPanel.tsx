@@ -13,7 +13,6 @@ import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { SshConnectionInfo, SshConnectionState } from '../../types';
-import { ConnectionPoolMonitor } from './ConnectionPoolMonitor';
 
 // Format connection state
 const formatState = (state: SshConnectionState): { text: string; color: string } => {
@@ -162,60 +161,55 @@ export const ConnectionsPanel: React.FC = () => {
   const connectionList = Array.from(connections.values())
     .filter(conn => conn.state !== 'disconnected');
   
-  const activeCount = connectionList.filter(c => c.state === 'active').length;
-  const idleCount = connectionList.filter(c => c.state === 'idle').length;
-  
   return (
-    <div className="h-full flex flex-col">
-      {/* Header with Monitor */}
-      <div className="border-b border-theme-border">
-        <ConnectionPoolMonitor />
-      </div>
-
-      {/* Connection List Title */}
-      <div className="flex items-center justify-between px-4 py-2 bg-theme-bg/50 border-b border-theme-border">
-        <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-          Connection Details
-        </h3>
+    <div className="h-full flex flex-col bg-theme-bg">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-theme-border bg-theme-bg-panel/50">
+        <div>
+          <h2 className="text-xl font-semibold text-zinc-100">Connection Pool</h2>
+          <p className="text-sm text-zinc-500 mt-1">Manage active SSH connections and keep-alive settings</p>
+        </div>
         <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
+          variant="outline"
+          size="sm"
           onClick={handleRefresh}
           disabled={loading}
-          title="Refresh connections"
+          className="gap-2"
         >
-          <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          Refresh
         </Button>
       </div>
       
       {/* Connection List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-6">
         {connectionList.length === 0 ? (
-          <div className="text-center text-zinc-500 py-8">
-            <Server className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>No active SSH connections</p>
-            <p className="text-xs mt-1">New connections will appear here</p>
+          <div className="text-center text-zinc-500 py-16">
+            <Server className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <p className="text-lg">No active SSH connections</p>
+            <p className="text-sm mt-2 opacity-70">New connections will appear here</p>
           </div>
         ) : (
-          connectionList.map(conn => (
-            <ConnectionCard
-              key={conn.id}
-              connection={conn}
-              onToggleKeepAlive={handleToggleKeepAlive}
-            />
-          ))
+          <div className="grid gap-4 max-w-4xl">
+            {connectionList.map(conn => (
+              <ConnectionCard
+                key={conn.id}
+                connection={conn}
+                onToggleKeepAlive={handleToggleKeepAlive}
+              />
+            ))}
+          </div>
         )}
       </div>
       
-      {/* Footer Instructions */}
-      <div className="p-3 border-t border-theme-border bg-theme-bg text-xs text-zinc-500">
+      {/* Footer Legend */}
+      <div className="px-6 py-4 border-t border-theme-border bg-theme-bg-panel/30 flex items-center gap-6 text-sm text-zinc-500">
         <div className="flex items-center gap-2">
-          <Shield className="h-3.5 w-3.5 text-green-400" />
-          <span>Keep Alive: Connection persists indefinitely</span>
+          <Shield className="h-4 w-4 text-green-400" />
+          <span>Keep Alive: Never auto-disconnect</span>
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <ShieldOff className="h-3.5 w-3.5 text-zinc-500" />
+        <div className="flex items-center gap-2">
+          <ShieldOff className="h-4 w-4 text-zinc-500" />
           <span>Standard: Auto-disconnect after 30 mins idle</span>
         </div>
       </div>

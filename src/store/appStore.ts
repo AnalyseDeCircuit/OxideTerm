@@ -592,7 +592,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   createTab: (type, sessionId) => {
     // Handle global/singleton tabs
-    if (type === 'settings' || type === 'connection_monitor' || type === 'topology') {
+    if (type === 'settings' || type === 'connection_monitor' || type === 'connection_pool' || type === 'topology') {
       const existingTab = get().tabs.find(t => t.type === type);
       if (existingTab) {
         set({ activeTabId: existingTab.id });
@@ -605,6 +605,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (type === 'connection_monitor') {
         title = 'Connection Monitor';
         icon = '📊';
+      } else if (type === 'connection_pool') {
+        title = 'Connection Pool';
+        icon = '🔌';
       } else if (type === 'topology') {
         title = 'Connection Matrix';
         icon = '🕸️';

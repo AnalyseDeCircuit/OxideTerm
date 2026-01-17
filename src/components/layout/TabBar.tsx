@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network } from 'lucide-react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network, Plug } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { cn } from '../../lib/utils';
@@ -17,6 +17,8 @@ const TabIcon = ({ type }: { type: string }) => {
       return <Settings className={iconClass} />;
     case 'connection_monitor':
       return <Activity className={iconClass} />;
+    case 'connection_pool':
+      return <Plug className={iconClass} />;
     case 'topology':
       return <div className="text-[10px]"><Network className={iconClass} /></div>;
     default:
