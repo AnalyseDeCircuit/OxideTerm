@@ -17,6 +17,7 @@ import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
 import { applyGlobalTheme } from '../../lib/themeManager';
+import { platform } from '../../lib/platform';
 
 const formatThemeName = (key: string) => {
     return key.split('-')
@@ -56,6 +57,7 @@ interface PersistedSettings {
     cursorStyle: string;
     cursorBlink: boolean;
     scrollback: number;
+    renderer: 'auto' | 'webgl' | 'canvas';
     // Buffer
     bufferMaxLines: number;
     bufferSaveOnDisconnect: boolean;
@@ -66,6 +68,8 @@ interface PersistedSettings {
     defaultPort: number;
 }
 
+const defaultRenderer: 'auto' | 'webgl' | 'canvas' = platform.isWindows ? 'canvas' : 'auto';
+
 const defaultSettings: PersistedSettings = {
     // Terminal
     theme: 'default',
@@ -75,6 +79,7 @@ const defaultSettings: PersistedSettings = {
     cursorStyle: 'block',
     cursorBlink: true,
     scrollback: 1000,
+    renderer: defaultRenderer,
     // Buffer
     bufferMaxLines: 100000,
     bufferSaveOnDisconnect: true,
@@ -303,6 +308,28 @@ export const SettingsView = () => {
                                         onChange={(e) => updateSetting('lineHeight', parseFloat(e.target.value))}
                                         className="w-20 text-center"
                                     />
+                                </div>
+
+                                <Separator className="opacity-50" />
+
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-zinc-200">Renderer</Label>
+                                        <p className="text-xs text-zinc-500 mt-0.5">Choose WebGL or Canvas rendering</p>
+                                    </div>
+                                    <Select
+                                        value={settings.renderer}
+                                        onValueChange={(val) => updateSetting('renderer', val as 'auto' | 'webgl' | 'canvas')}
+                                    >
+                                        <SelectTrigger className="w-[200px]">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="auto">Auto (WebGL preferred)</SelectItem>
+                                            <SelectItem value="webgl">WebGL</SelectItem>
+                                            <SelectItem value="canvas">Canvas</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
                         </div>

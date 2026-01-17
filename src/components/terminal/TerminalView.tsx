@@ -397,19 +397,77 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     
     searchAddonRef.current = searchAddon;
 
-    // Try WebGL, fallback to canvas/dom if needed
-    try {
-        // Configure WebGL with explicit DPR for crisp HiDPI rendering
-        const dpr = Math.ceil(window.devicePixelRatio || 1);
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-            webglAddon.dispose();
-        });
-        term.loadAddon(webglAddon);
-        console.log(`WebGL addon loaded with DPR: ${dpr}`);
-    } catch (e) {
-        console.warn("WebGL addon failed to load, falling back to canvas renderer", e);
-    }
+    // Load renderer based on settings
+    // renderer: 'auto' | 'webgl' | 'canvas'
+    const loadRenderer = async () => {
+        const rendererSetting = settings.renderer || 'auto';
+        
+        // Helper to load CanvasAddon dynamically (beta version has package.json issues)
+        const loadCanvasAddon = async () => {
+            try {
+                // Dynamic import with explicit path to work around beta package.json bug
+                const { CanvasAddon } = await import('@xterm/addon-canvas/lib/xterm-addon-canvas.mjs');
+                const canvasAddon = new CanvasAddon();
+                term.loadAddon(canvasAddon);
+                return true;
+            } catch (e) {
+                console.warn('[Renderer] Canvas addon dynamic import failed', e);
+                return false;
+            }
+        };
+        
+        if (rendererSetting === 'canvas') {
+            // Force Canvas renderer
+            const loaded = await loadCanvasAddon();
+            if (loaded) {
+                console.log('[Renderer] Canvas addon loaded (user preference)');
+            } else {
+                console.warn('[Renderer] Canvas addon failed, using DOM fallback');
+            }
+        } else if (rendererSetting === 'webgl') {
+            // Force WebGL renderer
+            try {
+                const dpr = Math.ceil(window.devicePixelRatio || 1);
+                const webglAddon = new WebglAddon();
+                webglAddon.onContextLoss(() => {
+                    console.warn('[Renderer] WebGL context lost, disposing');
+                    webglAddon.dispose();
+                });
+                term.loadAddon(webglAddon);
+                console.log(`[Renderer] WebGL addon loaded with DPR: ${dpr}`);
+            } catch (e) {
+                console.warn('[Renderer] WebGL addon failed, using DOM fallback', e);
+            }
+        } else {
+            // Auto: Try WebGL first, fallback to Canvas
+            try {
+                const dpr = Math.ceil(window.devicePixelRatio || 1);
+                const webglAddon = new WebglAddon();
+                webglAddon.onContextLoss(async () => {
+                    console.warn('[Renderer] WebGL context lost, switching to Canvas');
+                    webglAddon.dispose();
+                    // Try Canvas fallback on context loss
+                    const loaded = await loadCanvasAddon();
+                    if (loaded) {
+                        console.log('[Renderer] Canvas addon loaded as fallback');
+                    }
+                });
+                term.loadAddon(webglAddon);
+                console.log(`[Renderer] WebGL addon loaded (auto) with DPR: ${dpr}`);
+            } catch (e) {
+                console.warn('[Renderer] WebGL addon failed, trying Canvas fallback', e);
+                // Fallback to Canvas
+                const loaded = await loadCanvasAddon();
+                if (loaded) {
+                    console.log('[Renderer] Canvas addon loaded as fallback');
+                } else {
+                    console.warn('[Renderer] Canvas fallback failed, using DOM');
+                }
+            }
+        }
+    };
+    
+    loadRenderer();
 
     term.open(containerRef.current);
     fitAddon.fit();

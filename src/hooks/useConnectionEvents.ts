@@ -9,7 +9,7 @@
  * - connection_reconnected: { connection_id, terminal_ids, forward_ids }
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/appStore';
 import { useTransferStore } from '../store/transferStore';
@@ -40,8 +40,20 @@ interface ConnectionReconnectedEvent {
 }
 
 export function useConnectionEvents(): void {
-  const { updateConnectionState, sessions } = useAppStore();
-  const { interruptTransfersBySession } = useTransferStore();
+  // Use selectors to get stable function references
+  const updateConnectionState = useAppStore((state) => state.updateConnectionState);
+  const interruptTransfersBySession = useTransferStore((state) => state.interruptTransfersBySession);
+  
+  // Use ref for sessions to avoid re-subscribing on every session change
+  const sessionsRef = useRef(useAppStore.getState().sessions);
+  
+  // Keep sessionsRef in sync without triggering re-renders
+  useEffect(() => {
+    const unsubscribe = useAppStore.subscribe(
+      (state) => { sessionsRef.current = state.sessions; }
+    );
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     // 获取 sessionTreeStore 方法（避免闭包问题）
@@ -95,8 +107,9 @@ export function useConnectionEvents(): void {
       }
 
       // When connection goes down, interrupt all SFTP transfers for related sessions
+      // Use sessionsRef.current to avoid dependency on sessions
       if (status === 'link_down' || status === 'disconnected') {
-        // Find all sessions using this connection and interrupt their transfers
+        const sessions = sessionsRef.current;
         sessions.forEach((session, sessionId) => {
           if (session.connectionId === connection_id) {
             interruptTransfersBySession(sessionId, 
@@ -149,9 +162,10 @@ export function useConnectionEvents(): void {
         restoreTerminalConnections(terminal_ids);
       }
 
-      // TODO: Restore port forwards if needed
+      // 恢复端口转发
       if (forward_ids.length > 0) {
-        console.log(`[ConnectionEvents] TODO: Restore forwards:`, forward_ids);
+        console.log(`[ConnectionEvents] Restoring port forwards:`, forward_ids);
+        restorePortForwards(connection_id, forward_ids);
       }
     });
 
@@ -160,7 +174,9 @@ export function useConnectionEvents(): void {
       unlistenProgress.then((fn) => fn());
       unlistenReconnected.then((fn) => fn());
     };
-  }, [updateConnectionState, sessions, interruptTransfersBySession]);
+  // Dependencies are stable: updateConnectionState and interruptTransfersBySession are selectors
+  // sessionsRef is updated via subscription, not as a dependency
+  }, [updateConnectionState, interruptTransfersBySession]);
 }
 
 /**
@@ -205,6 +221,51 @@ async function restoreTerminalConnections(terminalIds: string[]): Promise<void> 
       console.log(`[ConnectionEvents] Terminal ${terminalId} PTY recreated, new ws_url: ${result.wsUrl}`);
     } catch (e) {
       console.error(`[ConnectionEvents] Failed to restore terminal ${terminalId}:`, e);
+    }
+  }
+}
+/**
+ * 恢复端口转发规则
+ * 
+ * 后端在重连时会自动恢复端口转发配置，但前端需要：
+ * 1. 刷新端口转发列表以获取最新状态
+ * 2. 更新 UI 显示
+ * 
+ * @param connectionId - 重连成功的连接 ID
+ * @param forwardIds - 需要恢复的转发规则 ID 列表
+ */
+async function restorePortForwards(connectionId: string, forwardIds: string[]): Promise<void> {
+  console.log(`[ConnectionEvents] Restoring ${forwardIds.length} port forwards for connection ${connectionId}`);
+  
+  // 找到使用此 connectionId 的所有会话
+  const appStore = useAppStore.getState();
+  const sessionIds: string[] = [];
+  
+  appStore.sessions.forEach((session, sessionId) => {
+    if (session.connectionId === connectionId) {
+      sessionIds.push(sessionId);
+    }
+  });
+
+  if (sessionIds.length === 0) {
+    console.warn(`[ConnectionEvents] No sessions found for connection ${connectionId}`);
+    return;
+  }
+
+  // 对每个会话刷新端口转发列表
+  for (const sessionId of sessionIds) {
+    try {
+      // 后端已经自动恢复了端口转发，这里只需刷新前端状态
+      const forwards = await api.listPortForwards(sessionId);
+      console.log(`[ConnectionEvents] Session ${sessionId} has ${forwards.length} port forwards after restore`);
+      
+      // 如果需要，可以在这里发送通知告知用户端口转发已恢复
+      const activeForwards = forwards.filter(f => f.status === 'active');
+      if (activeForwards.length > 0) {
+        console.log(`[ConnectionEvents] ${activeForwards.length} port forwards are now active for session ${sessionId}`);
+      }
+    } catch (e) {
+      console.error(`[ConnectionEvents] Failed to refresh port forwards for session ${sessionId}:`, e);
     }
   }
 }

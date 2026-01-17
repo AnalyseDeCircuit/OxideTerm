@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { useToastStore } from '../hooks/useToast';
+import { topologyResolver } from '../lib/topologyResolver';
 import { 
   SessionInfo, 
   Tab, 
@@ -10,6 +12,7 @@ import {
   SshConnectionInfo,
   SshConnectionState,
   SshConnectRequest,
+  ConnectPresetChainRequest,
 } from '../types';
 
 interface ModalsState {
@@ -442,7 +445,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       // Disconnect existing session first
       // 🔄 迁移到新 API: closeTerminal
-      await api.closeTerminal(sessionId).catch(() => {});
+      await api.closeTerminal(sessionId).catch((err) => {
+        console.warn(`[Reconnect] Failed to close old terminal ${sessionId}:`, err);
+        useToastStore.getState().addToast({
+          title: 'Failed to close old terminal',
+          description: String(err),
+          variant: 'warning',
+        });
+      });
       
       // Determine auth_type for reconnection:
       // - 'agent' -> use agent
@@ -516,7 +526,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       // Disconnect existing session first
       // 🔄 迁移到新 API: closeTerminal
-      await api.closeTerminal(sessionId).catch(() => {});
+      await api.closeTerminal(sessionId).catch((err) => {
+        console.warn(`[ReconnectWithPassword] Failed to close old terminal ${sessionId}:`, err);
+        useToastStore.getState().addToast({
+          title: 'Failed to close old terminal',
+          description: String(err),
+          variant: 'warning',
+        });
+      });
       
       // Reconnect with password
       // 🔄 迁移到新 API: sshConnect + createTerminal
@@ -726,33 +743,68 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return 'default_key';
       };
 
+      // Map auth_type for manual preset (no default_key in HopInfo)
+      const mapPresetAuthType = (authType: string): 'password' | 'key' | 'agent' => {
+        if (authType === 'agent') return 'agent';
+        if (authType === 'key') return 'key';
+        if (authType === 'password') return 'password';
+        return 'key';
+      };
+
       // TODO: 暂不支持 proxy_chain，需要后续扩展 sshConnect
       if (savedConn.proxy_chain && savedConn.proxy_chain.length > 0) {
-        // 对于代理链连接，使用旧的 connect_v2 API（会创建终端）
-        const proxyChain: ConnectRequest['proxy_chain'] = savedConn.proxy_chain.map((hop, index) => ({
-          id: `hop-${index}`,
+        // 使用 session_tree 的手工预设链连接（避免改动 connect_v2 核心握手）
+        const hops: ConnectPresetChainRequest['hops'] = savedConn.proxy_chain.map((hop) => ({
           host: hop.host,
           port: hop.port,
           username: hop.username,
-          auth_type: mapAuthType(hop.auth_type),
+          authType: mapPresetAuthType(hop.auth_type),
           password: hop.password,
-          key_path: hop.key_path,
+          keyPath: hop.key_path,
           passphrase: hop.passphrase,
         }));
 
-        const request: ConnectRequest = {
+        const target: ConnectPresetChainRequest['target'] = {
           host: savedConn.host,
           port: savedConn.port,
           username: savedConn.username,
-          auth_type: mapAuthType(savedConn.auth_type),
+          authType: mapPresetAuthType(savedConn.auth_type),
           password: savedConn.password,
-          key_path: savedConn.key_path,
+          keyPath: savedConn.key_path,
           passphrase: savedConn.passphrase,
-          name: savedConn.name,
-          proxy_chain: proxyChain,
         };
 
-        await get().connect(request);
+        const request: ConnectPresetChainRequest = {
+          savedConnectionId: connectionId,
+          hops,
+          target,
+        };
+
+        const response = await api.connectManualPreset(request);
+
+        // 同步会话树并注册拓扑映射
+        const { useSessionTreeStore } = await import('./sessionTreeStore');
+        const treeStore = useSessionTreeStore.getState();
+        await treeStore.fetchTree();
+        treeStore.selectNode(response.targetNodeId);
+
+        for (const nodeId of response.connectedNodeIds) {
+          const rawNode = treeStore.getRawNode(nodeId);
+          if (rawNode?.sshConnectionId) {
+            topologyResolver.register(rawNode.sshConnectionId, nodeId);
+          }
+        }
+
+        // 为目标节点创建终端并打开标签页
+        const terminalId = await treeStore.createTerminalForNode(response.targetNodeId);
+        get().createTab('terminal', terminalId);
+
+        useToastStore.getState().addToast({
+          title: 'Proxy chain connection established',
+          description: `Chain depth ${response.chainDepth}. Topology synchronized.`,
+          variant: 'success',
+        });
+
         await api.markConnectionUsed(connectionId);
         return;
       }

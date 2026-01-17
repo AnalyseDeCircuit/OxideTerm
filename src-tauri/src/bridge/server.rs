@@ -24,6 +24,14 @@ const HEARTBEAT_TIMEOUT_SECS: u64 = 90;
 /// Token validity window (seconds) - tokens older than this are rejected
 const TOKEN_VALIDITY_SECS: u64 = 60;
 
+/// Frame channel capacity - larger on Windows due to slower I/O throughput
+/// Windows: 16384 to compensate for higher syscall overhead
+/// Unix: 4096 as baseline
+#[cfg(target_os = "windows")]
+const FRAME_CHANNEL_CAPACITY: usize = 16384;
+#[cfg(not(target_os = "windows"))]
+const FRAME_CHANNEL_CAPACITY: usize = 4096;
+
 /// Get current unix timestamp in seconds
 fn unix_timestamp_secs() -> u64 {
     std::time::SystemTime::now()
@@ -536,7 +544,7 @@ impl WsBridge {
         let state_hb = state.clone();
 
         // Channel for sending frames to WebSocket (increased capacity to prevent deadlock)
-        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(FRAME_CHANNEL_CAPACITY);
         let frame_tx_ssh = frame_tx.clone();
         let frame_tx_hb = frame_tx.clone();
 
@@ -935,7 +943,7 @@ impl WsBridge {
         let state_hb = state.clone();
 
         // Channel for sending frames to WebSocket (increased capacity to prevent deadlock)
-        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(FRAME_CHANNEL_CAPACITY);
         let frame_tx_ssh = frame_tx.clone();
         let frame_tx_hb = frame_tx.clone();
 
@@ -1204,7 +1212,7 @@ impl WsBridge {
         let state_hb = state.clone();
 
         // Channel for sending frames to WebSocket
-        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(4096);
+        let (frame_tx, mut frame_rx) = mpsc::channel::<Bytes>(FRAME_CHANNEL_CAPACITY);
         let frame_tx_ssh = frame_tx.clone();
         let frame_tx_hb = frame_tx.clone();
 

@@ -260,20 +260,21 @@ impl AutoReconnectService {
             .await
             .map_err(|e| format!("Shell request failed: {}", e))?;
 
+        // Clone cmd_tx BEFORE passing session_handle to WsBridge
+        // (WsBridge consumes the handle, including its cmd_tx)
+        let cmd_tx = session_handle.cmd_tx.clone();
+
         // Get scroll buffer for this session
         let scroll_buffer = self
             .registry
             .with_session(session_id, |entry| entry.scroll_buffer.clone())
             .ok_or_else(|| "Session not found in registry".to_string())?;
 
-        // Start WebSocket bridge
+        // Start WebSocket bridge (consumes session_handle)
         let (_, ws_port, ws_token) =
             crate::bridge::WsBridge::start_extended(session_handle, scroll_buffer)
                 .await
                 .map_err(|e| format!("WebSocket bridge failed: {}", e))?;
-
-        // Get command sender
-        let cmd_tx = handle_controller.cmd_tx_clone();
 
         // Clone handle_controller for forwarding manager
         let forwarding_controller = handle_controller.clone();

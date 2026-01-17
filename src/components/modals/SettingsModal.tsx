@@ -56,6 +56,7 @@ interface PersistedSettings {
     cursorStyle: string;
     cursorBlink: boolean;
     scrollback: number;
+    renderer: 'auto' | 'webgl' | 'canvas'; // Renderer selection
     // Buffer
     bufferMaxLines: number;
     bufferSaveOnDisconnect: boolean;
@@ -66,6 +67,10 @@ interface PersistedSettings {
     defaultPort: number;
 }
 
+// Detect platform for default renderer (Canvas on Windows, Auto elsewhere)
+const isWindows = navigator.platform.toLowerCase().includes('win');
+const defaultRenderer: 'auto' | 'webgl' | 'canvas' = isWindows ? 'canvas' : 'auto';
+
 const defaultSettings: PersistedSettings = {
     // Terminal
     theme: 'default',
@@ -75,6 +80,7 @@ const defaultSettings: PersistedSettings = {
     cursorStyle: 'block',
     cursorBlink: true,
     scrollback: 1000,
+    renderer: defaultRenderer, // Platform-specific default
     // Buffer
     bufferMaxLines: 100000,
     bufferSaveOnDisconnect: true,
@@ -318,6 +324,26 @@ export const SettingsModal = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label>Renderer</Label>
+                                <Select 
+                                    value={settings.renderer}
+                                    onValueChange={(v) => updateSetting('renderer', v as 'auto' | 'webgl' | 'canvas')}
+                                >
+                                    <SelectTrigger className="w-[240px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="auto">Auto (WebGL preferred)</SelectItem>
+                                        <SelectItem value="webgl">WebGL</SelectItem>
+                                        <SelectItem value="canvas">Canvas</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-zinc-500">
+                                    Canvas is recommended on Windows for better stability. Requires restart to apply.
+                                </p>
                             </div>
                             
                             <div className="grid gap-2 pt-2">
