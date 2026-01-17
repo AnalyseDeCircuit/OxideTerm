@@ -710,6 +710,69 @@ export const api = {
     return invoke('expand_manual_preset', { request });
   },
 
+  // ===== Auto-Route (Auto-generated from Saved Connections) APIs =====
+
+  /**
+   * Get topology nodes (auto-generated from saved connections)
+   */
+  getTopologyNodes: async (): Promise<import('../types').TopologyNodeInfo[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_topology_nodes');
+  },
+
+  /**
+   * Get topology edges
+   */
+  getTopologyEdges: async (): Promise<import('../types').TopologyEdge[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_topology_edges');
+  },
+
+  /**
+   * Get custom edges overlay config
+   */
+  getTopologyEdgesOverlay: async (): Promise<import('../types').TopologyEdgesConfig> => {
+    if (USE_MOCK) return { customEdges: [], excludedEdges: [] };
+    return invoke('get_topology_edges_overlay');
+  },
+
+  /**
+   * Add a custom edge to topology
+   */
+  addTopologyEdge: async (from: string, to: string, cost?: number): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('add_topology_edge', { from, to, cost });
+  },
+
+  /**
+   * Remove a custom edge from topology
+   */
+  removeTopologyEdge: async (from: string, to: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('remove_topology_edge', { from, to });
+  },
+
+  /**
+   * Exclude an auto-generated edge
+   */
+  excludeTopologyEdge: async (from: string, to: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('exclude_topology_edge', { from, to });
+  },
+
+  /**
+   * Expand auto-route node chain (Mode 2: Static Auto-Route)
+   */
+  expandAutoRoute: async (request: import('../types').ExpandAutoRouteRequest): Promise<import('../types').ExpandAutoRouteResponse> => {
+    if (USE_MOCK) return {
+      targetNodeId: 'mock-target-node-id',
+      route: [],
+      totalCost: 0,
+      allNodeIds: ['mock-target-node-id'],
+    };
+    return invoke('expand_auto_route', { request });
+  },
+
   /**
    * 更新节点状态
    */

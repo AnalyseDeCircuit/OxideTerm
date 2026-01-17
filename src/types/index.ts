@@ -706,3 +706,77 @@ export interface ConnectManualPresetResponse {
   /** 链的深度（跳板数量 + 1） */
   chainDepth: number;
 }
+
+// ===== Auto-Route (Auto-generated from Saved Connections) =====
+
+/**
+ * Topology node info (auto-generated from saved connections)
+ */
+export interface TopologyNodeInfo {
+  /** Node ID (same as saved connection ID) */
+  id: string;
+  /** Display name */
+  displayName?: string;
+  /** Host address */
+  host: string;
+  /** SSH port */
+  port: number;
+  /** Username */
+  username: string;
+  /** Auth type */
+  authType: "password" | "key" | "agent";
+  /** Is local node (start point) */
+  isLocal: boolean;
+  /** Neighbor nodes (reachable next hops) */
+  neighbors: string[];
+  /** Tags */
+  tags?: string[];
+  /** Reference to saved connection ID */
+  savedConnectionId?: string;
+}
+
+/**
+ * Topology edge (reachability)
+ */
+export interface TopologyEdge {
+  /** Source node ID ("local" = local machine) */
+  from: string;
+  /** Target node ID */
+  to: string;
+  /** Cost (hop count, latency, etc.) */
+  cost: number;
+}
+
+/**
+ * Custom edges overlay config (user-editable)
+ */
+export interface TopologyEdgesConfig {
+  /** User-defined custom edges */
+  customEdges: TopologyEdge[];
+  /** Edges to exclude from auto-generation */
+  excludedEdges: TopologyEdge[];
+}
+
+/**
+ * Expand auto-route request
+ */
+export interface ExpandAutoRouteRequest {
+  /** Target node ID (topology node id) */
+  targetId: string;
+  /** Optional display name override */
+  displayName?: string;
+}
+
+/**
+ * Expand auto-route response
+ */
+export interface ExpandAutoRouteResponse {
+  /** Target node ID (in SessionTree) */
+  targetNodeId: string;
+  /** Computed route path (intermediate hop node IDs) */
+  route: string[];
+  /** Total route cost */
+  totalCost: number;
+  /** All expanded node IDs (from root to target) */
+  allNodeIds: string[];
+}

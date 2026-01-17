@@ -17,6 +17,7 @@ interface ModalsState {
   settings: boolean;
   editConnection: boolean;
   connectionManager: boolean; // 新增：连接管理面板
+  autoRoute: boolean; // 自动路由选择器
 }
 
 // 侧边栏区域类型
@@ -143,7 +144,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     newConnection: false,
     settings: false,
     editConnection: false,
-    connectionManager: false, // 新增
+    connectionManager: false,
+    autoRoute: false, // 自动路由
   },
   savedConnections: [],
   groups: [],

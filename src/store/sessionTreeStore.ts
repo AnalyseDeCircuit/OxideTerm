@@ -126,6 +126,7 @@ interface SessionTreeStore {
   addRootNode: (request: ConnectServerRequest) => Promise<string>;
   drillDown: (request: DrillDownRequest) => Promise<string>;
   expandManualPreset: (request: ConnectPresetChainRequest) => Promise<string>;
+  expandAutoRoute: (request: import('../types').ExpandAutoRouteRequest) => Promise<import('../types').ExpandAutoRouteResponse>;
   removeNode: (nodeId: string) => Promise<string[]>;
   clearTree: () => Promise<void>;
   
@@ -305,6 +306,19 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         await get().fetchTree();
         set({ selectedNodeId: targetId, isLoading: false });
         return targetId;
+      } catch (e) {
+        set({ error: String(e), isLoading: false });
+        throw e;
+      }
+    },
+    
+    expandAutoRoute: async (request) => {
+      set({ isLoading: true, error: null });
+      try {
+        const result = await api.expandAutoRoute(request);
+        await get().fetchTree();
+        set({ selectedNodeId: result.targetNodeId, isLoading: false });
+        return result;
       } catch (e) {
         set({ error: String(e), isLoading: false });
         throw e;

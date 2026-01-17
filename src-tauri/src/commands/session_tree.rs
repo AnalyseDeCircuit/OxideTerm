@@ -897,3 +897,197 @@ pub struct ConnectManualPresetResponse {
     /// 链的深度（跳板数量 + 1）
     pub chain_depth: u32,
 }
+
+// ============================================================================
+// Auto-Route Commands (Mode 2: Static Auto-Route)
+// ============================================================================
+
+use crate::session::topology_graph::{NetworkTopology, TopologyNodeInfo, TopologyEdge, TopologyEdgesConfig};
+use super::config::ConfigState;
+
+/// Get topology nodes (auto-generated from saved connections)
+#[tauri::command]
+pub async fn get_topology_nodes(
+    config_state: State<'_, Arc<ConfigState>>,
+) -> Result<Vec<TopologyNodeInfo>, String> {
+    // Load saved connections from config snapshot
+    let config = config_state.get_config_snapshot();
+    let connections = &config.connections;
+    
+    // Build topology from connections
+    let topology = NetworkTopology::build_from_connections(connections);
+    
+    Ok(topology.get_all_nodes())
+}
+
+/// Get topology edges
+#[tauri::command]
+pub async fn get_topology_edges(
+    config_state: State<'_, Arc<ConfigState>>,
+) -> Result<Vec<TopologyEdge>, String> {
+    let config = config_state.get_config_snapshot();
+    let connections = &config.connections;
+    let topology = NetworkTopology::build_from_connections(connections);
+    Ok(topology.get_all_edges())
+}
+
+/// Get custom edges overlay config
+#[tauri::command]
+pub async fn get_topology_edges_overlay() -> Result<TopologyEdgesConfig, String> {
+    Ok(NetworkTopology::get_edges_overlay())
+}
+
+/// Add a custom edge to topology
+#[tauri::command]
+pub async fn add_topology_edge(from: String, to: String, cost: Option<i32>) -> Result<(), String> {
+    NetworkTopology::add_custom_edge(from, to, cost.unwrap_or(1))
+}
+
+/// Remove a custom edge from topology
+#[tauri::command]
+pub async fn remove_topology_edge(from: String, to: String) -> Result<(), String> {
+    NetworkTopology::remove_custom_edge(&from, &to)
+}
+
+/// Exclude an auto-generated edge
+#[tauri::command]
+pub async fn exclude_topology_edge(from: String, to: String) -> Result<(), String> {
+    NetworkTopology::exclude_edge(from, to)
+}
+
+/// Auto-route expand request
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpandAutoRouteRequest {
+    /// Target node ID (topology node id, same as saved connection id)
+    pub target_id: String,
+    /// Optional display name override
+    pub display_name: Option<String>,
+}
+
+/// Auto-route expand response
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpandAutoRouteResponse {
+    /// Target node ID (in SessionTree)
+    pub target_node_id: String,
+    /// Computed route path (intermediate hop node IDs)
+    pub route: Vec<String>,
+    /// Total route cost
+    pub total_cost: i32,
+    /// All expanded node IDs (from root to target)
+    pub all_node_ids: Vec<String>,
+}
+
+/// Expand auto-route node chain (Mode 2: Static Auto-Route)
+///
+/// Auto-computes optimal path to target node and expands SessionTree nodes.
+/// 
+/// # Workflow
+/// 1. Build topology from saved connections
+/// 2. Use Dijkstra to compute shortest path
+/// 3. Convert path to SessionTree nodes
+/// 4. Return expanded node info
+#[tauri::command]
+pub async fn expand_auto_route(
+    state: State<'_, Arc<SessionTreeState>>,
+    config_state: State<'_, Arc<ConfigState>>,
+    request: ExpandAutoRouteRequest,
+) -> Result<ExpandAutoRouteResponse, String> {
+    // 1. Build topology from saved connections
+    let config = config_state.get_config_snapshot();
+    let connections = &config.connections;
+    let topology = NetworkTopology::build_from_connections(connections);
+    
+    // 2. Compute route
+    let route_result = topology.compute_route(&request.target_id)?;
+    tracing::info!(
+        "Auto-route computed: local -> {} -> {} (cost: {})",
+        route_result.path.join(" -> "),
+        request.target_id,
+        route_result.total_cost
+    );
+    
+    // 3. Get target node config
+    let target_config = topology.get_node(&request.target_id)
+        .ok_or_else(|| format!("Target node '{}' not found", request.target_id))?;
+    
+    // 4. Build NodeConnection list for path nodes
+    let mut hop_connections = Vec::new();
+    for hop_id in &route_result.path {
+        let hop_config = topology.get_node(hop_id)
+            .ok_or_else(|| format!("Hop node '{}' not found", hop_id))?;
+        
+        let auth = topology_auth_to_session_auth(&hop_config.auth_type, &hop_config.key_path)?;
+        let mut conn = NodeConnection::new(
+            hop_config.host.clone(),
+            hop_config.port,
+            hop_config.username.clone(),
+        );
+        conn.auth = auth;
+        conn.display_name = hop_config.display_name.clone();
+        hop_connections.push(conn);
+    }
+    
+    // 5. Build target NodeConnection
+    let target_auth = topology_auth_to_session_auth(&target_config.auth_type, &target_config.key_path)?;
+    let mut target_conn = NodeConnection::new(
+        target_config.host.clone(),
+        target_config.port,
+        target_config.username.clone(),
+    );
+    target_conn.auth = target_auth;
+    target_conn.display_name = request.display_name.or(target_config.display_name.clone());
+    
+    // 6. Generate route_id
+    let route_id = uuid::Uuid::new_v4().to_string();
+    
+    // 7. Expand to SessionTree
+    let mut tree = state.tree.write().await;
+    let target_node_id = tree.expand_auto_route(
+        &target_config.host,
+        &route_id,
+        hop_connections,
+        target_conn,
+    ).map_err(|e| e.to_string())?;
+    
+    // 8. Collect all node IDs (backtrack from target to root)
+    let mut all_node_ids = Vec::new();
+    let mut current_id = Some(target_node_id.clone());
+    while let Some(id) = current_id {
+        all_node_ids.push(id.clone());
+        current_id = tree.get_node(&id).and_then(|n| n.parent_id.clone());
+    }
+    all_node_ids.reverse();
+    
+    tracing::info!(
+        "Auto-route expanded: {} nodes created, target: {}",
+        all_node_ids.len(),
+        target_node_id
+    );
+    
+    Ok(ExpandAutoRouteResponse {
+        target_node_id,
+        route: route_result.path,
+        total_cost: route_result.total_cost,
+        all_node_ids,
+    })
+}
+
+/// Convert topology auth type to SessionTree auth method
+fn topology_auth_to_session_auth(
+    auth_type: &str,
+    key_path: &Option<String>,
+) -> Result<AuthMethod, String> {
+    match auth_type {
+        "password" => Err("Password authentication requires password which is not stored in topology".to_string()),
+        "key" => {
+            let path = key_path.clone().ok_or("Key path required for key authentication")?;
+            Ok(AuthMethod::Key {
+                key_path: path,
+                passphrase: None,
+            })
+        }
+        "agent" | _ => Ok(AuthMethod::Agent),
+    }
+}

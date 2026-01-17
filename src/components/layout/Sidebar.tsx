@@ -515,14 +515,26 @@ export const Sidebar = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
               <span className="text-xs font-semibold text-theme-text-muted uppercase tracking-wider">Active Sessions</span>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6"
-                onClick={() => toggleModal('newConnection', true)}
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6"
+                  onClick={() => toggleModal('autoRoute', true)}
+                  title="Auto-Route Connection"
+                >
+                  <Network className="h-3 w-3" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6"
+                  onClick={() => toggleModal('newConnection', true)}
+                  title="New Connection"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
             
             {/* Unified Session Tree - 统一会话树 */}
