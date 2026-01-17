@@ -252,6 +252,16 @@ pub async fn ssh_set_pool_config(
     Ok(())
 }
 
+/// 获取连接池统计信息
+///
+/// 返回连接池实时状态，用于监控面板
+#[tauri::command]
+pub async fn ssh_get_pool_stats(
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<crate::ssh::ConnectionPoolStats, String> {
+    Ok(connection_registry.get_stats().await)
+}
+
 // ============================================================================
 // 终端创建命令
 // ============================================================================

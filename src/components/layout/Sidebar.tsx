@@ -14,6 +14,8 @@ import {
   Download,
   Upload,
   Link2,
+  Activity,
+  Network
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
@@ -29,7 +31,7 @@ import { SessionTree } from '../sessions/SessionTree';
 import { DrillDownDialog } from '../modals/DrillDownDialog';
 import { SavePathAsPresetDialog } from '../modals/SavePathAsPresetDialog';
 import { AddRootNodeDialog } from '../modals/AddRootNodeDialog';
-import { TopologyDialog } from '../topology';
+import { ConnectionPoolMonitor } from '../connections/ConnectionPoolMonitor';
 import { api } from '../../lib/api';
 import type { UnifiedFlatNode } from '../../types';
 
@@ -422,67 +424,80 @@ export const Sidebar = () => {
   const sessionList = Array.from(sessions.values());
 
   return (
-    <div className="flex h-full border-r border-theme-border bg-theme-bg-panel w-64 flex-col">
-      {/* Activity Bar (Top of sidebar) */}
-      <div className="flex items-center p-2 gap-1 border-b border-theme-border">
+    <div className="flex h-full border-r border-theme-border bg-theme-bg-panel w-[300px] flex-row">
+      {/* Activity Bar (Vertical Left) */}
+      <div className="flex flex-col items-center py-2 gap-2 border-r border-theme-border w-12 bg-theme-bg shrink-0">
         <Button 
           variant={sidebarActiveSection === 'sessions' ? 'secondary' : 'ghost'} 
           size="icon"
           onClick={() => setSidebarSection('sessions')}
           title="Sessions"
-          className="rounded-sm"
+          className="rounded-md h-9 w-9"
         >
-          <Link2 className="h-4 w-4" />
+          <Link2 className="h-5 w-5" />
         </Button>
         <Button 
           variant={sidebarActiveSection === 'sftp' ? 'secondary' : 'ghost'} 
           size="icon"
           onClick={() => setSidebarSection('sftp')}
           title="SFTP"
-          className="rounded-sm"
+          className="rounded-md h-9 w-9"
         >
-          <Folder className="h-4 w-4" />
+          <Folder className="h-5 w-5" />
         </Button>
         <Button 
           variant={sidebarActiveSection === 'forwards' ? 'secondary' : 'ghost'} 
           size="icon"
           onClick={() => setSidebarSection('forwards')}
           title="Port Forwarding"
-          className="rounded-sm"
+          className="rounded-md h-9 w-9"
         >
-          <ArrowLeftRight className="h-4 w-4" />
+          <ArrowLeftRight className="h-5 w-5" />
         </Button>
-        <Button
-          variant={sidebarActiveSection === 'connections' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('connections')}
-          title="SSH Connection Pool"
-          className="rounded-sm relative"
-        >
-          <Terminal className="h-4 w-4" />
-          {/* Connection badge */}
+        <div className="relative">
+          <Button
+            variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_monitor' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => createTab('connection_monitor')}
+            title="Connection Monitor"
+            className="rounded-md h-9 w-9"
+          >
+            <Activity className="h-5 w-5" />
+          </Button>
           {connections.size > 0 && (
-            <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+            <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
               {connections.size}
             </span>
           )}
-        </Button>
+        </div>
 
         {/* Topology Button */}
-        <TopologyDialog />
+        <div className="flex justify-center w-full">
+            <Button
+                variant={tabs.find(t => t.id === activeTabId)?.type === 'topology' ? 'secondary' : 'ghost'}
+                size="icon"
+                onClick={() => createTab('topology')}
+                title="Connection Matrix"
+                className="rounded-md h-9 w-9"
+            >
+                <Network className="h-5 w-5" />
+            </Button>
+        </div>
 
         <div className="flex-1" />
         <Button 
-          variant="ghost" 
+          variant={tabs.find(t => t.id === activeTabId)?.type === 'settings' ? 'secondary' : 'ghost'}
           size="icon" 
-          className="rounded-sm"
-          onClick={() => toggleModal('settings', true)}
+          className="rounded-md h-9 w-9"
+          onClick={() => createTab('settings')}
+          title="Settings"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-5 w-5" />
         </Button>
       </div>
 
       {/* Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto p-2">
         {sidebarActiveSection === 'sessions' && (
           <div className="space-y-4">
@@ -733,10 +748,8 @@ export const Sidebar = () => {
           </div>
         )}
 
-        {/* SSH 连接池面板 */}
-        {sidebarActiveSection === 'connections' && (
-          <ConnectionsPanel />
-        )}
+        {/* SSH Connection Pool Panel Removed - moved to Tab */}
+      </div>
       </div>
 
       {/* Edit Connection Modal */}

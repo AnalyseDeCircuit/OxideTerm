@@ -49,6 +49,34 @@ export interface ConnectionPoolConfig {
 }
 
 /**
+ * Connection pool statistics (for monitoring panel)
+ */
+export interface ConnectionPoolStats {
+  /** Total number of connections */
+  totalConnections: number;
+  /** Active connections (with terminals/SFTP/forwards in use) */
+  activeConnections: number;
+  /** Idle connections (no users, waiting for timeout) */
+  idleConnections: number;
+  /** Connections in reconnecting state */
+  reconnectingConnections: number;
+  /** Connections with link down (waiting for reconnect) */
+  linkDownConnections: number;
+  /** Total terminal count */
+  totalTerminals: number;
+  /** Total SFTP session count */
+  totalSftpSessions: number;
+  /** Total port forward count */
+  totalForwards: number;
+  /** Total reference count */
+  totalRefCount: number;
+  /** Pool capacity (0 = unlimited) */
+  poolCapacity: number;
+  /** Idle timeout in seconds */
+  idleTimeoutSecs: number;
+}
+
+/**
  * SSH connect request (new API)
  */
 export interface SshConnectRequest {
@@ -191,12 +219,12 @@ export interface PersistedSessionInfo {
 }
 
 // Tab Types
-export type TabType = 'terminal' | 'sftp' | 'forwards';
+export type TabType = 'terminal' | 'sftp' | 'forwards' | 'settings' | 'connection_monitor' | 'topology';
 
 export interface Tab {
   id: string;
   type: TabType;
-  sessionId: string;
+  sessionId?: string;
   title: string;
   icon?: string;
 }

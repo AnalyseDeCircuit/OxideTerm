@@ -296,6 +296,7 @@ pub fn run() {
             commands::ssh_set_keep_alive,
             commands::ssh_get_pool_config,
             commands::ssh_set_pool_config,
+            commands::ssh_get_pool_stats,
             commands::create_terminal,
             commands::close_terminal,
             commands::recreate_terminal_pty,

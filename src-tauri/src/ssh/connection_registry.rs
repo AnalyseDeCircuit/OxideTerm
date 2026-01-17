@@ -152,6 +152,34 @@ pub struct ConnectionInfo {
     pub parent_connection_id: Option<String>,
 }
 
+/// 连接池统计信息（用于监控面板）
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionPoolStats {
+    /// 总连接数
+    pub total_connections: usize,
+    /// 活跃连接数（有终端/SFTP/转发在用）
+    pub active_connections: usize,
+    /// 空闲连接数（无使用者，等待超时）
+    pub idle_connections: usize,
+    /// 重连中的连接数
+    pub reconnecting_connections: usize,
+    /// 链路断开的连接数（等待重连）
+    pub link_down_connections: usize,
+    /// 总终端数
+    pub total_terminals: usize,
+    /// 总 SFTP 会话数
+    pub total_sftp_sessions: usize,
+    /// 总端口转发数
+    pub total_forwards: usize,
+    /// 总引用计数
+    pub total_ref_count: u32,
+    /// 连接池容量（0 = 无限制）
+    pub pool_capacity: usize,
+    /// 空闲超时时间（秒）
+    pub idle_timeout_secs: u64,
+}
+
 /// 单个 SSH 连接条目
 pub struct ConnectionEntry {
     /// 连接唯一 ID
@@ -571,6 +599,59 @@ impl SshConnectionRegistry {
         Duration::from_secs(self.config.read().await.idle_timeout_secs)
     }
 
+    /// 获取连接池统计信息
+    ///
+    /// 用于监控面板实时显示连接池状态
+    pub async fn get_stats(&self) -> ConnectionPoolStats {
+        let config = self.config.read().await;
+        let pool_capacity = config.max_connections;
+        let idle_timeout_secs = config.idle_timeout_secs;
+        drop(config);
+
+        let mut active_connections = 0;
+        let mut idle_connections = 0;
+        let mut reconnecting_connections = 0;
+        let mut link_down_connections = 0;
+        let mut total_terminals = 0;
+        let mut total_sftp_sessions = 0;
+        let mut total_forwards = 0;
+        let mut total_ref_count: u32 = 0;
+
+        for entry in self.connections.iter() {
+            let conn = entry.value();
+            let state = conn.state().await;
+
+            match state {
+                ConnectionState::Active => active_connections += 1,
+                ConnectionState::Idle => idle_connections += 1,
+                ConnectionState::Reconnecting => reconnecting_connections += 1,
+                ConnectionState::LinkDown => link_down_connections += 1,
+                _ => {}
+            }
+
+            total_terminals += conn.terminal_ids.read().await.len();
+            if conn.sftp_session_id.read().await.is_some() {
+                total_sftp_sessions += 1;
+            }
+            total_forwards += conn.forward_ids.read().await.len();
+            total_ref_count = total_ref_count.saturating_add(conn.ref_count());
+        }
+
+        ConnectionPoolStats {
+            total_connections: self.connections.len(),
+            active_connections,
+            idle_connections,
+            reconnecting_connections,
+            link_down_connections,
+            total_terminals,
+            total_sftp_sessions,
+            total_forwards,
+            total_ref_count,
+            pool_capacity,
+            idle_timeout_secs,
+        }
+    }
+
     /// 创建新的 SSH 连接
     ///
     /// # Arguments
@@ -908,6 +989,141 @@ impl SshConnectionRegistry {
             }
         }
         None
+    }
+
+    /// 精细化连接复用查找
+    ///
+    /// 比 `find_by_config` 更严格，额外检查：
+    /// - 认证方式兼容性
+    /// - 连接状态必须健康（Active/Idle）
+    /// - 心跳失败次数必须为 0
+    ///
+    /// # Returns
+    /// * `Some((connection_id, reuse_quality))` - 找到可复用连接，quality 0-100
+    /// * `None` - 没有合适的复用连接
+    pub async fn find_reusable_connection(&self, config: &SessionConfig) -> Option<(String, u8)> {
+        let mut best_match: Option<(String, u8)> = None;
+
+        for entry in self.connections.iter() {
+            let conn = entry.value();
+            let conn_id = entry.key().clone();
+
+            // 1. 基础匹配：host + port + username
+            if conn.config.host != config.host
+                || conn.config.port != config.port
+                || conn.config.username != config.username
+            {
+                continue;
+            }
+
+            // 2. 认证方式兼容性检查
+            if !Self::auth_compatible(&conn.config.auth, &config.auth) {
+                debug!(
+                    "Connection {} auth not compatible, skipping reuse",
+                    conn_id
+                );
+                continue;
+            }
+
+            // 3. 连接状态必须健康
+            let state = conn.state().await;
+            if state != ConnectionState::Active && state != ConnectionState::Idle {
+                debug!(
+                    "Connection {} state {:?} not healthy, skipping reuse",
+                    conn_id, state
+                );
+                continue;
+            }
+
+            // 4. 底层连接必须活着
+            if !conn.handle_controller.is_connected() {
+                debug!("Connection {} handle disconnected, skipping reuse", conn_id);
+                continue;
+            }
+
+            // 5. 心跳失败次数必须为 0
+            let failures = conn.heartbeat_failures();
+            if failures > 0 {
+                debug!(
+                    "Connection {} has {} heartbeat failures, skipping reuse",
+                    conn_id, failures
+                );
+                continue;
+            }
+
+            // 计算复用质量分数 (0-100)
+            let quality = self.calculate_reuse_quality(conn).await;
+
+            // 选择质量最高的连接
+            if best_match.is_none() || quality > best_match.as_ref().unwrap().1 {
+                best_match = Some((conn_id, quality));
+            }
+        }
+
+        if let Some((ref id, quality)) = best_match {
+            info!(
+                "Found reusable connection {} with quality {}",
+                id, quality
+            );
+        }
+
+        best_match
+    }
+
+    /// 检查两个认证方式是否兼容（可安全复用）
+    fn auth_compatible(a: &AuthMethod, b: &AuthMethod) -> bool {
+        match (a, b) {
+            // 密码认证：必须完全相同
+            (
+                AuthMethod::Password { password: p1 },
+                AuthMethod::Password { password: p2 },
+            ) => p1 == p2,
+            
+            // 密钥认证：路径必须相同（passphrase 不比较，因为密钥已加载）
+            (
+                AuthMethod::Key { key_path: k1, .. },
+                AuthMethod::Key { key_path: k2, .. },
+            ) => k1 == k2,
+            
+            // Agent 认证：总是兼容
+            (AuthMethod::Agent, AuthMethod::Agent) => true,
+            
+            // 不同类型不兼容
+            _ => false,
+        }
+    }
+
+    /// 计算连接复用质量分数
+    async fn calculate_reuse_quality(&self, conn: &ConnectionEntry) -> u8 {
+        let mut score: u8 = 100;
+
+        // 状态评估：Active 最优，Idle 次之
+        let state = conn.state().await;
+        if state == ConnectionState::Idle {
+            score = score.saturating_sub(10); // Idle 扣 10 分
+        }
+
+        // 引用计数评估：引用越少越好（资源争用少）
+        let ref_count = conn.ref_count();
+        if ref_count > 5 {
+            score = score.saturating_sub(20);
+        } else if ref_count > 2 {
+            score = score.saturating_sub(10);
+        }
+
+        // 空闲时间评估：最近活动的更好
+        let now = Utc::now().timestamp() as u64;
+        let last_active = conn.last_active.load(Ordering::SeqCst);
+        let idle_secs = now.saturating_sub(last_active);
+        if idle_secs > 300 {
+            // 空闲超过 5 分钟
+            score = score.saturating_sub(15);
+        } else if idle_secs > 60 {
+            // 空闲超过 1 分钟
+            score = score.saturating_sub(5);
+        }
+
+        score
     }
 
     /// 获取连接（增加引用计数）

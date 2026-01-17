@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff } from 'lucide-react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { cn } from '../../lib/utils';
@@ -13,6 +13,12 @@ const TabIcon = ({ type }: { type: string }) => {
       return <FolderOpen className={iconClass} />;
     case 'forwards':
       return <GitFork className={iconClass} />;
+    case 'settings':
+      return <Settings className={iconClass} />;
+    case 'connection_monitor':
+      return <Activity className={iconClass} />;
+    case 'topology':
+      return <div className="text-[10px]"><Network className={iconClass} /></div>;
     default:
       return null;
   }
@@ -86,11 +92,11 @@ export const TabBar = () => {
   };
 
   // 关闭 Tab 时释放后端资源
-  const handleCloseTab = async (e: React.MouseEvent, tabId: string, sessionId: string, tabType: string) => {
+  const handleCloseTab = async (e: React.MouseEvent, tabId: string, sessionId: string | undefined, tabType: string) => {
     e.stopPropagation();
     
     // 如果是终端 Tab，尝试调用新的 closeTerminalSession
-    if (tabType === 'terminal') {
+    if (tabType === 'terminal' && sessionId) {
       setClosing(sessionId);
       try {
         // 检查 session 是否使用新的连接池架构
@@ -171,7 +177,7 @@ export const TabBar = () => {
                       {reconnectNextRetry && ` (${formatTimeRemaining(reconnectNextRetry)})`}
                     </span>
                     <button
-                      onClick={(e) => handleCancelReconnect(e, tab.sessionId)}
+                      onClick={(e) => tab.sessionId && handleCancelReconnect(e, tab.sessionId)}
                       className="hover:bg-zinc-700 rounded p-0.5"
                       title="Cancel reconnect"
                     >
@@ -186,7 +192,7 @@ export const TabBar = () => {
                     {/* Refresh button for terminal tabs */}
                     {tab.type === 'terminal' && (
                       <button
-                        onClick={(e) => handleReconnect(e, tab.sessionId)}
+                        onClick={(e) => tab.sessionId && handleReconnect(e, tab.sessionId)}
                         disabled={isManualReconnecting}
                         className={cn(
                           "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
@@ -200,11 +206,11 @@ export const TabBar = () => {
                     )}
                     <button
                       onClick={(e) => handleCloseTab(e, tab.id, tab.sessionId, tab.type)}
-                      disabled={closing === tab.sessionId}
+                      disabled={tab.sessionId ? closing === tab.sessionId : false}
                       className={cn(
                         "opacity-0 group-hover:opacity-100 hover:bg-zinc-700 rounded p-0.5 transition-opacity",
                         isActive && "opacity-100",
-                        closing === tab.sessionId && "opacity-100"
+                        (tab.sessionId && closing === tab.sessionId) && "opacity-100"
                       )}
                       title="Close tab"
                     >

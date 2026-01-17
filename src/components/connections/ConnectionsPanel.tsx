@@ -13,6 +13,7 @@ import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { SshConnectionInfo, SshConnectionState } from '../../types';
+import { ConnectionPoolMonitor } from './ConnectionPoolMonitor';
 
 // Format connection state
 const formatState = (state: SshConnectionState): { text: string; color: string } => {
@@ -166,21 +167,25 @@ export const ConnectionsPanel: React.FC = () => {
   
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-theme-border">
-        <div>
-          <h2 className="text-lg font-semibold">SSH Connection Pool</h2>
-          <p className="text-xs text-zinc-500">
-            {activeCount} Active · {idleCount} Idle
-          </p>
-        </div>
+      {/* Header with Monitor */}
+      <div className="border-b border-theme-border">
+        <ConnectionPoolMonitor />
+      </div>
+
+      {/* Connection List Title */}
+      <div className="flex items-center justify-between px-4 py-2 bg-theme-bg/50 border-b border-theme-border">
+        <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+          Connection Details
+        </h3>
         <Button
           variant="ghost"
           size="icon"
+          className="h-6 w-6"
           onClick={handleRefresh}
           disabled={loading}
+          title="Refresh connections"
         >
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
         </Button>
       </div>
       

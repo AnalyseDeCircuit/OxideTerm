@@ -29,6 +29,7 @@ import {
   CreateTerminalRequest,
   CreateTerminalResponse,
   ConnectionPoolConfig,
+  ConnectionPoolStats,
 } from '../types';
 
 // Toggle this for development without a backend
@@ -164,6 +165,29 @@ export const api = {
   sshSetPoolConfig: async (config: ConnectionPoolConfig): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('ssh_set_pool_config', { config });
+  },
+
+  /**
+   * Get connection pool statistics
+   * Returns real-time stats for monitoring panel
+   */
+  sshGetPoolStats: async (): Promise<ConnectionPoolStats> => {
+    if (USE_MOCK) {
+      return {
+        totalConnections: 0,
+        activeConnections: 0,
+        idleConnections: 0,
+        reconnectingConnections: 0,
+        linkDownConnections: 0,
+        totalTerminals: 0,
+        totalSftpSessions: 0,
+        totalForwards: 0,
+        totalRefCount: 0,
+        poolCapacity: 0,
+        idleTimeoutSecs: 1800,
+      };
+    }
+    return invoke('ssh_get_pool_stats');
   },
 
   /**

@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import { Button } from '../ui/button';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { TopologyView } from './TopologyView';
 import { buildTopologyTree } from '../../lib/topologyUtils';
@@ -41,13 +42,15 @@ export const TopologyDialog: React.FC = () => {
   return (
     <>
       {/* 触发按钮 */}
-      <button
+      <Button
+        variant="ghost" 
+        size="icon"
         onClick={handleOpen}
-        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors text-sm"
-        title="View Topology"
+        title="Topology View"
+        className="rounded-md h-9 w-9"
       >
-        <Network className="h-4 w-4" />
-      </button>
+        <Network className="h-5 w-5" />
+      </Button>
 
       {/* 对话框 */}
       <Dialog open={open} onOpenChange={setOpen}>

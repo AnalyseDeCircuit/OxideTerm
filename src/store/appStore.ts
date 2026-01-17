@@ -59,7 +59,7 @@ interface AppStore {
   setNetworkOnline: (online: boolean) => void;
   
   // Actions - Tabs
-  createTab: (type: TabType, sessionId: string) => void;
+  createTab: (type: TabType, sessionId?: string) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   
@@ -591,6 +591,42 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   createTab: (type, sessionId) => {
+    // Handle global/singleton tabs
+    if (type === 'settings' || type === 'connection_monitor' || type === 'topology') {
+      const existingTab = get().tabs.find(t => t.type === type);
+      if (existingTab) {
+        set({ activeTabId: existingTab.id });
+        return;
+      }
+
+      let title = 'Settings';
+      let icon = '⚙️';
+      
+      if (type === 'connection_monitor') {
+        title = 'Connection Monitor';
+        icon = '📊';
+      } else if (type === 'topology') {
+        title = 'Connection Matrix';
+        icon = '🕸️';
+      }
+
+      const newTab: Tab = {
+        id: crypto.randomUUID(),
+        type,
+        title,
+        icon
+      };
+
+      set((state) => ({
+        tabs: [...state.tabs, newTab],
+        activeTabId: newTab.id
+      }));
+      return;
+    }
+
+    // Require sessionId for session-based tabs
+    if (!sessionId) return;
+
     const session = get().sessions.get(sessionId);
     if (!session) return;
 
