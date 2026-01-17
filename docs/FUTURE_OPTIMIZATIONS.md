@@ -65,24 +65,36 @@ pub struct TieredScrollBuffer {
 
 ---
 
-### 1.3 后端搜索服务 ❌ 未实现
+### 1.3 后端搜索服务 ✅ 已完成
 
-**当前问题**：搜索在前端 JavaScript 中执行（xterm SearchAddon），大日志时会阻塞 UI
+**已实现功能**（2026-01-17）：
+- ✅ 搜索在 Rust 后端执行（`session/search.rs`）
+- ✅ 支持正则表达式、大小写敏感、全词匹配
+- ✅ 使用 `tokio::task::spawn_blocking` 避免阻塞异步运行时
+- ✅ 无效正则返回错误信息（不再静默失败）
+- ✅ 前端搜索栏显示正则错误提示
+- ✅ 搜索上下文覆盖层（滚动出可视区域的内容用覆盖层显示，不清空终端）
 
-**优化方案**：将搜索移到 Rust 后端
+**实现细节**：
 ```rust
-#[tauri::command]
-async fn search_terminal_content(
-    session_id: String,
-    query: String,
-    options: SearchOptions,
-) -> Result<Vec<SearchMatch>, String> {
-    // 多线程搜索，支持正则表达式
-    tokio::task::spawn_blocking(move || {
-        // 在后端滚动缓冲区中搜索
-    }).await
+// session/search.rs
+pub fn search_lines(lines: &[TerminalLine], options: SearchOptions) -> SearchResult {
+    // 使用 regex crate 进行高效搜索
+    // 支持 case_sensitive, whole_word, regex 选项
+    // 无效正则返回 error 字段
+}
+
+// scroll_buffer.rs
+pub async fn search(&self, options: SearchOptions) -> SearchResult {
+    let lines = self.get_all().await;
+    tokio::task::spawn_blocking(move || search_lines(&lines, options)).await
 }
 ```
+
+**前端改进**：
+- 搜索栏显示正则错误信息
+- 滚动出可视区域的匹配项显示上下文覆盖层（不破坏终端内容）
+- ESC 键关闭覆盖层
 
 **预期收益**：搜索不阻塞 UI，CPU 占用 ↓ 70%
 
@@ -292,7 +304,7 @@ pub async fn resume_upload(&self, transfer_id: &str) -> Result<()> {
 | SFTP 断点续传 | P1 | 中 | 大文件传输可靠性 ↑↑ | ❌ 未实现 |
 | Windows 性能优化 | P1 | 高 | Windows 用户体验 ↑↑ | ❌ 未实现 |
 | 连接池持久化 | P2 | 低 | 用户体验 ↑ | ❌ 未实现 |
-| 后端搜索服务 | P2 | 中 | 搜索性能 ↑ 70% | ❌ 未实现 |
+| 后端搜索服务 | P2 | 中 | 搜索性能 ↑ 70% | ✅ 已完成 |
 | 智能重连策略 | P2 | 中 | 重连体验 ↑ | ❌ 未实现 |
 | 后端滚动缓冲区分层 | P3 | 高 | 内存占用 ↓ 60% | ⚠️ 基础实现 |
 | 终端主题商店 | P3 | 低 | 用户体验 ↑ | ❌ 未实现 |

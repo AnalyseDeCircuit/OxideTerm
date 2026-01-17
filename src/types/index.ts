@@ -486,6 +486,8 @@ export interface SearchResult {
   matches: SearchMatch[];
   total_matches: number;
   duration_ms: number;
+  /** Error message if regex is invalid */
+  error?: string;
 }
 
 // SFTP Resume Transfer Types

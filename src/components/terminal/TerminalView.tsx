@@ -9,9 +9,9 @@ import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar } from './SearchBar';
-import { SearchMatch, SettingsChangedDetail } from '../../types';
+import { SearchMatch, SettingsChangedDetail, TerminalLine } from '../../types';
 import { listen } from '@tauri-apps/api/event';
-import { Lock, Loader2 } from 'lucide-react';
+import { Lock, Loader2, X } from 'lucide-react';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -79,6 +79,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const [inputLocked, setInputLocked] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'link_down' | 'reconnecting' | 'disconnected'>('connected');
   const inputLockedRef = useRef(false); // For synchronous check in onData callback
+  
+  // === Search Context Overlay State ===
+  // Shows scrolled-out buffer content when jumping to matches not in xterm visible buffer
+  const [searchContextOverlay, setSearchContextOverlay] = useState<{
+    visible: boolean;
+    lines: TerminalLine[];
+    matchLineIndex: number; // Which line in the loaded context contains the match
+    match: SearchMatch | null;
+  }>({ visible: false, lines: [], matchLineIndex: -1, match: null });
   
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
@@ -629,18 +638,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   const currentTheme = themes[settings.theme] || themes.default;
 
-  // Handle search keyboard shortcut (Ctrl/Cmd + F)
+  // Handle search keyboard shortcut (Ctrl/Cmd + F) and ESC to close overlay
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         setSearchOpen(true);
       }
+      
+      // ESC closes search context overlay (if open)
+      if (e.key === 'Escape' && searchContextOverlay.visible) {
+        e.preventDefault();
+        setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [searchContextOverlay.visible]);
 
   // Handle jump to match from search
   const handleJumpToMatch = async (match: SearchMatch) => {
@@ -649,8 +664,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
     console.log('Jumping to match:', match);
 
-    // Clear previous selection
+    // Clear previous selection and close any context overlay
     term.clearSelection();
+    setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
 
     // Try to find ALL occurrences of the matched text in the visible buffer
     const buffer = term.buffer.active;
@@ -705,47 +721,49 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       return;
     }
 
-    // Not found in visible buffer - need to load from backend
+    // Not found in visible buffer - show context overlay instead of clearing terminal
     console.warn('Match not in visible buffer. Loading from backend...', match);
     
     try {
-      // Get context around the matched line from backend
+      // Get context around the matched line from backend (50 lines before and after)
       const lines = await api.scrollToLine(sessionId, match.line_number, 50);
       
       if (lines && lines.length > 0) {
-        // Write the context to terminal
-        term.clear();
-        term.writeln(`\x1b[33m--- Jumped to line ${match.line_number} (loaded from backend) ---\x1b[0m`);
-        lines.forEach(line => {
-          term.writeln(line.text);
-        });
-        term.writeln(`\x1b[33m--- End of context ---\x1b[0m`);
-        
-        // Scroll to show the match (approximate middle of loaded content)
-        const targetRow = Math.min(25, lines.length / 2);
-        term.scrollToLine(targetRow);
-        
-        // Try to select the matched text in the loaded content
-        setTimeout(() => {
-          const buffer = term.buffer.active;
-          for (let row = 0; row < buffer.length; row++) {
-            const line = buffer.getLine(row);
-            if (!line) continue;
-            const lineText = line.translateToString(true);
-            if (lineText.includes(match.matched_text)) {
-              const matchStart = lineText.indexOf(match.matched_text);
-              if (matchStart >= 0) {
-                term.select(matchStart, row, match.matched_text.length);
-              }
+        // Find which line in the context contains the match
+        let matchLineIndex = -1;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].text.includes(match.matched_text)) {
+            // Also check if line content matches for better accuracy
+            if (lines[i].text.trim() === match.line_content.trim() || 
+                lines[i].text.includes(match.line_content.substring(0, 50))) {
+              matchLineIndex = i;
               break;
             }
+            // Fall back to first match if no exact content match
+            if (matchLineIndex === -1) {
+              matchLineIndex = i;
+            }
           }
-        }, 100);
+        }
+        
+        // Show the context overlay
+        setSearchContextOverlay({
+          visible: true,
+          lines,
+          matchLineIndex,
+          match
+        });
+      } else {
+        console.warn('No context lines loaded from backend');
       }
     } catch (error) {
       console.error('Failed to load line from backend:', error);
-      term.writeln(`\x1b[31mError: Could not load line ${match.line_number} from backend\x1b[0m`);
     }
+  };
+  
+  // Close search context overlay
+  const closeSearchContextOverlay = () => {
+    setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
   };
   
   return (
@@ -783,6 +801,89 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
              </div>
              <div className="text-xs text-zinc-400 text-center">
                Input is locked during reconnection
+             </div>
+           </div>
+         </div>
+       )}
+       
+       {/* Search Context Overlay - shows scrolled-out content */}
+       {searchContextOverlay.visible && (
+         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-20 flex items-center justify-center p-4">
+           <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+             {/* Header */}
+             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
+               <div className="flex items-center gap-2">
+                 <span className="text-sm text-zinc-400">Search Result Context</span>
+                 {searchContextOverlay.match && (
+                   <span className="text-xs text-zinc-500">
+                     (Line {searchContextOverlay.match.line_number} in backend buffer)
+                   </span>
+                 )}
+               </div>
+               <button 
+                 onClick={closeSearchContextOverlay}
+                 className="p-1 hover:bg-zinc-800 rounded transition-colors"
+               >
+                 <X className="h-4 w-4 text-zinc-400" />
+               </button>
+             </div>
+             
+             {/* Content */}
+             <div 
+               className="flex-1 overflow-auto font-mono text-sm p-4"
+               style={{ 
+                 fontFamily: settings.fontFamily === 'jetbrains' ? '"JetBrains Mono", monospace' : 
+                             settings.fontFamily === 'meslo' ? '"Meslo LG S", monospace' : 
+                             'monospace',
+                 fontSize: `${settings.fontSize}px`
+               }}
+             >
+               {searchContextOverlay.lines.map((line, index) => {
+                 const isMatchLine = index === searchContextOverlay.matchLineIndex;
+                 const match = searchContextOverlay.match;
+                 
+                 // Highlight the matched text within the line
+                 let lineContent = line.text;
+                 if (isMatchLine && match) {
+                   const matchIndex = lineContent.indexOf(match.matched_text);
+                   if (matchIndex !== -1) {
+                     const before = lineContent.substring(0, matchIndex);
+                     const matched = lineContent.substring(matchIndex, matchIndex + match.matched_text.length);
+                     const after = lineContent.substring(matchIndex + match.matched_text.length);
+                     return (
+                       <div 
+                         key={index}
+                         className={`${isMatchLine ? 'bg-yellow-500/20 -mx-2 px-2' : ''}`}
+                       >
+                         <span className="text-zinc-500 select-none mr-3">
+                           {String(index + 1).padStart(4, ' ')}
+                         </span>
+                         <span className="text-zinc-300">{before}</span>
+                         <span className="bg-yellow-400 text-black px-0.5 rounded">{matched}</span>
+                         <span className="text-zinc-300">{after}</span>
+                       </div>
+                     );
+                   }
+                 }
+                 
+                 return (
+                   <div 
+                     key={index}
+                     className={`${isMatchLine ? 'bg-yellow-500/20 -mx-2 px-2' : ''}`}
+                   >
+                     <span className="text-zinc-500 select-none mr-3">
+                       {String(index + 1).padStart(4, ' ')}
+                     </span>
+                     <span className="text-zinc-300 whitespace-pre">{lineContent || ' '}</span>
+                   </div>
+                 );
+               })}
+             </div>
+             
+             {/* Footer */}
+             <div className="px-4 py-2 border-t border-zinc-700 text-xs text-zinc-500">
+               This content has scrolled out of the terminal's visible buffer. 
+               Press ESC or click outside to close.
              </div>
            </div>
          </div>

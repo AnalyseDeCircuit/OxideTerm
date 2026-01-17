@@ -49,6 +49,9 @@ pub struct SearchResult {
     pub total_matches: usize,
     /// Search duration in milliseconds
     pub duration_ms: u64,
+    /// Error message if regex is invalid (None = no error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Execute search on terminal lines
@@ -76,12 +79,13 @@ pub fn search_lines(lines: &[TerminalLine], options: SearchOptions) -> SearchRes
         .build()
     {
         Ok(re) => re,
-        Err(_) => {
-            // Invalid regex, return empty result
+        Err(e) => {
+            // Invalid regex, return error with message
             return SearchResult {
                 matches: vec![],
                 total_matches: 0,
                 duration_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("Invalid regex: {}", e)),
             };
         }
     };
@@ -106,6 +110,7 @@ pub fn search_lines(lines: &[TerminalLine], options: SearchOptions) -> SearchRes
         total_matches: matches.len(),
         matches,
         duration_ms,
+        error: None,
     }
 }
 
@@ -244,6 +249,8 @@ mod tests {
 
         let result = search_lines(&lines, options);
         assert_eq!(result.total_matches, 0); // Should not panic, return empty
+        assert!(result.error.is_some()); // Should have error message
+        assert!(result.error.unwrap().contains("Invalid regex"));
     }
 
     #[test]

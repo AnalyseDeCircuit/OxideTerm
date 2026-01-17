@@ -222,6 +222,7 @@ impl ScrollBuffer {
                 matches: vec![],
                 total_matches: 0,
                 duration_ms: 0,
+                error: Some("Search task failed".to_string()),
             })
     }
 }

@@ -30,6 +30,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  
+  // Use ref for onJumpToMatch to avoid triggering search re-execution
+  const onJumpToMatchRef = useRef(onJumpToMatch);
+  useEffect(() => {
+    onJumpToMatchRef.current = onJumpToMatch;
+  }, [onJumpToMatch]);
 
   // Focus input when opened
   useEffect(() => {
@@ -60,12 +66,21 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       };
 
       const result = await api.searchTerminal(sessionId, options);
+      
+      // Check for regex error
+      if (result.error) {
+        setError(result.error);
+        setSearchResult(null);
+        setCurrentMatchIndex(-1);
+        return;
+      }
+      
       setSearchResult(result);
       setCurrentMatchIndex(result.total_matches > 0 ? 0 : -1);
 
       // Jump to first match if available
-      if (result.total_matches > 0 && onJumpToMatch) {
-        onJumpToMatch(result.matches[0]);
+      if (result.total_matches > 0 && onJumpToMatchRef.current) {
+        onJumpToMatchRef.current(result.matches[0]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
@@ -74,7 +89,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [query, caseSensitive, useRegex, wholeWord, sessionId, onJumpToMatch]);
+  }, [query, caseSensitive, useRegex, wholeWord, sessionId]); // Removed onJumpToMatch dependency
 
   // Trigger search on query or options change (debounced)
   useEffect(() => {
@@ -103,10 +118,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     
     setCurrentMatchIndex(newIndex);
     
-    if (onJumpToMatch) {
-      onJumpToMatch(searchResult.matches[newIndex]);
+    if (onJumpToMatchRef.current) {
+      onJumpToMatchRef.current(searchResult.matches[newIndex]);
     }
-  }, [searchResult, currentMatchIndex, onJumpToMatch]);
+  }, [searchResult, currentMatchIndex]);
 
   // Navigate to next match
   const gotoNextMatch = useCallback(() => {
@@ -118,10 +133,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     
     setCurrentMatchIndex(newIndex);
     
-    if (onJumpToMatch) {
-      onJumpToMatch(searchResult.matches[newIndex]);
+    if (onJumpToMatchRef.current) {
+      onJumpToMatchRef.current(searchResult.matches[newIndex]);
     }
-  }, [searchResult, currentMatchIndex, onJumpToMatch]);
+  }, [searchResult, currentMatchIndex]);
 
   // Keyboard shortcuts
   useEffect(() => {
