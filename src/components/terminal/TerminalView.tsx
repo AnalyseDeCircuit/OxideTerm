@@ -6,11 +6,12 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, ISearchOptions } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useAppStore } from '../../store/appStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar, DeepSearchState } from './SearchBar';
-import { SettingsChangedDetail, SearchMatch } from '../../types';
+import { SearchMatch } from '../../types';
 import { listen } from '@tauri-apps/api/event';
 import { Lock, Loader2 } from 'lucide-react';
 
@@ -102,18 +103,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
 
-  // Load Settings
-  const [settings, setSettings] = useState(() => {
-        const saved = localStorage.getItem('oxide-settings');
-        return saved ? JSON.parse(saved) : {
-            theme: 'default',
-            fontFamily: 'jetbrains',
-            fontSize: 14,
-            cursorStyle: 'block',
-            cursorBlink: true,
-            scrollback: 1000
-        };
-  });
+  // Get terminal settings from unified store
+  const terminalSettings = useSettingsStore((state) => state.settings.terminal);
 
   // === Listen for connection status changes (Standby mode trigger) ===
   useEffect(() => {
@@ -169,27 +160,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     };
   }, [session?.connectionId, sessionId]);
 
-  // Listen for settings changes (type-safe via WindowEventMap extension)
+  // Subscribe to terminal settings changes from settingsStore
   useEffect(() => {
-    const handleSettingsChange = (e: CustomEvent<SettingsChangedDetail>) => {
-        setSettings(e.detail);
-        if (terminalRef.current) {
-            terminalRef.current.options.fontFamily = getFontFamily(e.detail.fontFamily);
-            terminalRef.current.options.fontSize = e.detail.fontSize;
-            terminalRef.current.options.cursorStyle = e.detail.cursorStyle;
-            terminalRef.current.options.cursorBlink = e.detail.cursorBlink;
-            terminalRef.current.options.lineHeight = e.detail.lineHeight;
-            
-            // Apply theme update - use the theme setter for type-safe assignment
-            const themeConfig = themes[e.detail.theme] || themes.default;
-            terminalRef.current.options.theme = themeConfig;
-            
-            terminalRef.current.refresh(0, terminalRef.current.rows - 1);
-            fitAddonRef.current?.fit();
-        }
-    };
-    window.addEventListener('settings-changed', handleSettingsChange);
-    return () => window.removeEventListener('settings-changed', handleSettingsChange);
+    const unsubscribe = useSettingsStore.subscribe(
+      (state) => state.settings.terminal,
+      (terminal) => {
+        const term = terminalRef.current;
+        if (!term) return;
+        
+        term.options.fontFamily = getFontFamily(terminal.fontFamily);
+        term.options.fontSize = terminal.fontSize;
+        term.options.cursorStyle = terminal.cursorStyle;
+        term.options.cursorBlink = terminal.cursorBlink;
+        term.options.lineHeight = terminal.lineHeight;
+        
+        // Apply theme update
+        const themeConfig = themes[terminal.theme] || themes.default;
+        term.options.theme = themeConfig;
+        
+        term.refresh(0, term.rows - 1);
+        fitAddonRef.current?.fit();
+      }
+    );
+    return unsubscribe;
   }, []);
 
   // Focus terminal when it becomes active (tab switch)
@@ -372,13 +365,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
     // Initialize xterm.js
     const term = new Terminal({
-      cursorBlink: settings.cursorBlink,
-      cursorStyle: settings.cursorStyle,
-      fontFamily: getFontFamily(settings.fontFamily),
-      fontSize: settings.fontSize,
-      lineHeight: 1.2,
-      theme: themes[settings.theme] || themes.default,
-      scrollback: settings.scrollback || 1000,
+      cursorBlink: terminalSettings.cursorBlink,
+      cursorStyle: terminalSettings.cursorStyle,
+      fontFamily: getFontFamily(terminalSettings.fontFamily),
+      fontSize: terminalSettings.fontSize,
+      lineHeight: terminalSettings.lineHeight,
+      theme: themes[terminalSettings.theme] || themes.default,
+      scrollback: terminalSettings.scrollback || 5000,
       allowProposedApi: true,
     });
 
@@ -400,7 +393,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     // Load renderer based on settings
     // renderer: 'auto' | 'webgl' | 'canvas'
     const loadRenderer = async () => {
-        const rendererSetting = settings.renderer || 'auto';
+        const rendererSetting = terminalSettings.renderer || 'auto';
         
         // Helper to load CanvasAddon dynamically (beta version has package.json issues)
         const loadCanvasAddon = async () => {
@@ -713,7 +706,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     }
   };
 
-  const currentTheme = themes[settings.theme] || themes.default;
+  const currentTheme = themes[terminalSettings.theme] || themes.default;
 
   // Handle search keyboard shortcut (Ctrl/Cmd + F)
   useEffect(() => {

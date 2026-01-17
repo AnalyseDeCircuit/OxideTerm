@@ -13,6 +13,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { api } from '../lib/api';
 import { topologyResolver } from '../lib/topologyResolver';
+import { useSettingsStore } from './settingsStore';
 import type { 
   FlatNode, 
   SessionTreeSummary,
@@ -100,8 +101,6 @@ interface SessionTreeStore {
   nodes: UnifiedFlatNode[];
   /** 当前选中的节点 ID */
   selectedNodeId: string | null;
-  /** 展开的节点 ID 集合 */
-  expandedIds: Set<string>;
   /** 加载状态 */
   isLoading: boolean;
   /** 错误信息 */
@@ -109,9 +108,8 @@ interface SessionTreeStore {
   /** 树摘要 */
   summary: SessionTreeSummary | null;
   
-  // ========== Focus Mode State (聚焦模式) ==========
-  /** 当前聚焦的节点 ID，null 表示根视图 */
-  focusedNodeId: string | null;
+  // NOTE: expandedIds 和 focusedNodeId 现在从 settingsStore.treeUI 获取
+  // 使用 getExpandedIds() 和 getFocusedNodeId() getter 访问
   
   /** 节点终端映射 (nodeId -> terminalIds) - 支持多终端 */
   nodeTerminalMap: Map<string, string[]>;
@@ -210,6 +208,61 @@ interface SessionTreeStore {
   getDescendants: (nodeId: string) => UnifiedFlatNode[];
   /** 重建统一节点列表 */
   rebuildUnifiedNodes: () => void;
+  
+  // ========== Settings Store Proxies ==========
+  /** 获取展开的节点 ID 集合（从 settingsStore 读取） */
+  getExpandedIds: () => Set<string>;
+  /** 获取聚焦节点 ID（从 settingsStore 读取） */
+  getFocusedNodeId: () => string | null;
+}
+
+// ============================================================================
+// Orphan ID Pruning
+// ============================================================================
+
+/**
+ * 清理 settingsStore.treeUI 中不再有效的节点 ID
+ * 
+ * 调用时机：rawNodes 更新后
+ * 清理逻辑：
+ *   - expandedIds: 移除所有不在 rawNodes 中的 ID
+ *   - focusedNodeId: 如果不在 rawNodes 中，置为 null
+ */
+function pruneOrphanedTreeUIState(currentNodes: FlatNode[]): void {
+  // 空节点列表时不清理，避免启动时误清
+  if (currentNodes.length === 0) {
+    return;
+  }
+  
+  const settingsStore = useSettingsStore.getState();
+  const { expandedIds, focusedNodeId } = settingsStore.settings.treeUI;
+  
+  // 构建当前有效 ID 集合
+  const validIds = new Set(currentNodes.map(node => node.id));
+  
+  // 过滤 expandedIds
+  const prunedExpandedIds = expandedIds.filter(id => validIds.has(id));
+  const expandedChanged = prunedExpandedIds.length !== expandedIds.length;
+  
+  // 检查 focusedNodeId
+  const focusedValid = focusedNodeId === null || validIds.has(focusedNodeId);
+  
+  // 仅在有变化时更新（避免无意义的 localStorage 写入）
+  if (expandedChanged || !focusedValid) {
+    console.debug(
+      '[SessionTree] Pruning orphaned IDs:',
+      expandedChanged ? `expandedIds: ${expandedIds.length} -> ${prunedExpandedIds.length}` : '',
+      !focusedValid ? `focusedNodeId: ${focusedNodeId} -> null` : ''
+    );
+    
+    // 批量更新 settingsStore
+    if (expandedChanged) {
+      settingsStore.setTreeExpanded(prunedExpandedIds);
+    }
+    if (!focusedValid) {
+      settingsStore.setFocusedNode(null);
+    }
+  }
 }
 
 // ============================================================================
@@ -222,12 +275,10 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     rawNodes: [],
     nodes: [],
     selectedNodeId: null,
-    expandedIds: new Set<string>(),
     isLoading: false,
     error: null,
     summary: null,
-    // Focus Mode (聚焦模式)
-    focusedNodeId: null,
+    // NOTE: expandedIds 和 focusedNodeId 现在从 settingsStore 获取
     nodeTerminalMap: new Map<string, string[]>(),
     terminalNodeMap: new Map<string, string>(),
     linkDownNodeIds: new Set<string>(),
@@ -240,25 +291,21 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       try {
         const rawNodes = await api.getSessionTree();
         
-        // 尝试从 localStorage 恢复展开状态
-        let expandedIds: Set<string>;
-        try {
-          const saved = localStorage.getItem('oxide-tree-expanded');
-          if (saved) {
-            const savedIds = JSON.parse(saved) as string[];
-            // 只保留仍然存在的节点
-            const existingIds = new Set(rawNodes.map(n => n.id));
-            expandedIds = new Set(savedIds.filter(id => existingIds.has(id)));
-          } else {
-            // 首次加载，默认展开所有有子节点的节点
-            expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
-          }
-        } catch {
-          // localStorage 读取失败，使用默认值
-          expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
+        // 获取当前 expandedIds（从 settingsStore）
+        const settingsStore = useSettingsStore.getState();
+        const currentExpandedIds = settingsStore.settings.treeUI.expandedIds;
+        
+        // 如果当前没有展开的节点，默认展开所有有子节点的节点
+        if (currentExpandedIds.length === 0 && rawNodes.length > 0) {
+          const defaultExpanded = rawNodes.filter(n => n.hasChildren).map(n => n.id);
+          settingsStore.setTreeExpanded(defaultExpanded);
         }
         
-        set({ rawNodes, expandedIds, isLoading: false });
+        set({ rawNodes, isLoading: false });
+        
+        // 清理孤儿 ID（移除不存在的 expandedIds/focusedNodeId）
+        pruneOrphanedTreeUIState(rawNodes);
+        
         get().rebuildUnifiedNodes();
       } catch (e) {
         set({ error: String(e), isLoading: false });
@@ -306,10 +353,13 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       try {
         const nodeId = await api.treeDrillDown(request);
         await get().fetchTree();
-        const { expandedIds } = get();
-        const newExpanded = new Set(expandedIds);
-        newExpanded.add(request.parentNodeId);
-        set({ selectedNodeId: nodeId, expandedIds: newExpanded, isLoading: false });
+        // 展开父节点（通过 settingsStore）
+        const settingsStore = useSettingsStore.getState();
+        const currentExpanded = settingsStore.settings.treeUI.expandedIds;
+        if (!currentExpanded.includes(request.parentNodeId)) {
+          settingsStore.setTreeExpanded([...currentExpanded, request.parentNodeId]);
+        }
+        set({ selectedNodeId: nodeId, isLoading: false });
         return nodeId;
       } catch (e) {
         set({ error: String(e), isLoading: false });
@@ -1041,54 +1091,33 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     },
     
     toggleExpand: (nodeId: string) => {
-      const { expandedIds } = get();
-      const newExpanded = new Set(expandedIds);
-      if (newExpanded.has(nodeId)) {
-        newExpanded.delete(nodeId);
-      } else {
-        newExpanded.add(nodeId);
-      }
-      set({ expandedIds: newExpanded });
+      // 使用 settingsStore 管理 expandedIds
+      useSettingsStore.getState().toggleTreeNode(nodeId);
       get().rebuildUnifiedNodes();
-      
-      // 持久化到 localStorage
-      try {
-        localStorage.setItem('oxide-tree-expanded', JSON.stringify([...newExpanded]));
-      } catch (e) {
-        console.warn('Failed to persist expanded state:', e);
-      }
     },
     
     expandAll: () => {
       const { rawNodes } = get();
-      const expandedIds = new Set(rawNodes.filter(n => n.hasChildren).map(n => n.id));
-      set({ expandedIds });
+      const allExpandable = rawNodes.filter(n => n.hasChildren).map(n => n.id);
+      useSettingsStore.getState().setTreeExpanded(allExpandable);
       get().rebuildUnifiedNodes();
     },
     
     collapseAll: () => {
-      set({ expandedIds: new Set() });
+      useSettingsStore.getState().setTreeExpanded([]);
       get().rebuildUnifiedNodes();
     },
     
     // ========== Focus Mode Actions (聚焦模式) ==========
     
     setFocusedNode: (nodeId: string | null) => {
-      set({ focusedNodeId: nodeId });
-      // 持久化到 localStorage
-      try {
-        if (nodeId) {
-          localStorage.setItem('oxide-focused-node', nodeId);
-        } else {
-          localStorage.removeItem('oxide-focused-node');
-        }
-      } catch (e) {
-        console.warn('Failed to persist focused node:', e);
-      }
+      // 使用 settingsStore 管理 focusedNodeId
+      useSettingsStore.getState().setFocusedNode(nodeId);
     },
     
     getBreadcrumbPath: () => {
-      const { focusedNodeId, nodes } = get();
+      const focusedNodeId = get().getFocusedNodeId();
+      const { nodes } = get();
       if (!focusedNodeId) return [];
       
       const path: UnifiedFlatNode[] = [];
@@ -1106,7 +1135,8 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     },
     
     getVisibleNodes: () => {
-      const { focusedNodeId, nodes } = get();
+      const focusedNodeId = get().getFocusedNodeId();
+      const { nodes } = get();
       
       if (!focusedNodeId) {
         // 根视图：显示所有 depth=0 的节点（直连服务器）
@@ -1123,40 +1153,35 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       
       // 只有有子节点的节点才能"进入"
       if (node.hasChildren) {
-        set({ focusedNodeId: nodeId });
-        // 持久化
-        try {
-          localStorage.setItem('oxide-focused-node', nodeId);
-        } catch (e) {
-          console.warn('Failed to persist focused node:', e);
-        }
+        useSettingsStore.getState().setFocusedNode(nodeId);
       }
     },
     
     goBack: () => {
-      const { focusedNodeId, nodes } = get();
+      const focusedNodeId = get().getFocusedNodeId();
       if (!focusedNodeId) return; // 已经在根视图
       
+      const { nodes } = get();
       const nodeMap = new Map(nodes.map(n => [n.id, n]));
       const currentNode = nodeMap.get(focusedNodeId);
       
       // 返回父节点，如果没有父节点则返回根视图
       const parentId = currentNode?.parentId || null;
-      set({ focusedNodeId: parentId });
-      
-      // 持久化
-      try {
-        if (parentId) {
-          localStorage.setItem('oxide-focused-node', parentId);
-        } else {
-          localStorage.removeItem('oxide-focused-node');
-        }
-      } catch (e) {
-        console.warn('Failed to persist focused node:', e);
-      }
+      useSettingsStore.getState().setFocusedNode(parentId);
     },
     
     // ========== Helpers ==========
+    
+    // 从 settingsStore 获取 expandedIds (作为 Set)
+    getExpandedIds: () => {
+      const expandedArray = useSettingsStore.getState().settings.treeUI.expandedIds;
+      return new Set(expandedArray);
+    },
+    
+    // 从 settingsStore 获取 focusedNodeId
+    getFocusedNodeId: () => {
+      return useSettingsStore.getState().settings.treeUI.focusedNodeId;
+    },
     
     getNode: (nodeId: string) => {
       return get().nodes.find(n => n.id === nodeId);
@@ -1189,7 +1214,9 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     },
     
     rebuildUnifiedNodes: () => {
-      const { rawNodes, expandedIds, nodeTerminalMap, linkDownNodeIds } = get();
+      const { rawNodes, nodeTerminalMap, linkDownNodeIds } = get();
+      // 从 settingsStore 获取 expandedIds
+      const expandedIds = get().getExpandedIds();
       
       // 构建 lineGuides (连接线指示)
       const buildLineGuides = (node: FlatNode, allNodes: FlatNode[]): boolean[] => {

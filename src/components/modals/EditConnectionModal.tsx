@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ConnectionInfo } from '../../types';
 import { useAppStore } from '../../store/appStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { api } from '../../lib/api';
 
 interface EditConnectionModalProps {
@@ -60,11 +61,11 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
     setError('');
 
     try {
-      // Get buffer configuration from settings
-      const settings = JSON.parse(localStorage.getItem('oxide-settings') || '{}');
+      // Get buffer configuration from settingsStore
+      const { buffer } = useSettingsStore.getState().settings;
       const bufferConfig = {
-        max_lines: settings.bufferMaxLines || 100000,
-        save_on_disconnect: settings.bufferSaveOnDisconnect !== false,
+        max_lines: buffer.maxLines,
+        save_on_disconnect: buffer.saveOnDisconnect,
       };
 
       await connect({

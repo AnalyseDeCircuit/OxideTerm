@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore';
+import { useSettingsStore, type RendererType, type FontFamily } from '../../store/settingsStore';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
@@ -22,7 +23,6 @@ import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInp
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
-import { applyGlobalTheme } from '../../lib/themeManager';
 
 const ThemePreview = ({ themeName }: { themeName: string }) => {
     const theme = themes[themeName] || themes.default;
@@ -46,79 +46,13 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
     );
 };
 
-// Extended persistence hook
-interface PersistedSettings {
-    // Terminal
-    theme: string;
-    fontFamily: string;
-    fontSize: number;
-    lineHeight: number;
-    cursorStyle: string;
-    cursorBlink: boolean;
-    scrollback: number;
-    renderer: 'auto' | 'webgl' | 'canvas'; // Renderer selection
-    // Buffer
-    bufferMaxLines: number;
-    bufferSaveOnDisconnect: boolean;
-    // Appearance
-    sidebarCollapsedDefault: boolean;
-    // Connections
-    defaultUsername: string;
-    defaultPort: number;
-}
-
-// Detect platform for default renderer (Canvas on Windows, Auto elsewhere)
-const isWindows = navigator.platform.toLowerCase().includes('win');
-const defaultRenderer: 'auto' | 'webgl' | 'canvas' = isWindows ? 'canvas' : 'auto';
-
-const defaultSettings: PersistedSettings = {
-    // Terminal
-    theme: 'default',
-    fontFamily: 'jetbrains',
-    fontSize: 14,
-    lineHeight: 1.2,
-    cursorStyle: 'block',
-    cursorBlink: true,
-    scrollback: 1000,
-    renderer: defaultRenderer, // Platform-specific default
-    // Buffer
-    bufferMaxLines: 100000,
-    bufferSaveOnDisconnect: true,
-    // Appearance
-    sidebarCollapsedDefault: false,
-    // Connections
-    defaultUsername: 'root',
-    defaultPort: 22,
-};
-
-const usePersistedSettings = () => {
-    const [settings, setSettings] = useState<PersistedSettings>(() => {
-        const saved = localStorage.getItem('oxide-settings');
-        return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-    });
-
-    useEffect(() => {
-        localStorage.setItem('oxide-settings', JSON.stringify(settings));
-        window.dispatchEvent(new CustomEvent('settings-changed', { detail: settings }));
-    }, [settings]);
-
-    const updateSetting = <K extends keyof PersistedSettings>(key: K, value: PersistedSettings[K]) => {
-        setSettings((prev) => ({ ...prev, [key]: value }));
-        
-        // Apply global theme immediately when theme changes
-        // Use typeof guard to safely narrow the generic value type
-        if (key === 'theme' && typeof value === 'string') {
-            applyGlobalTheme(value);
-        }
-    };
-
-    return { settings, updateSetting };
-};
-
 export const SettingsModal = () => {
   const { modals, toggleModal } = useAppStore();
   const [activeTab, setActiveTab] = useState('terminal');
-  const { settings, updateSetting } = usePersistedSettings();
+  
+  // Use unified settings store
+  const { settings, updateTerminal, updateBuffer, updateAppearance, updateConnectionDefaults } = useSettingsStore();
+  const { terminal, buffer, appearance, connectionDefaults } = settings;
   
   // Data State
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
@@ -260,8 +194,8 @@ export const SettingsModal = () => {
                                 <div className="grid gap-2">
                                     <Label>Font Family</Label>
                                     <Select 
-                                        value={settings.fontFamily}
-                                        onValueChange={(v) => updateSetting('fontFamily', v)}
+                                        value={terminal.fontFamily}
+                                        onValueChange={(v) => updateTerminal('fontFamily', v as FontFamily)}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -276,8 +210,8 @@ export const SettingsModal = () => {
                                 <div className="grid gap-2">
                                     <Label>Font Size</Label>
                                     <Select 
-                                        value={settings.fontSize.toString()}
-                                        onValueChange={(v) => updateSetting('fontSize', parseInt(v))}
+                                        value={terminal.fontSize.toString()}
+                                        onValueChange={(v) => updateTerminal('fontSize', parseInt(v))}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -295,8 +229,8 @@ export const SettingsModal = () => {
                                 <div className="grid gap-2">
                                     <Label>Line Height</Label>
                                     <Select 
-                                        value={settings.lineHeight.toString()}
-                                        onValueChange={(v) => updateSetting('lineHeight', parseFloat(v))}
+                                        value={terminal.lineHeight.toString()}
+                                        onValueChange={(v) => updateTerminal('lineHeight', parseFloat(v))}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -311,8 +245,8 @@ export const SettingsModal = () => {
                                 <div className="grid gap-2">
                                     <Label>Scrollback Lines (Frontend)</Label>
                                     <Select 
-                                        value={settings.scrollback.toString()}
-                                        onValueChange={(v) => updateSetting('scrollback', parseInt(v))}
+                                        value={terminal.scrollback.toString()}
+                                        onValueChange={(v) => updateTerminal('scrollback', parseInt(v))}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -329,8 +263,8 @@ export const SettingsModal = () => {
                             <div className="grid gap-2">
                                 <Label>Renderer</Label>
                                 <Select 
-                                    value={settings.renderer}
-                                    onValueChange={(v) => updateSetting('renderer', v as 'auto' | 'webgl' | 'canvas')}
+                                    value={terminal.renderer}
+                                    onValueChange={(v) => updateTerminal('renderer', v as RendererType)}
                                 >
                                     <SelectTrigger className="w-[240px]">
                                         <SelectValue />
@@ -352,24 +286,24 @@ export const SettingsModal = () => {
                                     <div className="flex items-center space-x-2">
                                         <Checkbox 
                                             id="block" 
-                                            checked={settings.cursorStyle === 'block'}
-                                            onCheckedChange={() => updateSetting('cursorStyle', 'block')}
+                                            checked={terminal.cursorStyle === 'block'}
+                                            onCheckedChange={() => updateTerminal('cursorStyle', 'block')}
                                         />
                                         <Label htmlFor="block">Block</Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox 
                                             id="underline" 
-                                            checked={settings.cursorStyle === 'underline'}
-                                            onCheckedChange={() => updateSetting('cursorStyle', 'underline')}
+                                            checked={terminal.cursorStyle === 'underline'}
+                                            onCheckedChange={() => updateTerminal('cursorStyle', 'underline')}
                                         />
                                         <Label htmlFor="underline">Underline</Label>
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <Checkbox 
                                             id="bar" 
-                                            checked={settings.cursorStyle === 'bar'}
-                                            onCheckedChange={() => updateSetting('cursorStyle', 'bar')}
+                                            checked={terminal.cursorStyle === 'bar'}
+                                            onCheckedChange={() => updateTerminal('cursorStyle', 'bar')}
                                         />
                                         <Label htmlFor="bar">Bar</Label>
                                     </div>
@@ -379,8 +313,8 @@ export const SettingsModal = () => {
                             <div className="flex items-center space-x-2">
                                 <Checkbox 
                                     id="blink" 
-                                    checked={settings.cursorBlink}
-                                    onCheckedChange={(c) => updateSetting('cursorBlink', !!c)}
+                                    checked={terminal.cursorBlink}
+                                    onCheckedChange={(c) => updateTerminal('cursorBlink', !!c)}
                                 />
                                 <Label htmlFor="blink">Cursor Blink</Label>
                             </div>
@@ -397,8 +331,8 @@ export const SettingsModal = () => {
                             <div className="grid gap-2">
                                 <Label>Maximum Buffer Lines</Label>
                                 <Select 
-                                    value={settings.bufferMaxLines.toString()}
-                                    onValueChange={(v) => updateSetting('bufferMaxLines', parseInt(v))}
+                                    value={buffer.maxLines.toString()}
+                                    onValueChange={(v) => updateBuffer('maxLines', parseInt(v))}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -419,8 +353,8 @@ export const SettingsModal = () => {
                             <div className="flex items-center space-x-2">
                                 <Checkbox 
                                     id="buffer-save" 
-                                    checked={settings.bufferSaveOnDisconnect}
-                                    onCheckedChange={(c) => updateSetting('bufferSaveOnDisconnect', !!c)}
+                                    checked={buffer.saveOnDisconnect}
+                                    onCheckedChange={(c) => updateBuffer('saveOnDisconnect', !!c)}
                                 />
                                 <Label htmlFor="buffer-save" className="cursor-pointer">
                                     Save buffer content on disconnect
@@ -444,8 +378,8 @@ export const SettingsModal = () => {
                             <div className="grid gap-2">
                                 <Label>Theme</Label>
                                 <Select 
-                                    value={settings.theme} 
-                                    onValueChange={(v) => updateSetting('theme', v)}
+                                    value={terminal.theme} 
+                                    onValueChange={(v) => updateTerminal('theme', v)}
                                 >
                                     <SelectTrigger className="w-[240px]">
                                         <SelectValue />
@@ -460,14 +394,14 @@ export const SettingsModal = () => {
                                         <SelectItem value="github-dark">GitHub Dark</SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <ThemePreview themeName={settings.theme} />
+                                <ThemePreview themeName={terminal.theme} />
                             </div>
 
                              <div className="flex items-center space-x-2">
                                 <Checkbox 
                                     id="sidebar-col" 
-                                    checked={settings.sidebarCollapsedDefault}
-                                    onCheckedChange={(c) => updateSetting('sidebarCollapsedDefault', !!c)}
+                                    checked={appearance.sidebarCollapsedDefault}
+                                    onCheckedChange={(c) => updateAppearance('sidebarCollapsedDefault', !!c)}
                                 />
                                 <Label htmlFor="sidebar-col">Collapse Sidebar by default</Label>
                             </div>
@@ -486,15 +420,15 @@ export const SettingsModal = () => {
                             <div className="grid gap-2">
                                 <Label>Default Username</Label>
                                 <Input 
-                                    value={settings.defaultUsername}
-                                    onChange={(e) => updateSetting('defaultUsername', e.target.value)}
+                                    value={connectionDefaults.username}
+                                    onChange={(e) => updateConnectionDefaults('username', e.target.value)}
                                 />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Default Port</Label>
                                 <Input 
-                                    value={settings.defaultPort}
-                                    onChange={(e) => updateSetting('defaultPort', parseInt(e.target.value) || 22)}
+                                    value={connectionDefaults.port}
+                                    onChange={(e) => updateConnectionDefaults('port', parseInt(e.target.value) || 22)}
                                 />
                             </div>
                         </div>

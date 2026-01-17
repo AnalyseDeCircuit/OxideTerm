@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../../store/appStore';
+import { useSettingsStore, type RendererType, type FontFamily, type CursorStyle } from '../../store/settingsStore';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
@@ -16,8 +17,6 @@ import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInp
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
-import { applyGlobalTheme } from '../../lib/themeManager';
-import { platform } from '../../lib/platform';
 
 const formatThemeName = (key: string) => {
     return key.split('-')
@@ -47,75 +46,12 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
     );
 };
 
-// Extended persistence hook
-interface PersistedSettings {
-    // Terminal
-    theme: string;
-    fontFamily: string;
-    fontSize: number;
-    lineHeight: number;
-    cursorStyle: string;
-    cursorBlink: boolean;
-    scrollback: number;
-    renderer: 'auto' | 'webgl' | 'canvas';
-    // Buffer
-    bufferMaxLines: number;
-    bufferSaveOnDisconnect: boolean;
-    // Appearance
-    sidebarCollapsedDefault: boolean;
-    // Connections
-    defaultUsername: string;
-    defaultPort: number;
-}
-
-const defaultRenderer: 'auto' | 'webgl' | 'canvas' = platform.isWindows ? 'canvas' : 'auto';
-
-const defaultSettings: PersistedSettings = {
-    // Terminal
-    theme: 'default',
-    fontFamily: 'jetbrains',
-    fontSize: 14,
-    lineHeight: 1.2,
-    cursorStyle: 'block',
-    cursorBlink: true,
-    scrollback: 1000,
-    renderer: defaultRenderer,
-    // Buffer
-    bufferMaxLines: 100000,
-    bufferSaveOnDisconnect: true,
-    // Appearance
-    sidebarCollapsedDefault: false,
-    // Connections
-    defaultUsername: 'root',
-    defaultPort: 22,
-};
-
-const usePersistedSettings = () => {
-    const [settings, setSettings] = useState<PersistedSettings>(() => {
-        const saved = localStorage.getItem('oxide-settings');
-        return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
-    });
-
-    useEffect(() => {
-        localStorage.setItem('oxide-settings', JSON.stringify(settings));
-        window.dispatchEvent(new CustomEvent('settings-changed', { detail: settings }));
-    }, [settings]);
-
-    const updateSetting = <K extends keyof PersistedSettings>(key: K, value: PersistedSettings[K]) => {
-        setSettings((prev) => ({ ...prev, [key]: value }));
-        
-        // Apply global theme immediately when theme changes
-        if (key === 'theme' && typeof value === 'string') {
-            applyGlobalTheme(value);
-        }
-    };
-
-    return { settings, updateSetting };
-};
-
 export const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('terminal');
-  const { settings, updateSetting } = usePersistedSettings();
+  
+  // Use unified settings store
+  const { settings, updateTerminal, updateAppearance, updateConnectionDefaults } = useSettingsStore();
+  const { terminal, appearance, connectionDefaults } = settings;
   
   // Data State
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
@@ -246,8 +182,8 @@ export const SettingsView = () => {
                                         <p className="text-xs text-zinc-500 mt-0.5">Monospace font for terminal text</p>
                                     </div>
                                     <Select 
-                                        value={settings.fontFamily} 
-                                        onValueChange={(val) => updateSetting('fontFamily', val)}
+                                        value={terminal.fontFamily} 
+                                        onValueChange={(val) => updateTerminal('fontFamily', val as FontFamily)}
                                     >
                                         <SelectTrigger className="w-[200px]">
                                             <SelectValue placeholder="Select font" />
@@ -276,15 +212,15 @@ export const SettingsView = () => {
                                             min="8" 
                                             max="32" 
                                             step="1"
-                                            value={settings.fontSize}
-                                            onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))}
+                                            value={terminal.fontSize}
+                                            onChange={(e) => updateTerminal('fontSize', parseInt(e.target.value))}
                                             className="w-32"
                                         />
                                         <div className="flex items-center gap-1">
                                             <Input 
                                                 type="number"
-                                                value={settings.fontSize}
-                                                onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))}
+                                                value={terminal.fontSize}
+                                                onChange={(e) => updateTerminal('fontSize', parseInt(e.target.value))}
                                                 className="w-16 text-center"
                                             />
                                             <span className="text-xs text-zinc-500">px</span>
@@ -304,8 +240,8 @@ export const SettingsView = () => {
                                         step="0.1" 
                                         min="0.8" 
                                         max="3"
-                                        value={settings.lineHeight}
-                                        onChange={(e) => updateSetting('lineHeight', parseFloat(e.target.value))}
+                                        value={terminal.lineHeight}
+                                        onChange={(e) => updateTerminal('lineHeight', parseFloat(e.target.value))}
                                         className="w-20 text-center"
                                     />
                                 </div>
@@ -318,8 +254,8 @@ export const SettingsView = () => {
                                         <p className="text-xs text-zinc-500 mt-0.5">Choose WebGL or Canvas rendering</p>
                                     </div>
                                     <Select
-                                        value={settings.renderer}
-                                        onValueChange={(val) => updateSetting('renderer', val as 'auto' | 'webgl' | 'canvas')}
+                                        value={terminal.renderer}
+                                        onValueChange={(val) => updateTerminal('renderer', val as RendererType)}
                                     >
                                         <SelectTrigger className="w-[200px]">
                                             <SelectValue />
@@ -344,8 +280,8 @@ export const SettingsView = () => {
                                         <p className="text-xs text-zinc-500 mt-0.5">Shape of the text cursor</p>
                                     </div>
                                     <Select 
-                                        value={settings.cursorStyle} 
-                                        onValueChange={(val) => updateSetting('cursorStyle', val)}
+                                        value={terminal.cursorStyle} 
+                                        onValueChange={(val) => updateTerminal('cursorStyle', val as CursorStyle)}
                                     >
                                         <SelectTrigger className="w-[160px]">
                                             <SelectValue />
@@ -367,8 +303,8 @@ export const SettingsView = () => {
                                     </div>
                                     <Checkbox 
                                         id="blink" 
-                                        checked={settings.cursorBlink}
-                                        onCheckedChange={(checked) => updateSetting('cursorBlink', checked as boolean)}
+                                        checked={terminal.cursorBlink}
+                                        onCheckedChange={(checked) => updateTerminal('cursorBlink', checked as boolean)}
                                     />
                                 </div>
                             </div>
@@ -384,8 +320,8 @@ export const SettingsView = () => {
                                 </div>
                                 <Input 
                                     type="number"
-                                    value={settings.scrollback}
-                                    onChange={(e) => updateSetting('scrollback', parseInt(e.target.value))}
+                                    value={terminal.scrollback}
+                                    onChange={(e) => updateTerminal('scrollback', parseInt(e.target.value))}
                                     className="w-28 text-center"
                                 />
                             </div>
@@ -411,12 +347,12 @@ export const SettingsView = () => {
                                         <p className="text-xs text-zinc-500 mt-0.5">Terminal color scheme</p>
                                     </div>
                                     <Select 
-                                        value={settings.theme} 
-                                        onValueChange={(val) => updateSetting('theme', val)}
+                                        value={terminal.theme} 
+                                        onValueChange={(val) => updateTerminal('theme', val)}
                                     >
                                         <SelectTrigger className="w-[200px] text-zinc-100">
                                             <SelectValue placeholder="Select theme">
-                                                {formatThemeName(settings.theme)}
+                                                {formatThemeName(terminal.theme)}
                                             </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent className="bg-zinc-900 border-zinc-700">
@@ -428,7 +364,7 @@ export const SettingsView = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <ThemePreview themeName={settings.theme} />
+                                <ThemePreview themeName={terminal.theme} />
                             </div>
                         </div>
 
@@ -442,8 +378,8 @@ export const SettingsView = () => {
                                 </div>
                                 <Checkbox 
                                     id="sidebar" 
-                                    checked={settings.sidebarCollapsedDefault}
-                                    onCheckedChange={(checked) => updateSetting('sidebarCollapsedDefault', checked as boolean)}
+                                    checked={appearance.sidebarCollapsedDefault}
+                                    onCheckedChange={(checked) => updateAppearance('sidebarCollapsedDefault', checked as boolean)}
                                 />
                             </div>
                         </div>
@@ -461,15 +397,15 @@ export const SettingsView = () => {
                             <div className="grid gap-2">
                                 <Label>Default Username</Label>
                                 <Input 
-                                    value={settings.defaultUsername}
-                                    onChange={(e) => updateSetting('defaultUsername', e.target.value)}
+                                    value={connectionDefaults.username}
+                                    onChange={(e) => updateConnectionDefaults('username', e.target.value)}
                                 />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Default Port</Label>
                                 <Input 
-                                    value={settings.defaultPort}
-                                    onChange={(e) => updateSetting('defaultPort', parseInt(e.target.value) || 22)}
+                                    value={connectionDefaults.port}
+                                    onChange={(e) => updateConnectionDefaults('port', parseInt(e.target.value) || 22)}
                                 />
                             </div>
                         </div>

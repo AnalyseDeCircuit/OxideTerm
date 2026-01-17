@@ -2,11 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles.css'
-import { initializeTheme } from './lib/themeManager'
-import { saveUIState } from './store/appStore'
+import { initializeSettings } from './store/settingsStore'
 
-// Initialize theme before rendering
-initializeTheme()
+// Initialize settings (including theme) before rendering
+// This loads from oxide-settings-v2, applies theme, and cleans up legacy keys
+initializeSettings()
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 
@@ -17,8 +17,7 @@ root.render(
 )
 
 // Cleanup on window close to prevent memory leaks
-// Also save UI state (tabs, sidebar) for restoration on next launch
+// NOTE: UI state (sidebar) is now automatically persisted by settingsStore
 window.addEventListener('beforeunload', () => {
-  saveUIState()
   root.unmount()
 })

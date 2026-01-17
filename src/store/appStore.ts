@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from '../lib/api';
 import { useToastStore } from '../hooks/useToast';
 import { topologyResolver } from '../lib/topologyResolver';
+import { useSettingsStore, type SidebarSection } from './settingsStore';
 import { 
   SessionInfo, 
   Tab, 
@@ -23,8 +24,8 @@ interface ModalsState {
   autoRoute: boolean; // 自动路由选择器
 }
 
-// 侧边栏区域类型
-type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections';
+// Re-export SidebarSection from settingsStore for backwards compatibility
+export type { SidebarSection };
 
 interface AppStore {
   // State
@@ -32,8 +33,10 @@ interface AppStore {
   connections: Map<string, SshConnectionInfo>; // 新增：连接池状态
   tabs: Tab[];
   activeTabId: string | null;
-  sidebarCollapsed: boolean;
-  sidebarActiveSection: SidebarSection;
+  // sidebarCollapsed 和 sidebarActiveSection 已迁移至 settingsStore
+  // 使用 getter 保持向后兼容
+  readonly sidebarCollapsed: boolean;
+  readonly sidebarActiveSection: SidebarSection;
   modals: ModalsState;
   savedConnections: ConnectionInfo[];
   groups: string[];
@@ -89,48 +92,28 @@ interface AppStore {
 }
 
 // Key for localStorage persistence
-const UI_STATE_STORAGE_KEY = 'oxide-ui-state';
+// NOTE: oxide-ui-state localStorage key is DEPRECATED
+// Sidebar state is now managed by settingsStore (oxide-settings-v2)
+// This key will be cleaned up in a future version
 
 // Load persisted UI state from localStorage
 // NOTE: We don't persist tabs/activeTabId because sessions are memory-only.
-// Persisting tabs would create ghost tabs referencing non-existent sessions.
-function loadPersistedUIState(): { tabs: Tab[]; activeTabId: string | null; sidebarCollapsed: boolean; sidebarActiveSection: SidebarSection } {
-  try {
-    const stored = localStorage.getItem(UI_STATE_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return {
-        tabs: [], // Don't restore tabs - sessions are not persisted
-        activeTabId: null, // Don't restore activeTabId
-        sidebarCollapsed: typeof parsed.sidebarCollapsed === 'boolean' ? parsed.sidebarCollapsed : false,
-        sidebarActiveSection: parsed.sidebarActiveSection ?? 'sessions',
-      };
-    }
-  } catch (e) {
-    console.warn('Failed to load persisted UI state:', e);
-  }
+// NOTE: sidebarCollapsed/sidebarActiveSection have been migrated to settingsStore
+function loadPersistedUIState(): { tabs: Tab[]; activeTabId: string | null } {
+  // Just return defaults - sidebar state is loaded from settingsStore
   return {
     tabs: [],
     activeTabId: null,
-    sidebarCollapsed: false,
-    sidebarActiveSection: 'sessions',
   };
 }
 
 // Save UI state to localStorage
-// NOTE: We don't persist tabs/activeTabId because sessions are memory-only.
+// NOTE: This is now a NO-OP as sidebar state is managed by settingsStore
+// Keeping the function signature for backwards compatibility
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function saveUIState(): void {
-  try {
-    const state = useAppStore.getState();
-    const uiState = {
-      // Don't save tabs/activeTabId - they reference sessions which are not persisted
-      sidebarCollapsed: state.sidebarCollapsed,
-      sidebarActiveSection: state.sidebarActiveSection,
-    };
-    localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(uiState));
-  } catch (e) {
-    console.warn('Failed to save UI state:', e);
-  }
+  // NO-OP: Sidebar state is now automatically persisted by settingsStore
+  // This function is kept for backwards compatibility but does nothing
 }
 
 const persistedState = loadPersistedUIState();
@@ -140,8 +123,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
   connections: new Map(), // 新增：连接池状态
   tabs: persistedState.tabs,
   activeTabId: persistedState.activeTabId,
-  sidebarCollapsed: persistedState.sidebarCollapsed,
-  sidebarActiveSection: persistedState.sidebarActiveSection,
+  // Sidebar state is now delegated to settingsStore
+  // These getters provide backwards compatibility for components that read from appStore
+  get sidebarCollapsed() {
+    return useSettingsStore.getState().settings.sidebarUI.collapsed;
+  },
+  get sidebarActiveSection() {
+    return useSettingsStore.getState().settings.sidebarUI.activeSection;
+  },
   reconnectPendingSessionId: null,
   modals: {
     newConnection: false,
@@ -694,12 +683,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ activeTabId: tabId });
   },
 
+  // Sidebar actions delegated to settingsStore
   toggleSidebar: () => {
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+    useSettingsStore.getState().toggleSidebar();
   },
 
   setSidebarSection: (section) => {
-    set({ sidebarActiveSection: section });
+    useSettingsStore.getState().setSidebarSection(section);
   },
   
   toggleModal: (modal, isOpen) => {

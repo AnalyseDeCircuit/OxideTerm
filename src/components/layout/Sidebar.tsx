@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -37,9 +38,11 @@ import { api } from '../../lib/api';
 import type { UnifiedFlatNode } from '../../types';
 
 export const Sidebar = () => {
+  // Sidebar state from settingsStore (for reactivity)
+  const sidebarCollapsed = useSettingsStore((s) => s.settings.sidebarUI.collapsed);
+  const sidebarActiveSection = useSettingsStore((s) => s.settings.sidebarUI.activeSection);
+  
   const { 
-    sidebarCollapsed, 
-    sidebarActiveSection, 
     setSidebarSection,
     sessions,
     connections,

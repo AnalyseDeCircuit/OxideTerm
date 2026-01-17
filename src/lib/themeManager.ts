@@ -36,20 +36,12 @@ export const getCurrentTheme = (): string => {
 
 /**
  * Initialize theme on app startup
+ * NOTE: This function is now a NO-OP as theme is managed by settingsStore
+ * settingsStore automatically applies the theme during initialization
+ * Kept for backwards compatibility
  */
 export const initializeTheme = () => {
-  const saved = localStorage.getItem('oxide-settings');
-  if (saved) {
-    try {
-      const settings = JSON.parse(saved);
-      if (settings.theme) {
-        applyGlobalTheme(settings.theme);
-        return;
-      }
-    } catch (e) {
-      console.error('Failed to parse saved settings:', e);
-    }
-  }
-  // Default theme
-  applyGlobalTheme('default');
+  // NO-OP: Theme initialization is handled by settingsStore.initializeSettings()
+  // which reads the theme from oxide-settings-v2 and applies it automatically
+  console.debug('[themeManager] initializeTheme() is deprecated - theme managed by settingsStore');
 };
