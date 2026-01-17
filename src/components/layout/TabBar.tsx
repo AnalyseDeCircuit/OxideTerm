@@ -65,6 +65,7 @@ export const TabBar = () => {
   // Update countdown every second when there are reconnecting sessions
   React.useEffect(() => {
     const hasReconnecting = tabs.some((tab) => {
+      if (!tab.sessionId) return false;
       const session = sessions.get(tab.sessionId);
       return session?.state === 'reconnecting' && session.reconnectNextRetry;
     });
@@ -147,7 +148,7 @@ export const TabBar = () => {
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             const isManualReconnecting = reconnecting === tab.sessionId;
-            const session = sessions.get(tab.sessionId);
+            const session = tab.sessionId ? sessions.get(tab.sessionId) : undefined;
             const isAutoReconnecting = session?.state === 'reconnecting';
             const reconnectAttempt = session?.reconnectAttempt;
             const reconnectMax = session?.reconnectMaxAttempts;

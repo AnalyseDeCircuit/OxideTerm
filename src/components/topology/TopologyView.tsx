@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import type { TopologyNode, LayoutNode } from '../../lib/topologyUtils';
-import { getNodeColor, calculateTreeLayout } from '../../lib/topologyUtils';
+import { calculateTreeLayout } from '../../lib/topologyUtils';
 import { cn } from '../../lib/utils';
 
 interface TopologyViewProps {
@@ -137,8 +137,8 @@ const NodeCard = ({
   const halfHeight = node.height / 2;
   
   // Interactive States
-  const isDown = node.status === 'disconnected' || node.status === 'closed' || node.status === 'error';
-  const isConnecting = node.status === 'connecting';
+  const isDown = node.status === 'disconnected' || node.status === 'failed';
+  const isConnecting = node.status === 'connecting' || node.status === 'pending';
 
   return (
     <foreignObject 
@@ -241,14 +241,12 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
   const height = Math.max(500, maxY + 100);
 
   // 4. Helper to determine connection relevance for dimming
-  const isNodeRelevant = (nodeId: string) => {
-      if (!hoveredNodeId) return false;
-      if (nodeId === hoveredNodeId) return true;
-      // Logic could be expanded to highlight parents/children. 
-      // For now, if *any* node is hovered, others are dimmed.
-      // We will handle 'dimmed' based on this status.
-      return false;
-  };
+  // Currently using simplified dimming logic inline, this helper is reserved for future enhancement
+  // const isNodeRelevant = (nodeId: string) => {
+  //     if (!hoveredNodeId) return false;
+  //     if (nodeId === hoveredNodeId) return true;
+  //     return false;
+  // };
   
   return (
     <div className="w-full h-full overflow-auto bg-[#0c0d0f] rounded-lg shadow-inner relative">
@@ -303,9 +301,6 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
         {/* Nodes Layer */}
         {allNodes.map(node => {
             const isHovered = hoveredNodeId === node.id;
-            const isDimmed = hoveredNodeId !== null && !isHovered && 
-                             !allNodes.find(n => n.id === hoveredNodeId)?.children?.some(c => c.id === node.id) &&
-                             !allNodes.find(n => n.children?.some(c => c.id === hoveredNodeId))?.id?.includes(node.id); // Simple parent check is hard with this data structure, focusing on simple dimming
             
             // Simplified dim logic: If any node hovered, dim all others except self
             const simplisticDim = hoveredNodeId !== null && hoveredNodeId !== node.id;

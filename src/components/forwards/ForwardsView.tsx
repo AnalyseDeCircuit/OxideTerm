@@ -82,8 +82,8 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
   };
 
   useEffect(() => {
-    // Only poll when session exists and connection state is active
-    if (!session || session.state !== 'active') {
+    // Only poll when session exists and connection state is connected
+    if (!session || session.state !== 'connected') {
       return;
     }
     
@@ -111,7 +111,7 @@ export const ForwardsView = ({ sessionId }: { sessionId: string }) => {
           toast({ 
             title: 'Failed to create forward', 
             description: e instanceof Error ? e.message : String(e),
-            variant: 'destructive'
+            variant: 'error'
           });
       }
   };

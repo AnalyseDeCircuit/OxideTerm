@@ -26,10 +26,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '../ui/select';
-import { ConnectRequest, ProxyHopConfig, SshConnectRequest } from '../../types';
+import { ProxyHopConfig } from '../../types';
 import { api } from '../../lib/api';
 import { AddJumpServerDialog } from './AddJumpServerDialog';
-import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight, Link2 } from 'lucide-react';
+import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight } from 'lucide-react';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 
 export const NewConnectionModal = () => {
@@ -213,7 +213,7 @@ export const NewConnectionModal = () => {
               <div className="bg-theme-bg border-l-4 border-theme-border rounded p-3 mb-4">
                 <div className="space-y-2">
                   <p className="text-sm">
-                    <span className="font-medium text-zinc-700 dark:text-zinc-300">ⓘ跳板机已配置</span>
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">ⓘ Jump servers configured</span>
                   </p>
                   <div className="text-xs text-zinc-600 dark:text-zinc-400">
                     {proxyServers.map((server, idx) => (
@@ -313,21 +313,20 @@ export const NewConnectionModal = () => {
                 
                 <TabsContent value="default_key">
                   <div className="text-sm text-zinc-500 pt-2">
-                    使用默认 SSH 密钥 (~/.ssh/id_rsa, ~/.ssh/id_ed25519 等)
+                  Use the default SSH key (e.g. ~/.ssh/id_rsa, ~/.ssh/id_ed25519)
                   </div>
                 </TabsContent>
                 
                 <TabsContent value="agent">
                   <div className="text-sm text-zinc-400 pt-2 space-y-2">
-                    <p>使用系统 SSH Agent 进行认证</p>
-                    <p className="text-xs text-zinc-500">
-                      需要确保 SSH Agent 正在运行且包含所需密钥
-                    </p>
+                  <p>Authenticate using the system SSH Agent</p>
+                  <p className="text-xs text-zinc-500">
+                    Ensure the SSH Agent is running and has the required keys loaded
+                  </p>
                   </div>
                 </TabsContent>
-              </Tabs>
-            </div>
-   
+                </Tabs>
+                </div>
             <div className="grid gap-2">
               <Label>Group</Label>
               <Select value={group} onValueChange={setGroup}>

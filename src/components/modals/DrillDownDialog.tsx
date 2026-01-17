@@ -198,14 +198,14 @@ export const DrillDownDialog: React.FC<DrillDownDialogProps> = ({
                 <TabsTrigger value="password" disabled={isConnecting}>密码</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="agent">
+                <TabsContent value="agent">
                 <div className="text-sm text-zinc-400 pt-2 space-y-2">
-                  <p>使用系统 SSH Agent 进行认证</p>
+                  <p>Authenticate using the system SSH Agent</p>
                   <p className="text-xs text-zinc-500">
-                    需要确保 SSH Agent 正在运行且包含所需密钥
+                  Make sure your SSH Agent is running and contains the required key(s)
                   </p>
                 </div>
-              </TabsContent>
+                </TabsContent>
 
               <TabsContent value="key">
                 <div className="space-y-2 pt-2">

@@ -9,8 +9,8 @@ import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
-import { SearchBar } from './SearchBar';
-import { SettingsChangedDetail } from '../../types';
+import { SearchBar, DeepSearchState } from './SearchBar';
+import { SettingsChangedDetail, SearchMatch } from '../../types';
 import { listen } from '@tauri-apps/api/event';
 import { Lock, Loader2 } from 'lucide-react';
 
@@ -75,6 +75,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   // Track current search query for navigation
   const currentSearchQueryRef = useRef<string>('');
   const currentSearchOptionsRef = useRef<ISearchOptions | undefined>(undefined);
+  
+  // Deep history search state
+  const [deepSearchState, setDeepSearchState] = useState<DeepSearchState>({
+    loading: false,
+    matches: [],
+    totalMatches: 0,
+    durationMs: 0,
+  });
   
   // P3: Backpressure handling - batch terminal writes with RAF
   const pendingDataRef = useRef<Uint8Array[]>([]);
@@ -709,9 +717,128 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     setSearchOpen(false);
     searchAddonRef.current?.clearDecorations();
     setSearchResults({ resultIndex: -1, resultCount: 0 });
+    setDeepSearchState({ loading: false, matches: [], totalMatches: 0, durationMs: 0 });
     currentSearchQueryRef.current = '';
     terminalRef.current?.focus();
   }, []);
+  
+  // === Deep History Search ===
+  const handleDeepSearch = useCallback(async (query: string, options: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }) => {
+    if (!query.trim()) return;
+    
+    setDeepSearchState(prev => ({ ...prev, loading: true, error: undefined }));
+    
+    try {
+      const result = await api.searchTerminal(sessionId, {
+        query,
+        case_sensitive: options.caseSensitive || false,
+        regex: options.regex || false,
+        whole_word: options.wholeWord || false,
+      });
+      
+      setDeepSearchState({
+        loading: false,
+        matches: result.matches,
+        totalMatches: result.total_matches,
+        durationMs: result.duration_ms,
+        error: result.error,
+      });
+    } catch (err) {
+      setDeepSearchState({
+        loading: false,
+        matches: [],
+        totalMatches: 0,
+        durationMs: 0,
+        error: err instanceof Error ? err.message : 'Search failed',
+      });
+    }
+  }, [sessionId]);
+  
+  // === Jump to search match from deep history ===
+  const handleJumpToMatch = useCallback(async (match: SearchMatch) => {
+    const term = terminalRef.current;
+    if (!term) return;
+    
+    const CONTEXT_LINES = 5;
+    const ORANGE = '\x1b[38;2;234;88;12m';
+    const YELLOW_BG = '\x1b[48;2;90;74;0m';
+    const RED = '\x1b[31m';
+    const RESET = '\x1b[0m';
+    
+    // Helper: highlight matched text within a line
+    const highlightMatch = (text: string, matchedText: string): string => {
+      const idx = text.indexOf(matchedText);
+      if (idx === -1) return YELLOW_BG + text + RESET;
+      return (
+        text.slice(0, idx) +
+        YELLOW_BG + matchedText + RESET +
+        text.slice(idx + matchedText.length)
+      );
+    };
+    
+    try {
+      // Fetch context around the match line from backend
+      const lines = await api.scrollToLine(sessionId, match.line_number, CONTEXT_LINES);
+      
+      if (lines.length === 0) {
+        // Buffer might have been completely cleared
+        term.writeln(`\r\n${ORANGE}━━━ History Match (Line ${match.line_number + 1}) ━━━${RESET}`);
+        term.writeln(`${RED}⚠ Buffer empty - showing cached snapshot:${RESET}`);
+        term.writeln(highlightMatch(match.line_content, match.matched_text));
+        term.writeln(`${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\r\n`);
+        term.scrollToBottom();
+        return;
+      }
+      
+      // Calculate which line in the returned array should be the match
+      // scrollToLine returns: [line_number - context ... line_number ... line_number + context]
+      const startLineInBuffer = match.line_number - CONTEXT_LINES;
+      const targetIndexInResult = match.line_number - Math.max(0, startLineInBuffer);
+      
+      // Validate: check if the target line still contains the matched text
+      const targetLine = lines[Math.min(targetIndexInResult, lines.length - 1)];
+      const isStillValid = targetLine && targetLine.text.includes(match.matched_text);
+      
+      // Write header
+      term.writeln(`\r\n${ORANGE}━━━ History Match (Line ${match.line_number + 1}) ━━━${RESET}`);
+      
+      if (!isStillValid) {
+        // Buffer has rotated - the line at this index is no longer the same
+        term.writeln(`${RED}⚠ Buffer rotated - live context may not match. Showing cached + current:${RESET}`);
+        term.writeln(`${RED}Cached match:${RESET} ${highlightMatch(match.line_content, match.matched_text)}`);
+        term.writeln(`${RED}Current line at index ${match.line_number}:${RESET} ${targetLine?.text || '(empty)'}`);
+        term.writeln(`${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\r\n`);
+        term.scrollToBottom();
+        return;
+      }
+      
+      // Valid match - show context with highlighting
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const actualLineNum = Math.max(0, startLineInBuffer) + i;
+        const isMatchLine = actualLineNum === match.line_number;
+        
+        if (isMatchLine) {
+          // Highlight the matched text within the line
+          term.writeln(highlightMatch(line.text, match.matched_text));
+        } else {
+          term.writeln(line.text);
+        }
+      }
+      
+      term.writeln(`${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\r\n`);
+      term.scrollToBottom();
+      
+    } catch (err) {
+      console.error('Failed to fetch line context:', err);
+      // Fallback: show the cached match from search results
+      term.writeln(`\r\n${ORANGE}━━━ History Match (Line ${match.line_number + 1}) ━━━${RESET}`);
+      term.writeln(`${RED}⚠ Failed to fetch context - showing cached snapshot:${RESET}`);
+      term.writeln(highlightMatch(match.line_content, match.matched_text));
+      term.writeln(`${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\r\n`);
+      term.scrollToBottom();
+    }
+  }, [sessionId]);
   
   return (
     <div 
@@ -762,6 +889,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
          onFindPrevious={handleFindPrevious}
          resultIndex={searchResults.resultIndex}
          resultCount={searchResults.resultCount}
+         onDeepSearch={handleDeepSearch}
+         onJumpToMatch={handleJumpToMatch}
+         deepSearchState={deepSearchState}
        />
     </div>
   );

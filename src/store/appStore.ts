@@ -21,7 +21,7 @@ interface ModalsState {
 }
 
 // 侧边栏区域类型
-type SidebarSection = 'sessions' | 'sftp' | 'forwards' | 'connections';
+type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections';
 
 interface AppStore {
   // State
@@ -250,7 +250,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const terminalIds = connection?.terminalIds || [];
         const newSessions = new Map(state.sessions);
         const newTabs = state.tabs.filter(t => {
-          if (terminalIds.includes(t.sessionId)) {
+          if (t.sessionId && terminalIds.includes(t.sessionId)) {
             newSessions.delete(t.sessionId);
             return false;
           }

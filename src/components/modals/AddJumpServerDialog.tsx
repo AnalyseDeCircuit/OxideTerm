@@ -87,19 +87,19 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
             <div className="col-span-3 space-y-2">
               <Label htmlFor="jump-host">Host *</Label>
               <Input
-                id="jump-host"
-                placeholder="bastion.example.com"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
+          id="jump-host"
+          placeholder="bastion.example.com"
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
               />
             </div>
             <div className="col-span-1 space-y-2">
               <Label htmlFor="jump-port">Port</Label>
               <Input
-                id="jump-port"
-                type="number"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
+          id="jump-port"
+          type="number"
+          value={port}
+          onChange={(e) => setPort(e.target.value)}
               />
             </div>
           </div>
@@ -122,61 +122,61 @@ export const AddJumpServerDialog: React.FC<AddJumpServerDialogProps> = ({
               className="w-full"
             >
               <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="default_key">Default Key</TabsTrigger>
-                <TabsTrigger value="key">SSH Key</TabsTrigger>
-                <TabsTrigger value="password">Password</TabsTrigger>
-                <TabsTrigger value="agent">SSH Agent</TabsTrigger>
+          <TabsTrigger value="default_key">Default Key</TabsTrigger>
+          <TabsTrigger value="key">SSH Key</TabsTrigger>
+          <TabsTrigger value="password">Password</TabsTrigger>
+          <TabsTrigger value="agent">SSH Agent</TabsTrigger>
               </TabsList>
 
               <TabsContent value="default_key">
-                <div className="text-sm text-zinc-500 pt-2">
-                  Use default SSH key (~/.ssh/id_rsa, etc.)
-                </div>
+          <div className="text-sm text-zinc-500 pt-2">
+            Use the default SSH key (~/.ssh/id_rsa, etc.)
+          </div>
               </TabsContent>
 
               <TabsContent value="key">
-                <div className="space-y-2 pt-2">
-                  <Label htmlFor="jump-keypath">Key Path</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="jump-keypath"
-                      value={keyPath}
-                      onChange={(e) => setKeyPath(e.target.value)}
-                      placeholder="~/.ssh/id_rsa"
-                    />
-                    <Button variant="outline" onClick={handleBrowseKey} type="button">Browse</Button>
-                  </div>
-                  <div className="space-y-1 pt-1">
-                    <Label htmlFor="jump-passphrase" className="text-sm font-normal">Passphrase (Optional)</Label>
-                    <Input
-                      id="jump-passphrase"
-                      type="password"
-                      value={passphrase}
-                      onChange={(e) => setPassphrase(e.target.value)}
-                    />
-                  </div>
-                </div>
+          <div className="space-y-2 pt-2">
+            <Label htmlFor="jump-keypath">Key Path</Label>
+            <div className="flex gap-2">
+              <Input
+                id="jump-keypath"
+                value={keyPath}
+                onChange={(e) => setKeyPath(e.target.value)}
+                placeholder="~/.ssh/id_rsa"
+              />
+              <Button variant="outline" onClick={handleBrowseKey} type="button">Browse</Button>
+            </div>
+            <div className="space-y-1 pt-1">
+              <Label htmlFor="jump-passphrase" className="text-sm font-normal">Passphrase (Optional)</Label>
+              <Input
+                id="jump-passphrase"
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+              />
+            </div>
+          </div>
               </TabsContent>
 
               <TabsContent value="password">
-                <div className="space-y-2 pt-2">
-                  <Label htmlFor="jump-password">Password</Label>
-                  <Input
-                    id="jump-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
+          <div className="space-y-2 pt-2">
+            <Label htmlFor="jump-password">Password</Label>
+            <Input
+              id="jump-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
               </TabsContent>
 
               <TabsContent value="agent">
-                <div className="text-sm text-zinc-400 pt-2 space-y-2">
-                  <p>使用系统 SSH Agent 进行认证</p>
-                  <p className="text-xs text-zinc-500">
-                    需要确保 SSH Agent 正在运行且包含所需密钥
-                  </p>
-                </div>
+          <div className="text-sm text-zinc-400 pt-2 space-y-2">
+            <p>Authenticate using the system SSH Agent</p>
+            <p className="text-xs text-zinc-500">
+              Make sure the SSH Agent is running and contains the required key(s)
+            </p>
+          </div>
               </TabsContent>
             </Tabs>
           </div>

@@ -109,6 +109,10 @@ interface SessionTreeStore {
   /** 树摘要 */
   summary: SessionTreeSummary | null;
   
+  // ========== Focus Mode State (聚焦模式) ==========
+  /** 当前聚焦的节点 ID，null 表示根视图 */
+  focusedNodeId: string | null;
+  
   /** 节点终端映射 (nodeId -> terminalIds) - 支持多终端 */
   nodeTerminalMap: Map<string, string[]>;
   /** 终端到节点的反向映射 (terminalId -> nodeId) */
@@ -187,6 +191,18 @@ interface SessionTreeStore {
   expandAll: () => void;
   collapseAll: () => void;
   
+  // ========== Focus Mode Actions (聚焦模式) ==========
+  /** 设置聚焦节点（进入/返回某层） */
+  setFocusedNode: (nodeId: string | null) => void;
+  /** 获取面包屑路径 */
+  getBreadcrumbPath: () => UnifiedFlatNode[];
+  /** 获取当前视图可见的节点 */
+  getVisibleNodes: () => UnifiedFlatNode[];
+  /** 进入子节点（双击进入） */
+  enterNode: (nodeId: string) => void;
+  /** 返回上一层 */
+  goBack: () => void;
+  
   // ========== Helpers ==========
   getNode: (nodeId: string) => UnifiedFlatNode | undefined;
   getRawNode: (nodeId: string) => FlatNode | undefined;
@@ -210,6 +226,8 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     isLoading: false,
     error: null,
     summary: null,
+    // Focus Mode (聚焦模式)
+    focusedNodeId: null,
     nodeTerminalMap: new Map<string, string[]>(),
     terminalNodeMap: new Map<string, string>(),
     linkDownNodeIds: new Set<string>(),
@@ -486,7 +504,7 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         const appStore = useAppStore.getState();
         const sessionIdSet = new Set(sessionIdsToClose);
         for (const tab of appStore.tabs) {
-          if (sessionIdSet.has(tab.sessionId)) {
+          if (tab.sessionId && sessionIdSet.has(tab.sessionId)) {
             appStore.closeTab(tab.id);
           }
         }
@@ -939,9 +957,6 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         if (hasDrift) {
           console.warn(`[StateDrift] Detected ${fixed.length} drift(s), auto-fixing...`);
           
-          // 保留本地的展开状态和 link-down 标记
-          const { expandedIds } = get();
-          
           // 清理孤儿节点的 link-down 标记
           const validNodeIds = new Set(backendNodes.map(n => n.id));
           const newLinkDownIds = new Set(
@@ -1054,6 +1069,91 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
     collapseAll: () => {
       set({ expandedIds: new Set() });
       get().rebuildUnifiedNodes();
+    },
+    
+    // ========== Focus Mode Actions (聚焦模式) ==========
+    
+    setFocusedNode: (nodeId: string | null) => {
+      set({ focusedNodeId: nodeId });
+      // 持久化到 localStorage
+      try {
+        if (nodeId) {
+          localStorage.setItem('oxide-focused-node', nodeId);
+        } else {
+          localStorage.removeItem('oxide-focused-node');
+        }
+      } catch (e) {
+        console.warn('Failed to persist focused node:', e);
+      }
+    },
+    
+    getBreadcrumbPath: () => {
+      const { focusedNodeId, nodes } = get();
+      if (!focusedNodeId) return [];
+      
+      const path: UnifiedFlatNode[] = [];
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+      let currentId: string | null = focusedNodeId;
+      
+      while (currentId) {
+        const node = nodeMap.get(currentId);
+        if (!node) break;
+        path.unshift(node);
+        currentId = node.parentId;
+      }
+      
+      return path;
+    },
+    
+    getVisibleNodes: () => {
+      const { focusedNodeId, nodes } = get();
+      
+      if (!focusedNodeId) {
+        // 根视图：显示所有 depth=0 的节点（直连服务器）
+        return nodes.filter(n => n.depth === 0);
+      }
+      
+      // 聚焦视图：显示聚焦节点的直接子节点
+      return nodes.filter(n => n.parentId === focusedNodeId);
+    },
+    
+    enterNode: (nodeId: string) => {
+      const node = get().getNode(nodeId);
+      if (!node) return;
+      
+      // 只有有子节点的节点才能"进入"
+      if (node.hasChildren) {
+        set({ focusedNodeId: nodeId });
+        // 持久化
+        try {
+          localStorage.setItem('oxide-focused-node', nodeId);
+        } catch (e) {
+          console.warn('Failed to persist focused node:', e);
+        }
+      }
+    },
+    
+    goBack: () => {
+      const { focusedNodeId, nodes } = get();
+      if (!focusedNodeId) return; // 已经在根视图
+      
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+      const currentNode = nodeMap.get(focusedNodeId);
+      
+      // 返回父节点，如果没有父节点则返回根视图
+      const parentId = currentNode?.parentId || null;
+      set({ focusedNodeId: parentId });
+      
+      // 持久化
+      try {
+        if (parentId) {
+          localStorage.setItem('oxide-focused-node', parentId);
+        } else {
+          localStorage.removeItem('oxide-focused-node');
+        }
+      } catch (e) {
+        console.warn('Failed to persist focused node:', e);
+      }
     },
     
     // ========== Helpers ==========

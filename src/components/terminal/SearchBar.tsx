@@ -1,9 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, ChevronUp, ChevronDown, CaseSensitive, Regex, WholeWord } from 'lucide-react';
+import { Search, X, ChevronUp, ChevronDown, CaseSensitive, Regex, WholeWord, History, Loader2 } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
+import { SearchMatch } from '../../types';
+
+export type SearchMode = 'active' | 'deep';
+
+export interface DeepSearchState {
+  loading: boolean;
+  matches: SearchMatch[];
+  totalMatches: number;
+  durationMs: number;
+  error?: string;
+}
 
 interface SearchBarProps {
   isOpen: boolean;
@@ -13,6 +24,10 @@ interface SearchBarProps {
   onFindPrevious: () => void;
   resultIndex: number;  // -1 if no results or limit exceeded
   resultCount: number;
+  // Deep history search
+  onDeepSearch?: (query: string, options: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }) => void;
+  onJumpToMatch?: (match: SearchMatch) => void;
+  deepSearchState?: DeepSearchState;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ 
@@ -23,13 +38,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onFindPrevious,
   resultIndex,
   resultCount,
+  onDeepSearch,
+  onJumpToMatch,
+  deepSearchState,
 }) => {
   const [query, setQuery] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [useRegex, setUseRegex] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>('active');
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const resultsListRef = useRef<HTMLDivElement>(null);
 
   // Focus input when opened
   useEffect(() => {
@@ -47,6 +67,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       clearTimeout(searchTimeoutRef.current);
     }
 
+    // Only do active search in active mode
+    if (searchMode !== 'active') return;
+
     searchTimeoutRef.current = setTimeout(() => {
       onSearch(query, { caseSensitive, regex: useRegex, wholeWord });
     }, 150); // Faster debounce for better responsiveness
@@ -56,7 +79,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, caseSensitive, useRegex, wholeWord, isOpen, onSearch]);
+  }, [query, caseSensitive, useRegex, wholeWord, isOpen, onSearch, searchMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -70,8 +93,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         return;
       }
 
-      // Enter to go to next match, Shift+Enter for previous
-      if (e.key === 'Enter' && resultCount > 0) {
+      // Enter to go to next match, Shift+Enter for previous (active mode only)
+      if (e.key === 'Enter' && searchMode === 'active' && resultCount > 0) {
         if (e.shiftKey) {
           onFindPrevious();
         } else {
@@ -79,11 +102,17 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         }
         e.preventDefault();
       }
+      
+      // Enter to trigger deep search in deep mode
+      if (e.key === 'Enter' && searchMode === 'deep' && query.trim() && onDeepSearch) {
+        onDeepSearch(query, { caseSensitive, regex: useRegex, wholeWord });
+        e.preventDefault();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, resultCount, onFindNext, onFindPrevious, onClose]);
+  }, [isOpen, resultCount, onFindNext, onFindPrevious, onClose, searchMode, query, caseSensitive, useRegex, wholeWord, onDeepSearch]);
 
   if (!isOpen) return null;
 
@@ -99,9 +128,53 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   // Format result display
   const getResultDisplay = () => {
     if (!query.trim()) return null;
+    if (searchMode === 'deep') {
+      if (deepSearchState?.loading) return 'Searching...';
+      if (deepSearchState?.error) return 'Error';
+      if (deepSearchState?.totalMatches === 0) return 'No results in history';
+      if (deepSearchState?.totalMatches) return `${deepSearchState.totalMatches} matches (${deepSearchState.durationMs}ms)`;
+      return null;
+    }
+    // Active mode
     if (resultCount === 0) return 'No results';
     if (resultIndex === -1) return `${resultCount}+ matches`; // Limit exceeded
     return `${resultIndex + 1}/${resultCount}`;
+  };
+  
+  // Handle mode switch
+  const handleModeChange = (newMode: SearchMode) => {
+    setSearchMode(newMode);
+    // Clear active search decorations when switching to deep mode
+    if (newMode === 'deep') {
+      onSearch('', {}); // Clear active search
+    }
+  };
+  
+  // Handle deep search button click
+  const handleDeepSearchClick = () => {
+    if (query.trim() && onDeepSearch) {
+      onDeepSearch(query, { caseSensitive, regex: useRegex, wholeWord });
+    }
+  };
+  
+  // Truncate line content for display
+  const truncateLine = (text: string, match: SearchMatch, maxLength: number = 60) => {
+    // Center around the match
+    const matchStart = match.column_start;
+    const matchEnd = match.column_end;
+    const matchLen = matchEnd - matchStart;
+    
+    if (text.length <= maxLength) return text;
+    
+    const contextBefore = Math.floor((maxLength - matchLen) / 2);
+    const start = Math.max(0, matchStart - contextBefore);
+    const end = Math.min(text.length, start + maxLength);
+    
+    let result = text.slice(start, end);
+    if (start > 0) result = '...' + result;
+    if (end < text.length) result = result + '...';
+    
+    return result;
   };
 
   return (
@@ -110,6 +183,33 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
     >
+      {/* Mode Tabs */}
+      <div className="flex border-b border-theme-border">
+        <button
+          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+            searchMode === 'active' 
+              ? 'bg-zinc-800 text-white border-b-2 border-orange-500' 
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+          onClick={() => handleModeChange('active')}
+        >
+          <Search className="w-3 h-3 inline mr-1" />
+          Visible Buffer
+        </button>
+        <button
+          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+            searchMode === 'deep' 
+              ? 'bg-zinc-800 text-white border-b-2 border-orange-500' 
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+          onClick={() => handleModeChange('deep')}
+          title="Search entire session history (beyond scrollback)"
+        >
+          <History className="w-3 h-3 inline mr-1" />
+          Deep History
+        </button>
+      </div>
+      
       {/* Main Search Row */}
       <div className="flex items-center gap-2 p-3 border-b border-theme-border">
         <Search className="w-4 h-4 text-zinc-400" />
@@ -118,7 +218,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search terminal output..."
+          placeholder={searchMode === 'active' ? "Search terminal output..." : "Search full history..."}
           className="flex-1 h-8 text-sm border-0 focus-visible:ring-0 bg-transparent"
         />
         
@@ -129,27 +229,49 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           </div>
         )}
 
-        {/* Navigation Buttons */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={onFindPrevious}
-          disabled={resultCount === 0}
-          title="Previous match (Shift+Enter)"
-        >
-          <ChevronUp className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={onFindNext}
-          disabled={resultCount === 0}
-          title="Next match (Enter)"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
+        {/* Navigation Buttons - only show in active mode */}
+        {searchMode === 'active' && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={onFindPrevious}
+              disabled={resultCount === 0}
+              title="Previous match (Shift+Enter)"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={onFindNext}
+              disabled={resultCount === 0}
+              title="Next match (Enter)"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+        
+        {/* Deep Search Button - only show in deep mode */}
+        {searchMode === 'deep' && onDeepSearch && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={handleDeepSearchClick}
+            disabled={!query.trim() || deepSearchState?.loading}
+            title="Search full history (Enter)"
+          >
+            {deepSearchState?.loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Search'
+            )}
+          </Button>
+        )}
 
         {/* Close Button */}
         <Button
@@ -216,6 +338,51 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           </Label>
         </div>
       </div>
+      
+      {/* Deep Search Results List */}
+      {searchMode === 'deep' && deepSearchState && !deepSearchState.loading && deepSearchState.matches.length > 0 && (
+        <div 
+          ref={resultsListRef}
+          className="max-h-64 overflow-y-auto border-t border-theme-border"
+        >
+          <div className="text-xs text-zinc-500 px-3 py-1 bg-zinc-950 sticky top-0">
+            Click to jump to match location
+          </div>
+          {deepSearchState.matches.slice(0, 100).map((match, idx) => (
+            <button
+              key={`${match.line_number}-${match.column_start}-${idx}`}
+              className="w-full text-left px-3 py-2 hover:bg-zinc-800 border-b border-zinc-800 transition-colors"
+              onClick={() => onJumpToMatch?.(match)}
+            >
+              <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
+                <span className="font-mono">Line {match.line_number + 1}</span>
+              </div>
+              <div className="text-sm font-mono text-zinc-200 truncate">
+                {truncateLine(match.line_content, match)}
+              </div>
+            </button>
+          ))}
+          {deepSearchState.matches.length > 100 && (
+            <div className="text-xs text-zinc-500 px-3 py-2 text-center">
+              Showing first 100 of {deepSearchState.totalMatches} matches
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Deep Search Error */}
+      {searchMode === 'deep' && deepSearchState?.error && (
+        <div className="px-3 py-2 bg-red-900/20 border-t border-red-800 text-red-400 text-xs">
+          {deepSearchState.error}
+        </div>
+      )}
+      
+      {/* Deep Search No Results */}
+      {searchMode === 'deep' && deepSearchState && !deepSearchState.loading && deepSearchState.totalMatches === 0 && query.trim() && (
+        <div className="px-3 py-2 bg-zinc-950 border-t border-theme-border text-zinc-400 text-xs text-center">
+          No matches found in session history
+        </div>
+      )}
     </div>
   );
 };
