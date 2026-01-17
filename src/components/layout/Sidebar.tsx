@@ -68,7 +68,7 @@ export const Sidebar = () => {
   const {
     nodes: treeNodes,
     selectedNodeId,
-    focusedNodeId,
+    getFocusedNodeId,
     fetchTree,
     selectNode,
     toggleExpand,
@@ -584,7 +584,7 @@ export const Sidebar = () => {
                 
                 {/* 聚焦节点列表 */}
                 <FocusedNodeList
-                  focusedNode={focusedNodeId ? getNode(focusedNodeId) || null : null}
+                  focusedNode={getFocusedNodeId() ? getNode(getFocusedNodeId()!) || null : null}
                   children={getVisibleNodes()}
                   selectedNodeId={selectedNodeId}
                   activeTerminalId={activeTabId ? tabs.find(t => t.id === activeTabId)?.sessionId : null}

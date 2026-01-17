@@ -460,11 +460,13 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       set({ isLoading: true, error: null });
       try {
         await api.clearSessionTree();
+        // 清空 settingsStore 中的树状态
+        useSettingsStore.getState().setTreeExpanded([]);
+        useSettingsStore.getState().setFocusedNode(null);
         set({ 
           rawNodes: [],
           nodes: [], 
           selectedNodeId: null, 
-          expandedIds: new Set(),
           nodeTerminalMap: new Map(),
           terminalNodeMap: new Map(),
           linkDownNodeIds: new Set(),

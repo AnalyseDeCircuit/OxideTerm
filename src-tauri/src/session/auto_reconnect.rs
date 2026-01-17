@@ -229,6 +229,15 @@ impl AutoReconnectService {
                 key_path: key_path.clone(),
                 passphrase: passphrase.clone(),
             },
+            super::types::AuthMethod::Certificate {
+                key_path,
+                cert_path,
+                passphrase,
+            } => SshAuthMethod::Certificate {
+                key_path: key_path.clone(),
+                cert_path: cert_path.clone(),
+                passphrase: passphrase.clone(),
+            },
             super::types::AuthMethod::Agent => {
                 // Agent authentication is supported
                 SshAuthMethod::Agent

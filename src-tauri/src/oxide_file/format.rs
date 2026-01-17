@@ -140,6 +140,11 @@ pub enum EncryptedAuth {
         key_path: String,
         passphrase: Option<String>,
     },
+    Certificate {
+        key_path: String,
+        cert_path: String,
+        passphrase: Option<String>,
+    },
     Agent,
 }
 

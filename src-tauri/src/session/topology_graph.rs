@@ -169,11 +169,13 @@ impl NetworkTopology {
             let auth_type = match &conn.auth {
                 crate::config::types::SavedAuth::Password { .. } => "password",
                 crate::config::types::SavedAuth::Key { .. } => "key",
+                crate::config::types::SavedAuth::Certificate { .. } => "certificate",
                 crate::config::types::SavedAuth::Agent => "agent",
             };
             
             let key_path = match &conn.auth {
                 crate::config::types::SavedAuth::Key { key_path, .. } => Some(key_path.clone()),
+                crate::config::types::SavedAuth::Certificate { key_path, .. } => Some(key_path.clone()),
                 _ => None,
             };
 
@@ -271,11 +273,13 @@ impl NetworkTopology {
         let auth_type = match &hop.auth {
             crate::config::types::SavedAuth::Password { .. } => "password",
             crate::config::types::SavedAuth::Key { .. } => "key",
+            crate::config::types::SavedAuth::Certificate { .. } => "certificate",
             crate::config::types::SavedAuth::Agent => "agent",
         };
         
         let key_path = match &hop.auth {
             crate::config::types::SavedAuth::Key { key_path, .. } => Some(key_path.clone()),
+            crate::config::types::SavedAuth::Certificate { key_path, .. } => Some(key_path.clone()),
             _ => None,
         };
 

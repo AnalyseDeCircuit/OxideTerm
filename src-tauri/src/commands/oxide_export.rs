@@ -86,6 +86,30 @@ pub async fn export_to_oxide(
                         passphrase,
                     })
                 }
+                SavedAuth::Certificate {
+                    key_path,
+                    cert_path,
+                    has_passphrase,
+                    passphrase_keychain_id,
+                } => {
+                    let passphrase =
+                        if *has_passphrase {
+                            if let Some(kc_id) = passphrase_keychain_id {
+                                Some(config_state.get_keychain_value(kc_id).map_err(|e| {
+                                    format!("Keychain error for {}: {}", context, e)
+                                })?)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                    Ok(EncryptedAuth::Certificate {
+                        key_path: key_path.clone(),
+                        cert_path: cert_path.clone(),
+                        passphrase,
+                    })
+                }
                 SavedAuth::Agent => Ok(EncryptedAuth::Agent),
             }
         };

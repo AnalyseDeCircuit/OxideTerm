@@ -224,6 +224,23 @@ async fn direct_connect(
                 .await
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }
+        AuthMethod::Certificate {
+            key_path,
+            cert_path,
+            passphrase,
+        } => {
+            info!("Authenticating to jump host with certificate: {}", cert_path);
+            let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                .map_err(|e| SshError::KeyError(e.to_string()))?;
+
+            let cert = russh_keys::load_openssh_certificate(cert_path)
+                .map_err(|e| SshError::CertificateParseError(e.to_string()))?;
+
+            handle
+                .authenticate_openssh_cert(&hop.username, Arc::new(key), cert)
+                .await
+                .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
+        }
         AuthMethod::Agent => {
             // Connect to SSH Agent and authenticate
             let mut agent = crate::ssh::agent::SshAgentClient::connect().await?;
@@ -326,6 +343,23 @@ async fn connect_via_stream(
 
             handle
                 .authenticate_publickey(&hop.username, key_with_hash)
+                .await
+                .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
+        }
+        AuthMethod::Certificate {
+            key_path,
+            cert_path,
+            passphrase,
+        } => {
+            info!("Authenticating via stream with certificate: {}", cert_path);
+            let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                .map_err(|e| SshError::KeyError(e.to_string()))?;
+
+            let cert = russh_keys::load_openssh_certificate(cert_path)
+                .map_err(|e| SshError::CertificateParseError(e.to_string()))?;
+
+            handle
+                .authenticate_openssh_cert(&hop.username, Arc::new(key), cert)
                 .await
                 .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?
         }

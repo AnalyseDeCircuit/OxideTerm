@@ -45,9 +45,11 @@ export const NewConnectionModal = () => {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('root');
-  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent'>('password');
+  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent' | 'certificate'>('password');
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
+  const [certPath, setCertPath] = useState('');  // Certificate path
+  const [passphrase, setPassphrase] = useState('');  // Key passphrase for certificate
   const [saveConnection, setSaveConnection] = useState(false);
   const [group, setGroup] = useState('Ungrouped');
   const [groups, setGroups] = useState<string[]>([]);
@@ -58,7 +60,7 @@ export const NewConnectionModal = () => {
 
   // Type-safe auth type handler
   const handleAuthTypeChange = (value: string) => {
-    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent') {
+    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent' || value === 'certificate') {
       setAuthType(value);
     }
   };
@@ -83,6 +85,23 @@ export const NewConnectionModal = () => {
       });
       if (selected && typeof selected === 'string') {
         setKeyPath(selected);
+      }
+    } catch (e) {
+      console.error('Failed to open file dialog:', e);
+    }
+  };
+
+  const handleBrowseCert = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Select SSH Certificate',
+        defaultPath: '~/.ssh',
+        filters: [{ name: 'Certificate', extensions: ['pub'] }]
+      });
+      if (selected && typeof selected === 'string') {
+        setCertPath(selected);
       }
     } catch (e) {
       console.error('Failed to open file dialog:', e);
@@ -142,7 +161,9 @@ export const NewConnectionModal = () => {
         username,
         authType: authType === 'default_key' ? 'key' : authType,
         password: authType === 'password' ? password : undefined,
-        keyPath: (authType === 'key' || authType === 'default_key') ? keyPath : undefined,
+        keyPath: (authType === 'key' || authType === 'default_key' || authType === 'certificate') ? keyPath : undefined,
+        certPath: authType === 'certificate' ? certPath : undefined,
+        passphrase: authType === 'certificate' ? passphrase : undefined,
         proxy_chain: proxyServers.length > 0 ? proxyServers : undefined,
       };
 
@@ -162,9 +183,10 @@ export const NewConnectionModal = () => {
           host,
           port: parseInt(port) || 22,
           username,
-          auth_type: saveAuthType as 'password' | 'key' | 'agent',
+          auth_type: saveAuthType as 'password' | 'key' | 'agent' | 'certificate',
           password: authType === 'password' ? password : undefined,
-          key_path: (authType === 'key' || authType === 'default_key') ? keyPath : undefined,
+          key_path: (authType === 'key' || authType === 'default_key' || authType === 'certificate') ? keyPath : undefined,
+          cert_path: authType === 'certificate' ? certPath : undefined,
         });
       }
       
@@ -172,6 +194,7 @@ export const NewConnectionModal = () => {
 
       // Reset sensitive fields if not saved
       setPassword('');
+      setPassphrase('');
     } catch (e) {
       console.error(e);
     } finally {
@@ -273,11 +296,12 @@ export const NewConnectionModal = () => {
                 onValueChange={handleAuthTypeChange}
                 className="w-full"
               >
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="password">Password</TabsTrigger>
                   <TabsTrigger value="default_key">Default Key</TabsTrigger>
                   <TabsTrigger value="key">SSH Key</TabsTrigger>
-                  <TabsTrigger value="agent">SSH Agent</TabsTrigger>
+                  <TabsTrigger value="certificate">Certificate</TabsTrigger>
+                  <TabsTrigger value="agent">Agent</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="password">
@@ -323,6 +347,48 @@ export const NewConnectionModal = () => {
                   <p className="text-xs text-zinc-500">
                     Ensure the SSH Agent is running and has the required keys loaded
                   </p>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="certificate">
+                  <div className="grid gap-3 pt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="cert-keypath">Private Key</Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          id="cert-keypath" 
+                          value={keyPath}
+                          onChange={(e) => setKeyPath(e.target.value)}
+                          placeholder="~/.ssh/id_ed25519"
+                        />
+                        <Button variant="outline" onClick={handleBrowseKey}>Browse</Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="certpath">Certificate</Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          id="certpath" 
+                          value={certPath}
+                          onChange={(e) => setCertPath(e.target.value)}
+                          placeholder="~/.ssh/id_ed25519-cert.pub"
+                        />
+                        <Button variant="outline" onClick={handleBrowseCert}>Browse</Button>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        OpenSSH certificate file (usually ends with -cert.pub)
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cert-passphrase">Passphrase (optional)</Label>
+                      <Input 
+                        id="cert-passphrase" 
+                        type="password"
+                        value={passphrase}
+                        onChange={(e) => setPassphrase(e.target.value)}
+                        placeholder="Key passphrase if encrypted"
+                      />
+                    </div>
                   </div>
                 </TabsContent>
                 </Tabs>

@@ -66,6 +66,14 @@ pub enum SshAuthRequest {
         passphrase: Option<String>,
     },
     Agent,
+    /// SSH certificate authentication (OpenSSH certificates)
+    Certificate {
+        #[serde(rename = "keyPath")]
+        key_path: String,
+        #[serde(rename = "certPath")]
+        cert_path: String,
+        passphrase: Option<String>,
+    },
 }
 
 /// SSH 连接响应
@@ -114,6 +122,15 @@ pub async fn ssh_connect(
         SshAuthRequest::Agent => {
             return Err("SSH Agent not yet supported".to_string());
         }
+        SshAuthRequest::Certificate {
+            key_path,
+            cert_path,
+            passphrase,
+        } => AuthMethod::Certificate {
+            key_path,
+            cert_path,
+            passphrase,
+        },
     };
 
     let config = SessionConfig {

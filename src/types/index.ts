@@ -1,6 +1,6 @@
 // Session Types
 export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
-export type AuthType = 'password' | 'key' | 'default_key' | 'agent';
+export type AuthType = 'password' | 'key' | 'default_key' | 'agent' | 'certificate';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SSH Connection Pool Types (New Architecture)
@@ -83,9 +83,10 @@ export interface SshConnectRequest {
   host: string;
   port: number;
   username: string;
-  authType: 'password' | 'key' | 'default_key' | 'agent';
+  authType: 'password' | 'key' | 'default_key' | 'agent' | 'certificate';
   password?: string;
   keyPath?: string;
+  certPath?: string;  // For certificate authentication
   passphrase?: string;
   name?: string;
   reuseConnection?: boolean;
@@ -280,9 +281,10 @@ export interface SaveConnectionRequest {
   host: string;
   port: number;
   username: string;
-  auth_type: 'password' | 'key' | 'agent';
+  auth_type: 'password' | 'key' | 'agent' | 'certificate';
   password?: string;
   key_path?: string;
+  cert_path?: string;
   color?: string;
   tags?: string[];
 }
@@ -633,9 +635,10 @@ export interface ConnectServerRequest {
   host: string;
   port: number;
   username: string;
-  authType?: 'password' | 'key' | 'agent';
+  authType?: 'password' | 'key' | 'agent' | 'certificate';
   password?: string;
   keyPath?: string;
+  certPath?: string;
   passphrase?: string;
   displayName?: string;
 }
@@ -648,9 +651,10 @@ export interface DrillDownRequest {
   host: string;
   port: number;
   username: string;
-  authType?: 'password' | 'key' | 'agent';
+  authType?: 'password' | 'key' | 'agent' | 'certificate';
   password?: string;
   keyPath?: string;
+  certPath?: string;
   passphrase?: string;
   displayName?: string;
 }
@@ -662,9 +666,10 @@ export interface HopInfo {
   host: string;
   port: number;
   username: string;
-  authType?: 'password' | 'key' | 'agent';
+  authType?: 'password' | 'key' | 'agent' | 'certificate';
   password?: string;
   keyPath?: string;
+  certPath?: string;
   passphrase?: string;
 }
 

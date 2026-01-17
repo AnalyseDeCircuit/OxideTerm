@@ -38,6 +38,17 @@ pub enum SavedAuth {
     },
     /// Use SSH agent
     Agent,
+    /// SSH certificate authentication
+    Certificate {
+        /// Path to private key file
+        key_path: String,
+        /// Path to certificate file (*-cert.pub)
+        cert_path: String,
+        /// Whether key requires passphrase
+        has_passphrase: bool,
+        /// Keychain entry ID for passphrase (if any)
+        passphrase_keychain_id: Option<String>,
+    },
 }
 
 /// Connection options

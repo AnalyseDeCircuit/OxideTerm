@@ -235,6 +235,15 @@ impl From<&SessionConfig> for SshConfig {
                 key_path: key_path.clone(),
                 passphrase: passphrase.clone(),
             },
+            AuthMethod::Certificate {
+                key_path,
+                cert_path,
+                passphrase,
+            } => SshAuthMethod::Certificate {
+                key_path: key_path.clone(),
+                cert_path: cert_path.clone(),
+                passphrase: passphrase.clone(),
+            },
             AuthMethod::Agent => SshAuthMethod::Agent,
         };
 

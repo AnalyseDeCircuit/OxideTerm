@@ -75,6 +75,16 @@ pub enum AuthMethod {
 
     /// SSH agent authentication
     Agent,
+
+    /// SSH certificate authentication (OpenSSH certificates)
+    Certificate {
+        /// Path to private key file
+        key_path: String,
+        /// Path to certificate file (*-cert.pub)
+        cert_path: String,
+        /// Optional passphrase for encrypted keys
+        passphrase: Option<String>,
+    },
 }
 
 impl AuthMethod {
@@ -87,6 +97,18 @@ impl AuthMethod {
     pub fn key(key_path: impl Into<String>, passphrase: Option<String>) -> Self {
         Self::Key {
             key_path: key_path.into(),
+            passphrase,
+        }
+    }
+
+    pub fn certificate(
+        key_path: impl Into<String>,
+        cert_path: impl Into<String>,
+        passphrase: Option<String>,
+    ) -> Self {
+        Self::Certificate {
+            key_path: key_path.into(),
+            cert_path: cert_path.into(),
             passphrase,
         }
     }

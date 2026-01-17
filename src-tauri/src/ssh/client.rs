@@ -110,6 +110,30 @@ impl SshClient {
                 // Agent authentication returns () on success, set flag manually
                 true
             }
+            AuthMethod::Certificate {
+                key_path,
+                cert_path,
+                passphrase,
+            } => {
+                // Load private key
+                let key = if let Some(pass) = passphrase {
+                    russh_keys::load_secret_key(key_path, Some(pass))
+                        .map_err(|e| SshError::KeyError(e.to_string()))?
+                } else {
+                    russh_keys::load_secret_key(key_path, None)
+                        .map_err(|e| SshError::KeyError(e.to_string()))?
+                };
+
+                // Load and parse OpenSSH certificate
+                let cert = russh_keys::load_openssh_certificate(cert_path)
+                    .map_err(|e| SshError::CertificateParseError(format!("Failed to load certificate: {}", e)))?;
+
+                // Authenticate with certificate
+                handle
+                    .authenticate_openssh_cert(&self.config.username, Arc::new(key), cert)
+                    .await
+                    .map_err(|e| SshError::AuthenticationFailed(format!("Certificate authentication failed: {}", e)))?
+            }
         };
 
         if !authenticated {

@@ -697,6 +697,15 @@ impl SshConnectionRegistry {
                     key_path: key_path.clone(),
                     passphrase: passphrase.clone(),
                 },
+                AuthMethod::Certificate {
+                    key_path,
+                    cert_path,
+                    passphrase,
+                } => SshAuthMethod::Certificate {
+                    key_path: key_path.clone(),
+                    cert_path: cert_path.clone(),
+                    passphrase: passphrase.clone(),
+                },
                 AuthMethod::Agent => SshAuthMethod::Agent,
             },
             timeout_secs: 30,
@@ -894,6 +903,37 @@ impl SshConnectionRegistry {
                     .map_err(|e| {
                         ConnectionRegistryError::ConnectionFailed(format!(
                             "Authentication failed: {}",
+                            e
+                        ))
+                    })?
+            }
+            AuthMethod::Certificate {
+                key_path,
+                cert_path,
+                passphrase,
+            } => {
+                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Failed to load key: {}",
+                            e
+                        ))
+                    })?;
+
+                let cert = russh_keys::load_openssh_certificate(cert_path)
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Failed to load certificate: {}",
+                            e
+                        ))
+                    })?;
+
+                handle
+                    .authenticate_openssh_cert(&target_config.username, std::sync::Arc::new(key), cert)
+                    .await
+                    .map_err(|e| {
+                        ConnectionRegistryError::ConnectionFailed(format!(
+                            "Certificate authentication failed: {}",
                             e
                         ))
                     })?
@@ -1904,6 +1944,15 @@ impl SshConnectionRegistry {
                     key_path: key_path.clone(),
                     passphrase: passphrase.clone(),
                 },
+                AuthMethod::Certificate {
+                    key_path,
+                    cert_path,
+                    passphrase,
+                } => SshAuthMethod::Certificate {
+                    key_path: key_path.clone(),
+                    cert_path: cert_path.clone(),
+                    passphrase: passphrase.clone(),
+                },
                 AuthMethod::Agent => SshAuthMethod::Agent,
             },
             timeout_secs: 30,
@@ -2019,6 +2068,18 @@ impl SshConnectionRegistry {
                     .authenticate_publickey(&config.username, key_with_hash)
                     .await
                     .map_err(|e| format!("Authentication failed: {}", e))?
+            }
+            AuthMethod::Certificate { key_path, cert_path, passphrase } => {
+                let key = russh_keys::load_secret_key(key_path, passphrase.as_deref())
+                    .map_err(|e| format!("Failed to load key: {}", e))?;
+
+                let cert = russh_keys::load_openssh_certificate(cert_path)
+                    .map_err(|e| format!("Failed to load certificate: {}", e))?;
+
+                handle
+                    .authenticate_openssh_cert(&config.username, std::sync::Arc::new(key), cert)
+                    .await
+                    .map_err(|e| format!("Certificate authentication failed: {}", e))?
             }
             AuthMethod::Agent => {
                 let mut agent = crate::ssh::agent::SshAgentClient::connect()

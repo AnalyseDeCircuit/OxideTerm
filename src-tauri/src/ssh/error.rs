@@ -25,6 +25,12 @@ pub enum SshError {
     #[error("Key error: {0}")]
     KeyError(String),
 
+    #[error("Certificate load error: {0}")]
+    CertificateLoadError(String),
+
+    #[error("Certificate parse error: {0}")]
+    CertificateParseError(String),
+
     #[error("Timeout: {0}")]
     Timeout(String),
 

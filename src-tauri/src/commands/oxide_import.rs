@@ -113,6 +113,28 @@ pub async fn import_from_oxide(
                     passphrase_keychain_id,
                 }
             }
+            EncryptedAuth::Certificate {
+                key_path,
+                cert_path,
+                passphrase,
+            } => {
+                let passphrase_keychain_id = if let Some(pass) = passphrase {
+                    let kc_id = format!("oxide_cert_{}", id);
+                    entries.push(PendingKeychainEntry {
+                        id: kc_id.clone(),
+                        value: pass,
+                    });
+                    Some(kc_id)
+                } else {
+                    None
+                };
+                SavedAuth::Certificate {
+                    key_path,
+                    cert_path,
+                    has_passphrase: passphrase_keychain_id.is_some(),
+                    passphrase_keychain_id,
+                }
+            }
             EncryptedAuth::Agent => SavedAuth::Agent,
         };
 

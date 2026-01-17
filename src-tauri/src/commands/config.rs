@@ -107,6 +107,7 @@ fn auth_to_info(auth: &SavedAuth) -> (String, Option<String>) {
     match auth {
         SavedAuth::Password { .. } => ("password".to_string(), None),
         SavedAuth::Key { key_path, .. } => ("key".to_string(), Some(key_path.clone())),
+        SavedAuth::Certificate { key_path, .. } => ("certificate".to_string(), Some(key_path.clone())),
         SavedAuth::Agent => ("agent".to_string(), None),
     }
 }
@@ -726,6 +727,7 @@ pub struct ProxyHopForConnect {
     pub auth_type: String,
     pub password: Option<String>,
     pub key_path: Option<String>,
+    pub cert_path: Option<String>,
     pub passphrase: Option<String>,
 }
 
@@ -740,10 +742,10 @@ pub async fn get_saved_connection_for_connect(
     let conn = config.get_connection(&id).ok_or("Connection not found")?;
 
     // Convert main auth
-    let (auth_type, password, key_path, passphrase) = match &conn.auth {
+    let (auth_type, password, key_path, cert_path, passphrase) = match &conn.auth {
         SavedAuth::Password { keychain_id } => {
             let pwd = state.keychain.get(keychain_id).map_err(|e| e.to_string())?;
-            ("password".to_string(), Some(pwd), None, None)
+            ("password".to_string(), Some(pwd), None, None, None)
         }
         SavedAuth::Key {
             key_path,
@@ -757,9 +759,24 @@ pub async fn get_saved_connection_for_connect(
             } else {
                 None
             };
-            ("key".to_string(), None, Some(key_path.clone()), passphrase)
+            ("key".to_string(), None, Some(key_path.clone()), None, passphrase)
         }
-        SavedAuth::Agent => ("agent".to_string(), None, None, None),
+        SavedAuth::Certificate {
+            key_path,
+            cert_path,
+            has_passphrase,
+            passphrase_keychain_id,
+        } => {
+            let passphrase = if *has_passphrase {
+                passphrase_keychain_id
+                    .as_ref()
+                    .and_then(|kc_id| state.keychain.get(kc_id).ok())
+            } else {
+                None
+            };
+            ("certificate".to_string(), None, Some(key_path.clone()), Some(cert_path.clone()), passphrase)
+        }
+        SavedAuth::Agent => ("agent".to_string(), None, None, None, None),
     };
 
     // Convert proxy_chain
@@ -767,10 +784,10 @@ pub async fn get_saved_connection_for_connect(
         .proxy_chain
         .iter()
         .map(|hop| {
-            let (hop_auth_type, hop_password, hop_key_path, hop_passphrase) = match &hop.auth {
+            let (hop_auth_type, hop_password, hop_key_path, hop_cert_path, hop_passphrase) = match &hop.auth {
                 SavedAuth::Password { keychain_id } => {
                     let pwd = state.keychain.get(keychain_id).ok();
-                    ("password".to_string(), pwd, None, None)
+                    ("password".to_string(), pwd, None, None, None)
                 }
                 SavedAuth::Key {
                     key_path,
@@ -780,9 +797,20 @@ pub async fn get_saved_connection_for_connect(
                     let passphrase = passphrase_keychain_id
                         .as_ref()
                         .and_then(|kc_id| state.keychain.get(kc_id).ok());
-                    ("key".to_string(), None, Some(key_path.clone()), passphrase)
+                    ("key".to_string(), None, Some(key_path.clone()), None, passphrase)
                 }
-                SavedAuth::Agent => ("agent".to_string(), None, None, None),
+                SavedAuth::Certificate {
+                    key_path,
+                    cert_path,
+                    passphrase_keychain_id,
+                    ..
+                } => {
+                    let passphrase = passphrase_keychain_id
+                        .as_ref()
+                        .and_then(|kc_id| state.keychain.get(kc_id).ok());
+                    ("certificate".to_string(), None, Some(key_path.clone()), Some(cert_path.clone()), passphrase)
+                }
+                SavedAuth::Agent => ("agent".to_string(), None, None, None, None),
             };
 
             ProxyHopForConnect {
@@ -792,6 +820,7 @@ pub async fn get_saved_connection_for_connect(
                 auth_type: hop_auth_type,
                 password: hop_password,
                 key_path: hop_key_path,
+                cert_path: hop_cert_path,
                 passphrase: hop_passphrase,
             }
         })
