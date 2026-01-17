@@ -22,7 +22,7 @@
 ## ✨ 特性
 
 ### 🚀 极致性能
-- **零延迟数据传输** - WebSocket 直连绕过 Tauri IPC，实现真正的实时终端交互
+- **极低延迟传输** - WebSocket 直连绕过 Tauri IPC，实现真正的实时终端交互
 - **GPU 加速渲染** - 基于 xterm.js WebGL 插件，轻松处理海量日志输出
 - **内存高效** - Rust 编写的后端，无 GC 开销，内存占用极低
 - **并发连接** - 多会话并发管理，每个会话独立线程池
@@ -33,7 +33,9 @@
   - 🔑 密码认证 - 系统密钥链安全存储
   - 🗝️ 密钥认证 - 支持 RSA/Ed25519/ECDSA
   - 🔐 默认密钥 - 自动检测 `~/.ssh/id_*` 密钥
-  - 🤖 SSH Agent - UI 支持，核心实现计划中 ([详情](docs/SSH_AGENT_STATUS.md))
+  - 📜 证书认证 - OpenSSH 证书 (⚠️ 实验性)
+  - 🔐 2FA/MFA - Keyboard-Interactive 认证 (⚠️ 实验性)
+  - 🚧 SSH Agent - UI 配置已就绪 (核心连接等待 russh 上游支持)
 - **跳板机支持** - 无限多跳 ProxyJump，支持 HPC 环境
 - **自动重连** - 网络波动时智能重连，会话不丢失
 - **Known Hosts** - SSH 主机密钥验证与管理
@@ -147,7 +149,7 @@ OxideTerm 采用**双平面架构**，将数据流与控制流分离：
 | 组件 | 技术 |
 |------|------|
 | **应用框架** | Tauri 2.0 |
-| **SSH 协议** | russh 0.48 (纯 Rust) |
+| **SSH 协议** | russh 0.49 (纯 Rust) |
 | **SFTP 协议** | russh-sftp 2.0 |
 | **异步运行时** | Tokio (full features) |
 | **WebSocket** | tokio-tungstenite 0.24 |
@@ -242,9 +244,10 @@ OxideTerm/
 │       ├── ssh/                # SSH 客户端实现
 │       │   ├── client.rs       # SSH 连接管理
 │       │   ├── proxy.rs        # ProxyJump 多跳实现
-│       │   ├── agent.rs        # SSH Agent 支持（规划中）
+│       │   ├── agent.rs        # SSH Agent (UI/Types)
 │       │   ├── session.rs      # 会话抽象
 │       │   ├── config.rs       # SSH 配置解析
+│       │   ├── keyboard_interactive.rs  # 2FA/KBI 认证
 │       │   └── known_hosts.rs  # 主机密钥验证
 │       ├── bridge/             # WebSocket 桥接服务器
 │       │   ├── server.rs       # WS 服务器实现
@@ -332,7 +335,7 @@ OxideTerm/
 - **[协议规范](docs/PROTOCOL.md)** - WebSocket 二进制协议
 - **[SFTP 功能](docs/SFTP.md)** - 文件管理功能说明
 - **[端口转发](docs/PORT_FORWARDING.md)** - 转发配置指南
-- **[SSH Agent 状态](docs/SSH_AGENT_STATUS.md)** - Agent 认证实现状态
+- **[认证增强](docs/AUTH_ENHANCEMENT.md)** - 证书认证与 2FA 实现
 - **[开发指南](docs/DEVELOPMENT.md)** - 开发环境与贡献指南
 
 ---
@@ -350,9 +353,11 @@ OxideTerm/
 - [x] .oxide 文件导入导出
 - [x] SSH Config 解析
 - [x] Known Hosts 管理
+- [ ] SSH Agent 认证 (UI已完成，核心等待上游支持)
+- [x] 证书认证（OpenSSH Certificates）⚠️ 实验性
+- [x] 2FA/Keyboard-Interactive 认证 ⚠️ 实验性
 
 ### 🚧 进行中
-- [ ] SSH Agent 认证（UI 已完成，核心实现待 russh 库更新）
 - [ ] 命令面板 (`⌘K`)
 - [ ] 会话搜索与过滤
 
@@ -370,7 +375,6 @@ OxideTerm/
 - [ ] 脚本自动化
 - [ ] 终端分屏
 - [ ] SSH 隧道持久化
-- [ ] 2FA 支持
 - [ ] 性能分析工具
 
 ---
@@ -424,11 +428,11 @@ https://polyformproject.org/licenses/noncommercial/1.0.0/
 
 ---
 
-## � 未来计划 (Future Plans)
+## 🔮 未来计划 (Future Plans)
 
 | 功能 | 描述 | 状态 |
 |------|------|------|
-| **SSH Agent 支持** | 完整的 SSH Agent 协议实现 | 🔄 规划中 |
+| **SSH Agent 转发** | 将本地 Agent 转发到远程服务器 | 🔄 规划中 |
 | **重连时恢复跳板机链** | 断线重连时自动恢复 proxy_chain 配置 | 📋 待实现 |
 | **终端缓冲持久化** | 会话关闭后保留滚动历史 | 🔄 规划中 |
 | **SSH Config 双向同步** | 支持写入 `~/.ssh/config` | 📋 待实现 |

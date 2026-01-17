@@ -245,6 +245,12 @@ impl From<&SessionConfig> for SshConfig {
                 passphrase: passphrase.clone(),
             },
             AuthMethod::Agent => SshAuthMethod::Agent,
+            AuthMethod::KeyboardInteractive => {
+                // KeyboardInteractive sessions must use the dedicated ssh_connect_kbi command.
+                // This conversion should never be called for KBI - the frontend must route
+                // KBI connections through the separate KBI flow.
+                panic!("KeyboardInteractive must use ssh_connect_kbi command, not connect_v2")
+            }
         };
 
         SshConfig {

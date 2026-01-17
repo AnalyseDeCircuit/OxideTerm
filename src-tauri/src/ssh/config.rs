@@ -85,6 +85,10 @@ pub enum AuthMethod {
         /// Optional passphrase for encrypted keys
         passphrase: Option<String>,
     },
+
+    /// Keyboard-Interactive authentication (2FA/TOTP)
+    /// Note: This requires frontend interaction during authentication
+    KeyboardInteractive,
 }
 
 impl AuthMethod {

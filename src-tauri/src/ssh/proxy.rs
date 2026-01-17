@@ -248,6 +248,12 @@ async fn direct_connect(
             // Agent authentication returns () on success, set flag manually
             true
         }
+        AuthMethod::KeyboardInteractive => {
+            // KBI not supported for proxy chain hops in MVP
+            return Err(SshError::AuthenticationFailed(
+                "KeyboardInteractive authentication not supported for proxy chain hops".to_string(),
+            ));
+        }
     };
 
     if !authenticated {
@@ -369,6 +375,12 @@ async fn connect_via_stream(
             agent.authenticate(&handle, &hop.username).await?;
             // Agent authentication returns () on success, set flag manually
             true
+        }
+        AuthMethod::KeyboardInteractive => {
+            // KBI not supported for proxy chain hops in MVP
+            return Err(SshError::AuthenticationFailed(
+                "KeyboardInteractive authentication not supported for proxy chain hops".to_string(),
+            ));
         }
     };
 

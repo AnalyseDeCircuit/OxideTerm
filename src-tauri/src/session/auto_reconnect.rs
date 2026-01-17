@@ -242,6 +242,11 @@ impl AutoReconnectService {
                 // Agent authentication is supported
                 SshAuthMethod::Agent
             }
+            super::types::AuthMethod::KeyboardInteractive => {
+                // KeyboardInteractive cannot be auto-reconnected
+                // User must manually re-initiate 2FA auth flow
+                return Err("KeyboardInteractive sessions cannot be auto-reconnected. Please manually reconnect with 2FA.".to_string());
+            }
         };
 
         let ssh_config = SshConfig {

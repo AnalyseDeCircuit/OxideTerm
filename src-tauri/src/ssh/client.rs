@@ -134,6 +134,13 @@ impl SshClient {
                     .await
                     .map_err(|e| SshError::AuthenticationFailed(format!("Certificate authentication failed: {}", e)))?
             }
+            AuthMethod::KeyboardInteractive => {
+                // KeyboardInteractive is handled by the separate KBI flow (commands/kbi.rs)
+                // This path should never be reached - KBI uses ssh_connect_kbi command
+                return Err(SshError::AuthenticationFailed(
+                    "KeyboardInteractive must be initiated via ssh_connect_kbi command".to_string(),
+                ));
+            }
         };
 
         if !authenticated {

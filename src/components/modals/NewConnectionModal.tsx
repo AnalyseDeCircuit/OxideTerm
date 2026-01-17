@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,7 +30,8 @@ import {
 import { ProxyHopConfig } from '../../types';
 import { api } from '../../lib/api';
 import { AddJumpServerDialog } from './AddJumpServerDialog';
-import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight } from 'lucide-react';
+import { KbiDialog } from './KbiDialog';
+import { Plus, Trash2, Key, Lock, ChevronDown, ChevronRight, Shield } from 'lucide-react';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 
 export const NewConnectionModal = () => {
@@ -37,15 +39,19 @@ export const NewConnectionModal = () => {
     modals, 
     toggleModal 
   } = useAppStore();
-  const { addRootNode, connectNode } = useSessionTreeStore();
+  const { addRootNode, connectNode, addKbiSession } = useSessionTreeStore();
   const [loading, setLoading] = useState(false);
+  
+  // KBI (2FA) specific state
+  const [kbiFlowActive, setKbiFlowActive] = useState(false);
+  const [kbiError, setKbiError] = useState<string | null>(null);
   
   // Form State
   const [name, setName] = useState('');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('root');
-  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent' | 'certificate'>('password');
+  const [authType, setAuthType] = useState<'password' | 'key' | 'default_key' | 'agent' | 'certificate' | 'keyboard_interactive'>('password');
   const [password, setPassword] = useState('');
   const [keyPath, setKeyPath] = useState('');
   const [certPath, setCertPath] = useState('');  // Certificate path
@@ -60,7 +66,7 @@ export const NewConnectionModal = () => {
 
   // Type-safe auth type handler
   const handleAuthTypeChange = (value: string) => {
-    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent' || value === 'certificate') {
+    if (value === 'password' || value === 'key' || value === 'default_key' || value === 'agent' || value === 'certificate' || value === 'keyboard_interactive') {
       setAuthType(value);
     }
   };
@@ -144,11 +150,83 @@ export const NewConnectionModal = () => {
     return host && username;
   };
 
+  // Handle KBI success - add the session to SessionTree
+  const handleKbiSuccess = useCallback(async (sessionId: string, wsPort: number, wsToken: string) => {
+    console.log(`KBI auth succeeded, session: ${sessionId}, ws://127.0.0.1:${wsPort}`);
+    setKbiFlowActive(false);
+    setKbiError(null);
+    
+    try {
+      // Add the KBI session to SessionTree
+      // This is a special path since KBI doesn't go through addRootNode+connectNode
+      await addKbiSession({
+        sessionId,
+        wsPort,
+        wsToken,
+        host,
+        port: parseInt(port) || 22,
+        username,
+        displayName: name || `${username}@${host}`,
+      });
+      
+      toggleModal('newConnection', false);
+    } catch (e) {
+      console.error('Failed to add KBI session to tree:', e);
+      setKbiError(String(e));
+    }
+  }, [host, port, username, name, addKbiSession, toggleModal]);
+
+  // Handle KBI failure/cancel
+  const handleKbiFailure = useCallback((error: string) => {
+    console.log(`KBI auth failed: ${error}`);
+    setKbiFlowActive(false);
+    setKbiError(error);
+    setLoading(false);
+  }, []);
+
+  // Start KBI connection flow
+  const handleKbiConnect = async () => {
+    if (!host || !username) return;
+    if (proxyServers.length > 0) {
+      setKbiError('2FA via proxy chain is not supported. Please use direct connection.');
+      return;
+    }
+
+    setLoading(true);
+    setKbiError(null);
+
+    try {
+      // Initiate KBI auth flow - this will trigger ssh_kbi_prompt events
+      await invoke('ssh_connect_kbi', {
+        host,
+        port: parseInt(port) || 22,
+        username,
+        cols: 80,
+        rows: 24,
+        displayName: name || undefined,
+      });
+      
+      // KBI flow started - show the dialog
+      setKbiFlowActive(true);
+      // Note: setLoading(false) will be called by handleKbiSuccess/handleKbiFailure
+    } catch (e) {
+      console.error('Failed to start KBI flow:', e);
+      setKbiError(String(e));
+      setLoading(false);
+    }
+  };
+
   const handleConnect = async () => {
     if (proxyServers.length > 0) {
       if (!proxyServers.every(server => server.host && server.username)) return;
     } else {
       if (!host || !username) return;
+    }
+
+    // Special handling for KBI - use separate flow
+    if (authType === 'keyboard_interactive') {
+      await handleKbiConnect();
+      return;
     }
 
     setLoading(true);
@@ -203,33 +281,53 @@ export const NewConnectionModal = () => {
   };
 
   return (
-    <Dialog open={modals.newConnection} onOpenChange={(open) => {
-      // 关闭 modal 时清除敏感数据
-      if (!open) {
-        setPassword('');
-        // 清除代理链中的密码
-        setProxyServers(prev => prev.map(p => ({ ...p, password: undefined, passphrase: undefined })));
-      }
-      toggleModal('newConnection', open);
-    }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby="new-connection-description">
-        <DialogHeader>
-          <DialogTitle>New Connection</DialogTitle>
-          <DialogDescription id="new-connection-description">
-            Enter details for your new SSH connection.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-6 p-4">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name (Optional)</Label>
-              <Input 
-                id="name" 
-                placeholder="My Server" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+    <>
+      {/* KBI Dialog - shown when 2FA flow is active */}
+      {kbiFlowActive && (
+        <KbiDialog
+          onSuccess={handleKbiSuccess}
+          onFailure={handleKbiFailure}
+        />
+      )}
+
+      <Dialog open={modals.newConnection} onOpenChange={(open) => {
+        // 关闭 modal 时清除敏感数据
+        if (!open) {
+          setPassword('');
+          setKbiError(null);
+          // 清除代理链中的密码
+          setProxyServers(prev => prev.map(p => ({ ...p, password: undefined, passphrase: undefined })));
+        }
+        toggleModal('newConnection', open);
+      }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby="new-connection-description">
+          <DialogHeader>
+            <DialogTitle>New Connection</DialogTitle>
+            <DialogDescription id="new-connection-description">
+              Enter details for your new SSH connection.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* KBI Error display */}
+          {kbiError && (
+            <div className="mx-4 mt-2 p-3 bg-red-950/30 border border-red-900/50 rounded text-sm text-red-400">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                <span>2FA Error: {kbiError}</span>
+              </div>
+            </div>
+          )}
+          
+          <div className="space-y-6 p-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name (Optional)</Label>
+                <Input 
+                  id="name" 
+                  placeholder="My Server" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
             </div>
 
             {proxyServers.length > 0 && (
@@ -296,12 +394,13 @@ export const NewConnectionModal = () => {
                 onValueChange={handleAuthTypeChange}
                 className="w-full"
               >
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-6">
                   <TabsTrigger value="password">Password</TabsTrigger>
                   <TabsTrigger value="default_key">Default Key</TabsTrigger>
                   <TabsTrigger value="key">SSH Key</TabsTrigger>
                   <TabsTrigger value="certificate">Certificate</TabsTrigger>
                   <TabsTrigger value="agent">Agent</TabsTrigger>
+                  <TabsTrigger value="keyboard_interactive">2FA</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="password">
@@ -389,6 +488,20 @@ export const NewConnectionModal = () => {
                         placeholder="Key passphrase if encrypted"
                       />
                     </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="keyboard_interactive">
+                  <div className="text-sm text-zinc-400 pt-2 space-y-2">
+                    <p>Two-Factor Authentication (Keyboard-Interactive)</p>
+                    <p className="text-xs text-zinc-500">
+                      The server will prompt for credentials during connection.
+                      Common uses: TOTP codes, hardware tokens, challenge-response.
+                    </p>
+                    <p className="text-xs text-yellow-600">
+                      Note: 2FA connections cannot be auto-reconnected.
+                      You'll need to manually reconnect if the session drops.
+                    </p>
                   </div>
                 </TabsContent>
                 </Tabs>
@@ -542,5 +655,6 @@ export const NewConnectionModal = () => {
         onAdd={handleAddJumpServer}
       />
     </Dialog>
+    </>
   );
  };

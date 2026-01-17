@@ -1,6 +1,6 @@
 // Session Types
 export type SessionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'reconnecting';
-export type AuthType = 'password' | 'key' | 'default_key' | 'agent' | 'certificate';
+export type AuthType = 'password' | 'key' | 'default_key' | 'agent' | 'certificate' | 'keyboard_interactive';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SSH Connection Pool Types (New Architecture)
@@ -99,6 +99,63 @@ export interface SshConnectResponse {
   connectionId: string;
   reused: boolean;
   connection: SshConnectionInfo;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Keyboard-Interactive (2FA) Authentication Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Individual prompt in a KBI InfoRequest
+ */
+export interface KbiPrompt {
+  /** The prompt text (e.g., "Password:", "Verification code:") */
+  prompt: string;
+  /** Whether to echo the input (false for passwords/codes) */
+  echo: boolean;
+}
+
+/**
+ * KBI prompt event - emitted when server requests input
+ * Event name: "ssh_kbi_prompt"
+ */
+export interface KbiPromptEvent {
+  /** Unique ID for this auth flow (UUID) */
+  authFlowId: string;
+  /** Optional name from server (often empty) */
+  name: string;
+  /** Optional instructions from server */
+  instructions: string;
+  /** Prompts the user must respond to */
+  prompts: KbiPrompt[];
+}
+
+/**
+ * KBI result event - emitted when auth flow completes
+ * Event name: "ssh_kbi_result"
+ */
+export interface KbiResultEvent {
+  authFlowId: string;
+  success: boolean;
+  error?: string;
+  sessionId?: string;
+  wsPort?: number;
+  wsToken?: string;
+}
+
+/**
+ * KBI respond request - sent from frontend to backend
+ */
+export interface KbiRespondRequest {
+  authFlowId: string;
+  responses: string[];
+}
+
+/**
+ * KBI cancel request - sent from frontend to backend
+ */
+export interface KbiCancelRequest {
+  authFlowId: string;
 }
 
 /**
@@ -635,7 +692,7 @@ export interface ConnectServerRequest {
   host: string;
   port: number;
   username: string;
-  authType?: 'password' | 'key' | 'agent' | 'certificate';
+  authType?: 'password' | 'key' | 'agent' | 'certificate' | 'keyboard_interactive';
   password?: string;
   keyPath?: string;
   certPath?: string;

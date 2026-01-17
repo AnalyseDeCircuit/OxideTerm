@@ -707,6 +707,12 @@ impl SshConnectionRegistry {
                     passphrase: passphrase.clone(),
                 },
                 AuthMethod::Agent => SshAuthMethod::Agent,
+                AuthMethod::KeyboardInteractive => {
+                    // KBI sessions must use the dedicated ssh_connect_kbi command
+                    return Err(ConnectionRegistryError::ConnectionFailed(
+                        "KeyboardInteractive must use ssh_connect_kbi command".to_string(),
+                    ));
+                }
             },
             timeout_secs: 30,
             cols: config.cols,
@@ -954,6 +960,12 @@ impl SshConnectionRegistry {
                     ))
                 })?;
                 true
+            }
+            AuthMethod::KeyboardInteractive => {
+                // KBI via proxy chain is not supported in MVP
+                return Err(ConnectionRegistryError::ConnectionFailed(
+                    "KeyboardInteractive authentication not supported via proxy chain".to_string(),
+                ));
             }
         };
 
@@ -1954,6 +1966,12 @@ impl SshConnectionRegistry {
                     passphrase: passphrase.clone(),
                 },
                 AuthMethod::Agent => SshAuthMethod::Agent,
+                AuthMethod::KeyboardInteractive => {
+                    return Err(
+                        "KeyboardInteractive sessions cannot be auto-reconnected. Please manually reconnect with 2FA."
+                            .to_string(),
+                    );
+                }
             },
             timeout_secs: 30,
             cols: config.cols,
@@ -2090,6 +2108,13 @@ impl SshConnectionRegistry {
                     .await
                     .map_err(|e| format!("Agent authentication failed: {}", e))?;
                 true
+            }
+            AuthMethod::KeyboardInteractive => {
+                // KBI reconnection via proxy chain is not supported
+                return Err(
+                    "KeyboardInteractive sessions cannot be auto-reconnected via proxy chain"
+                        .to_string(),
+                );
             }
         };
 

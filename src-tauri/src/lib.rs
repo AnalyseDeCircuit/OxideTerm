@@ -407,6 +407,10 @@ pub fn run() {
             commands::network_status_changed,
             commands::cancel_reconnect,
             commands::is_reconnecting,
+            // Keyboard-Interactive (2FA) commands - completely isolated from connect_v2
+            commands::ssh_connect_kbi,
+            commands::ssh_kbi_respond,
+            commands::ssh_kbi_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
