@@ -1,41 +1,35 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, ChevronUp, ChevronDown, CaseSensitive, Regex, WholeWord } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
-import { api } from '../../lib/api';
-import { SearchOptions, SearchResult, SearchMatch } from '../../types';
 
 interface SearchBarProps {
-  sessionId: string;
   isOpen: boolean;
   onClose: () => void;
-  onJumpToMatch?: (match: SearchMatch) => void;
+  onSearch: (query: string, options: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }) => void;
+  onFindNext: () => void;
+  onFindPrevious: () => void;
+  resultIndex: number;  // -1 if no results or limit exceeded
+  resultCount: number;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ 
-  sessionId, 
   isOpen, 
   onClose,
-  onJumpToMatch 
+  onSearch,
+  onFindNext,
+  onFindPrevious,
+  resultIndex,
+  resultCount,
 }) => {
   const [query, setQuery] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [useRegex, setUseRegex] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
-  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
-  const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  
-  // Use ref for onJumpToMatch to avoid triggering search re-execution
-  const onJumpToMatchRef = useRef(onJumpToMatch);
-  useEffect(() => {
-    onJumpToMatchRef.current = onJumpToMatch;
-  }, [onJumpToMatch]);
 
   // Focus input when opened
   useEffect(() => {
@@ -45,98 +39,24 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     }
   }, [isOpen]);
 
-  // Debounced search
-  const performSearch = useCallback(async () => {
-    if (!query.trim()) {
-      setSearchResult(null);
-      setCurrentMatchIndex(-1);
-      setError(null);
-      return;
-    }
-
-    setIsSearching(true);
-    setError(null);
-
-    try {
-      const options: SearchOptions = {
-        query: query.trim(),
-        case_sensitive: caseSensitive,
-        regex: useRegex,
-        whole_word: wholeWord,
-      };
-
-      const result = await api.searchTerminal(sessionId, options);
-      
-      // Check for regex error
-      if (result.error) {
-        setError(result.error);
-        setSearchResult(null);
-        setCurrentMatchIndex(-1);
-        return;
-      }
-      
-      setSearchResult(result);
-      setCurrentMatchIndex(result.total_matches > 0 ? 0 : -1);
-
-      // Jump to first match if available
-      if (result.total_matches > 0 && onJumpToMatchRef.current) {
-        onJumpToMatchRef.current(result.matches[0]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
-      setSearchResult(null);
-      setCurrentMatchIndex(-1);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [query, caseSensitive, useRegex, wholeWord, sessionId]); // Removed onJumpToMatch dependency
-
-  // Trigger search on query or options change (debounced)
+  // Debounced search - triggers on query or options change
   useEffect(() => {
+    if (!isOpen) return;
+    
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
     searchTimeoutRef.current = setTimeout(() => {
-      performSearch();
-    }, 300);
+      onSearch(query, { caseSensitive, regex: useRegex, wholeWord });
+    }, 150); // Faster debounce for better responsiveness
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [performSearch]);
-
-  // Navigate to previous match
-  const gotoPrevMatch = useCallback(() => {
-    if (!searchResult || searchResult.total_matches === 0) return;
-
-    const newIndex = currentMatchIndex > 0 
-      ? currentMatchIndex - 1 
-      : searchResult.total_matches - 1;
-    
-    setCurrentMatchIndex(newIndex);
-    
-    if (onJumpToMatchRef.current) {
-      onJumpToMatchRef.current(searchResult.matches[newIndex]);
-    }
-  }, [searchResult, currentMatchIndex]);
-
-  // Navigate to next match
-  const gotoNextMatch = useCallback(() => {
-    if (!searchResult || searchResult.total_matches === 0) return;
-
-    const newIndex = currentMatchIndex < searchResult.total_matches - 1 
-      ? currentMatchIndex + 1 
-      : 0;
-    
-    setCurrentMatchIndex(newIndex);
-    
-    if (onJumpToMatchRef.current) {
-      onJumpToMatchRef.current(searchResult.matches[newIndex]);
-    }
-  }, [searchResult, currentMatchIndex]);
+  }, [query, caseSensitive, useRegex, wholeWord, isOpen, onSearch]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -151,11 +71,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       }
 
       // Enter to go to next match, Shift+Enter for previous
-      if (e.key === 'Enter' && searchResult && searchResult.total_matches > 0) {
+      if (e.key === 'Enter' && resultCount > 0) {
         if (e.shiftKey) {
-          gotoPrevMatch();
+          onFindPrevious();
         } else {
-          gotoNextMatch();
+          onFindNext();
         }
         e.preventDefault();
       }
@@ -163,7 +83,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, searchResult, gotoPrevMatch, gotoNextMatch, onClose]);
+  }, [isOpen, resultCount, onFindNext, onFindPrevious, onClose]);
 
   if (!isOpen) return null;
 
@@ -174,6 +94,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+  };
+
+  // Format result display
+  const getResultDisplay = () => {
+    if (!query.trim()) return null;
+    if (resultCount === 0) return 'No results';
+    if (resultIndex === -1) return `${resultCount}+ matches`; // Limit exceeded
+    return `${resultIndex + 1}/${resultCount}`;
   };
 
   return (
@@ -195,12 +123,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         />
         
         {/* Match Counter */}
-        {searchResult && (
+        {query.trim() && (
           <div className="text-xs text-zinc-400 whitespace-nowrap">
-            {searchResult.total_matches === 0 
-              ? 'No results' 
-              : `${currentMatchIndex + 1}/${searchResult.total_matches}`
-            }
+            {getResultDisplay()}
           </div>
         )}
 
@@ -209,8 +134,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           variant="ghost"
           size="sm"
           className="h-7 w-7 p-0"
-          onClick={gotoPrevMatch}
-          disabled={!searchResult || searchResult.total_matches === 0}
+          onClick={onFindPrevious}
+          disabled={resultCount === 0}
+          title="Previous match (Shift+Enter)"
         >
           <ChevronUp className="h-4 w-4" />
         </Button>
@@ -218,8 +144,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           variant="ghost"
           size="sm"
           className="h-7 w-7 p-0"
-          onClick={gotoNextMatch}
-          disabled={!searchResult || searchResult.total_matches === 0}
+          onClick={onFindNext}
+          disabled={resultCount === 0}
+          title="Next match (Enter)"
         >
           <ChevronDown className="h-4 w-4" />
         </Button>
@@ -230,6 +157,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           size="sm"
           className="h-7 w-7 p-0"
           onClick={onClose}
+          title="Close (Esc)"
         >
           <X className="h-4 w-4" />
         </Button>
@@ -247,6 +175,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <Label 
             htmlFor="case-sensitive" 
             className="text-xs cursor-pointer flex items-center gap-1"
+            title="Case Sensitive"
           >
             <CaseSensitive className="w-3.5 h-3.5" />
             <span>Aa</span>
@@ -263,6 +192,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <Label 
             htmlFor="regex" 
             className="text-xs cursor-pointer flex items-center gap-1"
+            title="Use Regular Expression"
           >
             <Regex className="w-3.5 h-3.5" />
             <span>.*</span>
@@ -279,24 +209,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <Label 
             htmlFor="whole-word" 
             className="text-xs cursor-pointer flex items-center gap-1"
+            title="Match Whole Word"
           >
             <WholeWord className="w-3.5 h-3.5" />
             <span>Word</span>
           </Label>
         </div>
-
-        {/* Loading/Error Indicator */}
-        {isSearching && (
-          <div className="ml-auto text-xs text-zinc-500">Searching...</div>
-        )}
-        {error && (
-          <div className="ml-auto text-xs text-red-400">{error}</div>
-        )}
-        {searchResult && searchResult.duration_ms > 0 && (
-          <div className="ml-auto text-xs text-zinc-500">
-            {searchResult.duration_ms}ms
-          </div>
-        )}
       </div>
     </div>
   );

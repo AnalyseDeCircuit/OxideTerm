@@ -12,7 +12,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
-  <img src="https://img.shields.io/badge/license-CC--BY--NC--4.0-green" alt="License">
+  <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
   <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
 </p>
@@ -377,19 +377,29 @@ OxideTerm/
 
 ## 📝 许可证
 
-本项目采用 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) 许可证。
+本项目采用 **PolyForm Noncommercial 1.0.0** 协议。
 
-**您可以自由地：**
-- ✅ 复制、分发、展示和演绎本作品
-- ✅ 修改和构建衍生作品
-- ✅ 用于学习和个人项目
+本项目的当前及历史版本均建议在 PolyForm Noncommercial 协议下使用，原 CC 授权不再维护。
 
-**但须遵守：**
-- ℹ️ **署名** — 您必须注明原作者并提供许可证链接
-- 🚫 **非商业性使用** — 您不得将本作品用于商业目的
+完整协议文本请参见：
+https://polyformproject.org/licenses/noncommercial/1.0.0/
 
 如需商业使用授权，请联系作者。
 
+⚖️ 法律声明：协议变更与追溯效力 (Legal Notice: Relicensing & Retroactivity)
+致所有使用者（尤其是商业实体）：
+
+协议变更： 本项目已正式从 CC BY-NC 4.0 迁移至 PolyForm Noncommercial License 1.0.0。
+
+追溯声明： 作为本项目的唯一著作权人，我在此声明：本项目的所有历史提交（Commits）、分支（Branches）及过往发布版本（Releases），现在均统一受 PolyForm Noncommercial License 1.0.0 约束。 3. 专利防御（核弹条款）： 本协议包含明确的专利撤销条款。任何尝试利用本项目（无论新旧版本）进行专利诉讼或商业牟利的实体，其对本项目所有代码的授权将自动、立即且永久终止。
+
+禁止商业白嫖： - 如果您是个人、学生或非营利组织，请继续享受开源。
+
+如果您代表商业公司或盈利性组织： 严禁以任何形式（包括但不限于直接运行、动态/静态链接、逻辑移植、算法参考）使用本项目任何版本的代码。
+
+任何在未经书面商业授权的情况下，于商业环境中使用本项目历史 Commit 的行为，均将被视为恶意规避作者的专利保护策略，并面临法律起诉及侵权索赔。
+
+警告： 我们的会追踪代码指纹。不要尝试翻阅 Git 历史来寻找“旧版授权”的漏洞，那在法律上将被视为有预谋的侵权行为。
 ---
 
 ## 🤝 贡献

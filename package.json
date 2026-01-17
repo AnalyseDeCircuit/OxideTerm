@@ -2,12 +2,14 @@
   "name": "tauri-app",
   "private": true,
   "version": "0.5.0-beta1",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "license:check:backend": "cd src-tauri && node scripts/check-license-policy.cjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

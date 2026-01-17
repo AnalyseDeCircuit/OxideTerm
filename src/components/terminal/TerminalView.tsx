@@ -1,17 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon, ISearchOptions } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar } from './SearchBar';
-import { SearchMatch, SettingsChangedDetail, TerminalLine } from '../../types';
+import { SettingsChangedDetail } from '../../types';
 import { listen } from '@tauri-apps/api/event';
-import { Lock, Loader2, X } from 'lucide-react';
+import { Lock, Loader2 } from 'lucide-react';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -61,9 +62,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true); // Track mount state for StrictMode
   const [searchOpen, setSearchOpen] = useState(false);
+  
+  // Search state - synced with SearchAddon's onDidChangeResults
+  const [searchResults, setSearchResults] = useState<{ resultIndex: number; resultCount: number }>({ 
+    resultIndex: -1, 
+    resultCount: 0 
+  });
+  // Track current search query for navigation
+  const currentSearchQueryRef = useRef<string>('');
+  const currentSearchOptionsRef = useRef<ISearchOptions | undefined>(undefined);
   
   // P3: Backpressure handling - batch terminal writes with RAF
   const pendingDataRef = useRef<Uint8Array[]>([]);
@@ -79,15 +90,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const [inputLocked, setInputLocked] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'link_down' | 'reconnecting' | 'disconnected'>('connected');
   const inputLockedRef = useRef(false); // For synchronous check in onData callback
-  
-  // === Search Context Overlay State ===
-  // Shows scrolled-out buffer content when jumping to matches not in xterm visible buffer
-  const [searchContextOverlay, setSearchContextOverlay] = useState<{
-    visible: boolean;
-    lines: TerminalLine[];
-    matchLineIndex: number; // Which line in the loaded context contains the match
-    match: SearchMatch | null;
-  }>({ visible: false, lines: [], matchLineIndex: -1, match: null });
   
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
@@ -374,9 +376,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
     const fitAddon = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
+    const searchAddon = new SearchAddon();
     
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
+    term.loadAddon(searchAddon);
+    
+    // Listen for search result changes
+    searchAddon.onDidChangeResults((e) => {
+      setSearchResults({ resultIndex: e.resultIndex, resultCount: e.resultCount });
+    });
+    
+    searchAddonRef.current = searchAddon;
 
     // Try WebGL, fallback to canvas/dom if needed
     try {
@@ -638,133 +649,69 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   const currentTheme = themes[settings.theme] || themes.default;
 
-  // Handle search keyboard shortcut (Ctrl/Cmd + F) and ESC to close overlay
+  // Handle search keyboard shortcut (Ctrl/Cmd + F)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         setSearchOpen(true);
       }
-      
-      // ESC closes search context overlay (if open)
-      if (e.key === 'Escape' && searchContextOverlay.visible) {
-        e.preventDefault();
-        setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [searchContextOverlay.visible]);
+  }, []);
 
-  // Handle jump to match from search
-  const handleJumpToMatch = async (match: SearchMatch) => {
-    const term = terminalRef.current;
-    if (!term) return;
-
-    console.log('Jumping to match:', match);
-
-    // Clear previous selection and close any context overlay
-    term.clearSelection();
-    setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
-
-    // Try to find ALL occurrences of the matched text in the visible buffer
-    const buffer = term.buffer.active;
-    const totalRows = buffer.length;
-    const matchedText = match.matched_text;
-    
-    // Find all rows containing the match
-    const matchedRows: { row: number; col: number }[] = [];
-    for (let row = 0; row < totalRows; row++) {
-      const line = buffer.getLine(row);
-      if (!line) continue;
-      
-      const lineText = line.translateToString(true);
-      let startIndex = 0;
-      let foundIndex;
-      
-      // Find all occurrences in this line
-      while ((foundIndex = lineText.indexOf(matchedText, startIndex)) !== -1) {
-        matchedRows.push({ row, col: foundIndex });
-        startIndex = foundIndex + 1;
-      }
-    }
-    
-    console.log(`Found ${matchedRows.length} matches in visible buffer`);
-    
-    if (matchedRows.length > 0) {
-      // Find the match closest to the target line content
-      let bestMatch = matchedRows[0];
-      const targetContent = match.line_content.trim();
-      
-      for (const m of matchedRows) {
-        const line = buffer.getLine(m.row);
-        if (line) {
-          const lineText = line.translateToString(true).trim();
-          if (lineText === targetContent || lineText.includes(targetContent)) {
-            bestMatch = m;
-            break;
-          }
-        }
-      }
-      
-      // Scroll to the best match
-      term.scrollToLine(bestMatch.row);
-      
-      // Select the text - wait a bit for scroll to complete
-      setTimeout(() => {
-        if (terminalRef.current) {
-          terminalRef.current.select(bestMatch.col, bestMatch.row, matchedText.length);
-        }
-      }, 50);
-      
+  // === SearchAddon API for SearchBar ===
+  const handleSearch = useCallback((query: string, options: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }) => {
+    const searchAddon = searchAddonRef.current;
+    if (!searchAddon || !query) {
+      searchAddon?.clearDecorations();
+      setSearchResults({ resultIndex: -1, resultCount: 0 });
+      currentSearchQueryRef.current = '';
       return;
     }
-
-    // Not found in visible buffer - show context overlay instead of clearing terminal
-    console.warn('Match not in visible buffer. Loading from backend...', match);
     
-    try {
-      // Get context around the matched line from backend (50 lines before and after)
-      const lines = await api.scrollToLine(sessionId, match.line_number, 50);
-      
-      if (lines && lines.length > 0) {
-        // Find which line in the context contains the match
-        let matchLineIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].text.includes(match.matched_text)) {
-            // Also check if line content matches for better accuracy
-            if (lines[i].text.trim() === match.line_content.trim() || 
-                lines[i].text.includes(match.line_content.substring(0, 50))) {
-              matchLineIndex = i;
-              break;
-            }
-            // Fall back to first match if no exact content match
-            if (matchLineIndex === -1) {
-              matchLineIndex = i;
-            }
-          }
-        }
-        
-        // Show the context overlay
-        setSearchContextOverlay({
-          visible: true,
-          lines,
-          matchLineIndex,
-          match
-        });
-      } else {
-        console.warn('No context lines loaded from backend');
+    const searchOptions: ISearchOptions = {
+      caseSensitive: options.caseSensitive,
+      regex: options.regex,
+      wholeWord: options.wholeWord,
+      decorations: {
+        matchBackground: '#5a4a00',
+        matchBorder: '#997700',
+        matchOverviewRuler: '#997700',
+        activeMatchBackground: '#997700',
+        activeMatchBorder: '#ffcc00',
+        activeMatchColorOverviewRuler: '#ffcc00',
       }
-    } catch (error) {
-      console.error('Failed to load line from backend:', error);
-    }
-  };
+    };
+    
+    // Store for navigation
+    currentSearchQueryRef.current = query;
+    currentSearchOptionsRef.current = searchOptions;
+    
+    searchAddon.findNext(query, searchOptions);
+  }, []);
   
-  // Close search context overlay
-  const closeSearchContextOverlay = () => {
-    setSearchContextOverlay({ visible: false, lines: [], matchLineIndex: -1, match: null });
-  };
+  const handleFindNext = useCallback(() => {
+    const query = currentSearchQueryRef.current;
+    if (!query || !searchAddonRef.current) return;
+    searchAddonRef.current.findNext(query, currentSearchOptionsRef.current);
+  }, []);
+  
+  const handleFindPrevious = useCallback(() => {
+    const query = currentSearchQueryRef.current;
+    if (!query || !searchAddonRef.current) return;
+    searchAddonRef.current.findPrevious(query, currentSearchOptionsRef.current);
+  }, []);
+  
+  const handleCloseSearch = useCallback(() => {
+    setSearchOpen(false);
+    searchAddonRef.current?.clearDecorations();
+    setSearchResults({ resultIndex: -1, resultCount: 0 });
+    currentSearchQueryRef.current = '';
+    terminalRef.current?.focus();
+  }, []);
   
   return (
     <div 
@@ -806,95 +753,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
          </div>
        )}
        
-       {/* Search Context Overlay - shows scrolled-out content */}
-       {searchContextOverlay.visible && (
-         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-20 flex items-center justify-center p-4">
-           <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-             {/* Header */}
-             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
-               <div className="flex items-center gap-2">
-                 <span className="text-sm text-zinc-400">Search Result Context</span>
-                 {searchContextOverlay.match && (
-                   <span className="text-xs text-zinc-500">
-                     (Line {searchContextOverlay.match.line_number} in backend buffer)
-                   </span>
-                 )}
-               </div>
-               <button 
-                 onClick={closeSearchContextOverlay}
-                 className="p-1 hover:bg-zinc-800 rounded transition-colors"
-               >
-                 <X className="h-4 w-4 text-zinc-400" />
-               </button>
-             </div>
-             
-             {/* Content */}
-             <div 
-               className="flex-1 overflow-auto font-mono text-sm p-4"
-               style={{ 
-                 fontFamily: settings.fontFamily === 'jetbrains' ? '"JetBrains Mono", monospace' : 
-                             settings.fontFamily === 'meslo' ? '"Meslo LG S", monospace' : 
-                             'monospace',
-                 fontSize: `${settings.fontSize}px`
-               }}
-             >
-               {searchContextOverlay.lines.map((line, index) => {
-                 const isMatchLine = index === searchContextOverlay.matchLineIndex;
-                 const match = searchContextOverlay.match;
-                 
-                 // Highlight the matched text within the line
-                 let lineContent = line.text;
-                 if (isMatchLine && match) {
-                   const matchIndex = lineContent.indexOf(match.matched_text);
-                   if (matchIndex !== -1) {
-                     const before = lineContent.substring(0, matchIndex);
-                     const matched = lineContent.substring(matchIndex, matchIndex + match.matched_text.length);
-                     const after = lineContent.substring(matchIndex + match.matched_text.length);
-                     return (
-                       <div 
-                         key={index}
-                         className={`${isMatchLine ? 'bg-yellow-500/20 -mx-2 px-2' : ''}`}
-                       >
-                         <span className="text-zinc-500 select-none mr-3">
-                           {String(index + 1).padStart(4, ' ')}
-                         </span>
-                         <span className="text-zinc-300">{before}</span>
-                         <span className="bg-yellow-400 text-black px-0.5 rounded">{matched}</span>
-                         <span className="text-zinc-300">{after}</span>
-                       </div>
-                     );
-                   }
-                 }
-                 
-                 return (
-                   <div 
-                     key={index}
-                     className={`${isMatchLine ? 'bg-yellow-500/20 -mx-2 px-2' : ''}`}
-                   >
-                     <span className="text-zinc-500 select-none mr-3">
-                       {String(index + 1).padStart(4, ' ')}
-                     </span>
-                     <span className="text-zinc-300 whitespace-pre">{lineContent || ' '}</span>
-                   </div>
-                 );
-               })}
-             </div>
-             
-             {/* Footer */}
-             <div className="px-4 py-2 border-t border-zinc-700 text-xs text-zinc-500">
-               This content has scrolled out of the terminal's visible buffer. 
-               Press ESC or click outside to close.
-             </div>
-           </div>
-         </div>
-       )}
-       
-       {/* Search Bar */}
+       {/* Search Bar - using xterm.js SearchAddon */}
        <SearchBar 
-         sessionId={sessionId}
          isOpen={searchOpen}
-         onClose={() => setSearchOpen(false)}
-         onJumpToMatch={handleJumpToMatch}
+         onClose={handleCloseSearch}
+         onSearch={handleSearch}
+         onFindNext={handleFindNext}
+         onFindPrevious={handleFindPrevious}
+         resultIndex={searchResults.resultIndex}
+         resultCount={searchResults.resultCount}
        />
     </div>
   );
