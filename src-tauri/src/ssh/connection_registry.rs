@@ -1360,6 +1360,12 @@ impl SshConnectionRegistry {
         // 取消空闲计时器
         conn.cancel_idle_timer().await;
 
+        // 取消心跳任务（避免断开后心跳任务继续运行报错）
+        conn.cancel_heartbeat().await;
+
+        // 取消重连任务（如果有）
+        conn.cancel_reconnect().await;
+
         // 设置状态为断开中
         conn.set_state(ConnectionState::Disconnecting).await;
 
@@ -1429,6 +1435,8 @@ impl SshConnectionRegistry {
         drop(entry);
 
         conn.cancel_idle_timer().await;
+        conn.cancel_heartbeat().await;
+        conn.cancel_reconnect().await;
         conn.set_state(ConnectionState::Disconnecting).await;
         conn.handle_controller.disconnect().await;
         conn.set_state(ConnectionState::Disconnected).await;

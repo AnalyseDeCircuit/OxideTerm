@@ -331,9 +331,9 @@ pub fn spawn_handle_owner_task(
                         }
 
                         HandleCommand::Ping { reply_tx } => {
-                            // Try to open a session channel as a keepalive probe
-                            // This validates the SSH connection is still functional
-                            // Timeout set to 5s to avoid blocking heartbeat too long
+                            // Use channel_open_session as keepalive probe, but handle errors carefully.
+                            // ChannelOpenFailure (e.g., MaxSessions limit) doesn't mean connection is broken.
+                            // Only true disconnects should trigger immediate reconnection.
                             debug!("Ping probe starting for session {}", session_id);
                             let result = match tokio::time::timeout(
                                 std::time::Duration::from_secs(5),
@@ -348,9 +348,22 @@ pub fn spawn_handle_owner_task(
                                     PingResult::Ok
                                 }
                                 Ok(Err(e)) => {
-                                    // SSH protocol error - likely unrecoverable
-                                    warn!("Ping SSH error for session {}: {:?}", session_id, e);
-                                    PingResult::IoError
+                                    // Check error type to distinguish soft vs hard failures
+                                    let error_str = format!("{:?}", e);
+                                    if error_str.contains("ChannelOpenFailure") {
+                                        // Server refused channel (MaxSessions, policy, idle cleanup, etc.)
+                                        // SSH transport layer is still alive - treat as soft failure
+                                        warn!("Ping channel refused for session {} (server policy, not a disconnect): {:?}", session_id, e);
+                                        PingResult::Timeout
+                                    } else if error_str.contains("Disconnect") || error_str.contains("disconnect") {
+                                        // True SSH disconnect - connection is gone
+                                        warn!("Ping SSH disconnect for session {}: {:?}", session_id, e);
+                                        PingResult::IoError
+                                    } else {
+                                        // Other errors - treat as soft failure to avoid false positive reconnects
+                                        warn!("Ping SSH error for session {} (treating as soft failure): {:?}", session_id, e);
+                                        PingResult::Timeout
+                                    }
                                 }
                                 Err(_) => {
                                     // Timeout
