@@ -23,6 +23,7 @@ import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInp
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
+import { platform } from '../../lib/platform';
 
 const ThemePreview = ({ themeName }: { themeName: string }) => {
     const theme = themes[themeName] || themes.default;
@@ -558,7 +559,9 @@ export const SettingsModal = () => {
                                     <Sparkles className="h-5 w-5 text-theme-accent" />
                                     <div>
                                         <div className="font-medium text-zinc-200">Enable AI Capabilities</div>
-                                        <div className="text-xs text-zinc-500">Press Ctrl+I / Cmd+I in terminal to open AI panel</div>
+                                        <div className="text-xs text-zinc-500">
+                                            Press {platform.isWindows ? 'Ctrl+Shift+I' : 'Ctrl+I / Cmd+I'} in terminal to open AI panel
+                                        </div>
                                     </div>
                                 </div>
                                 <Checkbox 

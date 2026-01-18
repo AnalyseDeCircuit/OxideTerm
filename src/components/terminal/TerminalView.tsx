@@ -730,15 +730,27 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   const currentTheme = themes[terminalSettings.theme] || themes.default;
 
-  // Handle search keyboard shortcut (Ctrl/Cmd + F) and AI panel (Ctrl/Cmd + I)
+  // Handle search keyboard shortcut and AI panel
+  // Windows: Ctrl+Shift+F for search, Ctrl+Shift+I for AI (avoid conflicts)
+  // Mac/Linux: Cmd/Ctrl+F for search, Cmd/Ctrl+I for AI
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      // Search shortcut
+      const isSearchShortcut = platform.isWindows
+        ? (e.ctrlKey && e.shiftKey && e.key === 'F')
+        : ((e.ctrlKey || e.metaKey) && e.key === 'f');
+      
+      if (isSearchShortcut) {
         e.preventDefault();
         setSearchOpen(true);
       }
-      // AI Panel shortcut (Ctrl/Cmd + I)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+      
+      // AI Panel shortcut
+      const isAiShortcut = platform.isWindows
+        ? (e.ctrlKey && e.shiftKey && e.key === 'I')
+        : ((e.ctrlKey || e.metaKey) && e.key === 'i');
+      
+      if (isAiShortcut) {
         e.preventDefault();
         // Check if AI is enabled in settings
         const { settings } = useSettingsStore.getState();
