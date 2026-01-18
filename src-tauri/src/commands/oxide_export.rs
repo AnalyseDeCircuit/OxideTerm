@@ -166,7 +166,6 @@ pub async fn export_to_oxide(
             tags: saved_conn.tags.clone(),
             options: saved_conn.options.clone(),
             proxy_chain: encrypted_proxy_chain,
-            session_buffer: None, // TODO: Add option to include buffer from active sessions
         });
     }
 

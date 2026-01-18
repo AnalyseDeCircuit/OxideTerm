@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '.
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Checkbox } from '../ui/checkbox';
 import { useAppStore } from '../../store/appStore';
 import type { OxideMetadata, ImportResult } from '../../types';
 
@@ -21,7 +20,6 @@ export function OxideImportModal({ isOpen, onClose }: OxideImportModalProps) {
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [metadata, setMetadata] = useState<OxideMetadata | null>(null);
   const [password, setPassword] = useState('');
-  const [restoreBuffers, setRestoreBuffers] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -105,7 +103,6 @@ export function OxideImportModal({ isOpen, onClose }: OxideImportModalProps) {
     setFileData(null);
     setMetadata(null);
     setPassword('');
-    setRestoreBuffers(true);
     setError(null);
     setResult(null);
     onClose();
@@ -214,22 +211,6 @@ export function OxideImportModal({ isOpen, onClose }: OxideImportModalProps) {
                   className="mt-1 bg-theme-bg border-theme-border text-theme-text placeholder:text-theme-text-muted focus-visible:ring-theme-accent"
                   autoFocus
                 />
-              </div>
-
-              {/* Buffer Restore Option */}
-              <div className="flex items-center space-x-2 p-3 bg-zinc-900 rounded border border-theme-border">
-                <Checkbox
-                  id="restore-buffers"
-                  checked={restoreBuffers}
-                  onCheckedChange={(checked: boolean) => setRestoreBuffers(checked === true)}
-                  className="border-theme-text-muted data-[state=checked]:bg-theme-accent data-[state=checked]:border-theme-accent"
-                />
-                <Label htmlFor="restore-buffers" className="cursor-pointer text-theme-text">
-                  <div className="font-medium">Restore terminal buffer content</div>
-                  <div className="text-xs text-theme-text-muted">
-                    If the file contains saved terminal buffers, restore them to active sessions
-                  </div>
-                </Label>
               </div>
 
               {/* Error Message */}

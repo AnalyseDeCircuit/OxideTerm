@@ -24,8 +24,8 @@ OxideTerm 使用两种序列化格式：
 │  │  应用场景:                                           │   │
 │  │  • redb 状态存储 (session, forwarding)               │   │
 │  │  • SFTP 传输进度持久化                               │   │
-│  │  • .oxide 文件加密负载                               │   │
-│  │  • Terminal scroll_buffer 持久化                     │   │
+│  │  • .oxide 文件加密负载 (仅配置数据)                  │   │
+│  │  • Terminal scroll_buffer 本地持久化               │   │
 │  │                                                      │   │
 │  │  特性支持:                                           │   │
 │  │  ✓ 二进制紧凑格式                                    │   │
@@ -129,6 +129,7 @@ pub struct SerializedBuffer {
 #### 5. `src/oxide_file/crypto.rs` - .oxide 加密负载
 
 ```rust
+/// .oxide 文件是纯配置包，不包含会话数据或终端缓冲区
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedPayload {
     pub version: u32,
@@ -141,11 +142,13 @@ pub struct EncryptedPayload {
 pub enum EncryptedAuth {
     Password { password: String },
     Key { key_path: String, passphrase: Option<String> },
+    Certificate { key_path: String, cert_path: String, passphrase: Option<String> },
     Agent,
 }
 ```
 
 - **用途**: 连接配置导出/导入的加密部分
+- **设计决策**: .oxide 仅用于设备间配置迁移，不包含会话数据（终端缓冲区等）
 - **特殊类型**: `EncryptedAuth`(内部标签枚举), `Option<String>`
 
 ### JSON 序列化组件

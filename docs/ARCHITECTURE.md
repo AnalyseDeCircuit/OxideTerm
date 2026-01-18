@@ -22,7 +22,7 @@
 
 ### 核心原则
 
-1. **性能优先** - 终端交互必须是零延迟的，任何可感知的延迟都是不可接受的
+1. **性能优先** - 终端交互必须是极低延迟的，追求接近实时的响应速度
 2. **安全至上** - 使用纯 Rust 实现 SSH，避免内存安全问题
 3. **现代体验** - 提供与 VS Code / iTerm2 相当的用户体验
 4. **可维护性** - 清晰的模块边界，易于扩展和测试
@@ -107,7 +107,7 @@ OxideTerm 将通信分为两个平面：
 
 ### 数据平面 (Data Plane)
 
-处理高频、低延迟的终端 I/O：
+处理高频、极低延迟的终端 I/O：
 
 ```
 ┌─────────────┐     WebSocket (Binary)     ┌─────────────┐
@@ -124,7 +124,8 @@ OxideTerm 将通信分为两个平面：
 **特点：**
 - 二进制帧传输，无 JSON 序列化开销
 - 绕过 Tauri IPC，直接 WebSocket 连接
-- 心跳保活，90秒超时断开
+- 心跳保活，30秒间隔，90秒超时断开
+- 支持数据、调整大小、心跳等多种帧类型
 
 ### 控制平面 (Control Plane)
 
@@ -159,7 +160,12 @@ src-tauri/src/
 │   ├── session.rs          # 会话管理 (Handle Owner Task)
 │   ├── config.rs           # SSH Config 解析
 │   ├── proxy.rs            # 代理跳板支持
-│   └── error.rs            # SSH 错误类型
+│   ├── error.rs            # SSH 错误类型
+│   ├── agent.rs            # SSH Agent (仅 UI/Types，核心待实现)
+│   ├── keyboard_interactive.rs  # 2FA/KBI 认证
+│   ├── known_hosts.rs      # 主机密钥验证
+│   ├── handle_owner.rs     # Handle 控制器
+│   └── connection_registry.rs  # 连接池
 │
 ├── bridge/                 # WebSocket 桥接
 │   ├── mod.rs
@@ -167,12 +173,21 @@ src-tauri/src/
 │   ├── protocol.rs         # 帧协议定义
 │   └── manager.rs          # 连接管理
 │
-├── session/                # 会话注册与健康检查
+├── session/                # 会话管理
 │   ├── mod.rs
 │   ├── registry.rs         # 全局会话注册表
 │   ├── state.rs            # 会话状态机
 │   ├── health.rs           # 健康检查
-│   └── reconnect.rs        # 自动重连
+│   ├── reconnect.rs        # 重连逻辑
+│   ├── auto_reconnect.rs   # 自动重连任务
+│   ├── auth.rs             # 认证流程
+│   ├── events.rs           # 事件定义
+│   ├── parser.rs           # 输出解析
+│   ├── scroll_buffer.rs    # 滚动缓冲区
+│   ├── search.rs           # 终端搜索
+│   ├── tree.rs             # 会话树管理
+│   ├── topology_graph.rs   # 拓扑图
+│   └── types.rs            # 类型定义
 │
 ├── sftp/                   # SFTP 实现
 │   ├── mod.rs
@@ -196,11 +211,18 @@ src-tauri/src/
 │
 └── commands/               # Tauri 命令
     ├── mod.rs
-    ├── connect_v2.rs       # 连接命令
+    ├── connect_v2.rs       # 连接命令 (主要连接流程)
+    ├── ssh.rs              # SSH 通用命令
     ├── config.rs           # 配置命令
     ├── sftp.rs             # SFTP 命令
     ├── forwarding.rs       # 转发命令
-    └── health.rs           # 健康检查命令
+    ├── health.rs           # 健康检查命令
+    ├── kbi.rs              # KBI/2FA 命令
+    ├── network.rs          # 网络状态命令
+    ├── oxide_export.rs     # .oxide 导出
+    ├── oxide_import.rs     # .oxide 导入
+    ├── scroll.rs           # 滚动缓冲区命令
+    └── session_tree.rs     # 会话树命令
 ```
 
 ### 核心组件关系图
@@ -585,9 +607,11 @@ Tauri 2.0 提供细粒度的权限控制：
 
 ### 终端渲染
 
-- WebGL 渲染替代 DOM 渲染，性能提升 10x
+- WebGL 渲染替代 DOM 渲染，显著提升性能
 - 使用 FitAddon 自适应容器大小
 - 滚动缓冲区限制 (默认 10000 行)
+- 支持终端内搜索 (`⌘F` / `Ctrl+F`)
+- 后端滚动缓冲区优化（参见 BACKEND_SCROLL_BUFFER.md）
 
 ### 网络传输
 
