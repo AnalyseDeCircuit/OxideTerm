@@ -55,7 +55,6 @@ target/
 # Node
 # Note: package-lock.json should be committed for consistent builds
 yarn.lock
-pnpm-lock.yaml
 
 # Development
 *.swp
