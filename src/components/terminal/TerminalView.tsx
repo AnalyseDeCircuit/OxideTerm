@@ -12,7 +12,7 @@ import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar, DeepSearchState } from './SearchBar';
 import { AiInlinePanel } from './AiInlinePanel';
-import { SearchMatch } from '../../types';
+import { SearchMatch, SessionInfo } from '../../types';
 import { listen } from '@tauri-apps/api/event';
 import { Lock, Loader2 } from 'lucide-react';
 
@@ -105,16 +105,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   
   const { getSession } = useAppStore();
   const session = getSession(sessionId);
+  const sessionRef = useRef<SessionInfo | undefined>(session);
+  const connectionIdRef = useRef<string | null>(session?.connectionId ?? null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
+    connectionIdRef.current = session?.connectionId ?? null;
+  }, [session?.connectionId]);
 
   // Get terminal settings from unified store
   const terminalSettings = useSettingsStore((state) => state.settings.terminal);
 
   // === Listen for connection status changes (Standby mode trigger) ===
   useEffect(() => {
-    // Get connection ID from session
-    const connectionId = session?.connectionId;
-    if (!connectionId) return;
-
     interface ConnectionStatusEvent {
       connection_id: string;
       status: 'connected' | 'link_down' | 'reconnecting' | 'disconnected';
@@ -123,8 +129,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     const unlisten = listen<ConnectionStatusEvent>('connection_status_changed', (event) => {
       const { connection_id, status } = event.payload;
       
+      const currentConnectionId = connectionIdRef.current;
+      if (!currentConnectionId) return;
       // Only handle events for our connection
-      if (connection_id !== connectionId) return;
+      if (connection_id !== currentConnectionId) return;
       
       console.log(`[TerminalView ${sessionId}] Connection status: ${status}`);
       setConnectionStatus(status);
@@ -161,7 +169,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [session?.connectionId, sessionId]);
+  }, [sessionId]);
 
   // Subscribe to terminal settings changes from settingsStore
   useEffect(() => {
@@ -204,16 +212,24 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   // WebSocket reconnection effect - triggers when ws_url changes (after auto-reconnect)
   useEffect(() => {
+    const currentSession = sessionRef.current;
+    const wsUrl = currentSession?.ws_url;
     // Skip if terminal not initialized or no ws_url
-    if (!terminalRef.current || !session?.ws_url) return;
+    if (!terminalRef.current || !wsUrl) return;
     
     // Skip if this is the same URL we're already connected to
-    if (session.ws_url === lastWsUrlRef.current) return;
+    if (wsUrl === lastWsUrlRef.current) {
+      const existingWs = wsRef.current;
+      if (existingWs && existingWs.readyState <= WebSocket.OPEN) {
+        return;
+      }
+      // If ws exists but is closed, allow reconnect to same URL
+    }
     
     // Skip if WebSocket is already open/connecting to same URL
     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) {
       // If old connection exists but URL changed, close it
-      if (lastWsUrlRef.current !== null && session.ws_url !== lastWsUrlRef.current) {
+      if (lastWsUrlRef.current !== null && wsUrl !== lastWsUrlRef.current) {
         console.log('[Terminal] Session reconnected, closing old WebSocket and reconnecting...');
         reconnectingRef.current = true;
         const oldWs = wsRef.current;
@@ -225,10 +241,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     }
     
     const term = terminalRef.current;
-    const wsUrl = session.ws_url;
-    const wsToken = session.ws_token;
+    const wsToken = currentSession?.ws_token;
+    const displayUser = currentSession?.username ?? 'unknown';
+    const displayHost = currentSession?.host ?? 'unknown';
     
-    term.writeln(`\r\n\x1b[33mReconnecting to ${session.username}@${session.host}...\x1b[0m`);
+    term.writeln(`\r\n\x1b[33mReconnecting to ${displayUser}@${displayHost}...\x1b[0m`);
     
     try {
       const ws = new WebSocket(wsUrl);
@@ -356,7 +373,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       console.error('Failed to reconnect WebSocket:', e);
       term.writeln(`\r\n\x1b[31mFailed to reconnect: ${e}\x1b[0m`);
     }
-  }, [session?.ws_url, session?.ws_token, session?.username, session?.host]);
+  }, [session?.ws_url]);
 
   const getFontFamily = (val: string) => {
       switch(val) {
@@ -717,6 +734,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
           wsRef.current.close();
           wsRef.current = null;
       }
+        lastWsUrlRef.current = null;
       term.dispose();
       terminalRef.current = null;
     };

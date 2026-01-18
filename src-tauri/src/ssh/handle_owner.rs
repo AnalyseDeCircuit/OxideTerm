@@ -352,9 +352,11 @@ pub fn spawn_handle_owner_task(
                                     let error_str = format!("{:?}", e);
                                     if error_str.contains("ChannelOpenFailure") {
                                         // Server refused channel (MaxSessions, policy, idle cleanup, etc.)
-                                        // SSH transport layer is still alive - treat as soft failure
-                                        warn!("Ping channel refused for session {} (server policy, not a disconnect): {:?}", session_id, e);
-                                        PingResult::Timeout
+                                        // SSH transport layer is still alive - treat as OK (server responded!)
+                                        // Key insight: ChannelOpenFailure means the server received and processed
+                                        // our request, it just declined to open a new channel. Connection is healthy.
+                                        debug!("Ping channel refused for session {} (server policy, connection healthy): {:?}", session_id, e);
+                                        PingResult::Ok
                                     } else if error_str.contains("Disconnect") || error_str.contains("disconnect") {
                                         // True SSH disconnect - connection is gone
                                         warn!("Ping SSH disconnect for session {}: {:?}", session_id, e);
