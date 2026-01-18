@@ -67,6 +67,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true); // Track mount state for StrictMode
+  const reconnectingRef = useRef(false); // Suppress close/error during intentional reconnect
   const [searchOpen, setSearchOpen] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   
@@ -214,7 +215,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       // If old connection exists but URL changed, close it
       if (lastWsUrlRef.current !== null && session.ws_url !== lastWsUrlRef.current) {
         console.log('[Terminal] Session reconnected, closing old WebSocket and reconnecting...');
-        wsRef.current.close();
+        reconnectingRef.current = true;
+        const oldWs = wsRef.current;
+        wsRef.current = null;
+        oldWs.close(1000, 'Reconnect');
       } else {
         return; // Same URL, already connected
       }
@@ -237,6 +241,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
           ws.close();
           return;
         }
+        reconnectingRef.current = false;
         
         // Send authentication token
         if (wsToken) {
@@ -256,7 +261,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       };
 
       ws.onmessage = (event) => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || wsRef.current !== ws) return;
         
         const data = new Uint8Array(event.data);
         if (data.length < HEADER_SIZE) return;
@@ -335,13 +340,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
       };
 
       ws.onerror = (error) => {
+        if (!isMountedRef.current || wsRef.current !== ws) return;
         console.error('WebSocket reconnection error:', error);
         term.writeln(`\r\n\x1b[31mWebSocket reconnection error\x1b[0m`);
       };
 
       ws.onclose = (event) => {
+        if (!isMountedRef.current || wsRef.current !== ws) return;
         console.log('WebSocket closed after reconnect:', event.code, event.reason);
-        if (isMountedRef.current && event.code !== 1000) {
+        if (event.code !== 1000) {
           term.writeln(`\r\n\x1b[33mConnection closed (code: ${event.code})\x1b[0m`);
         }
       };
@@ -496,11 +503,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     let wsConnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     if (session?.ws_url) {
-        const wsUrl = session.ws_url; // Capture to avoid undefined in closure
+      const wsUrl = session.ws_url; // Capture to avoid undefined in closure
         term.writeln(`Connecting to ${session.username}@${session.host}...`);
 
         wsConnectTimeout = setTimeout(async () => {
             if (!isMountedRef.current) return; // Check if still mounted after delay
+
+            // Avoid stale ws_url from reconnect race
+            const latestSession = useAppStore.getState().sessions.get(sessionId);
+            if (!latestSession?.ws_url || latestSession.ws_url !== wsUrl) {
+              return;
+            }
+            if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) {
+              return;
+            }
 
             // Wait for fonts to load before connecting
             await ensureFontsLoaded();
@@ -516,10 +532,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                         ws.close();
                         return;
                     }
+                  reconnectingRef.current = false;
 
                     // SECURITY: Send authentication token as first message
-                    if (session?.ws_token) {
-                        ws.send(session.ws_token);
+                    const latestToken = latestSession.ws_token;
+                    if (latestToken) {
+                      ws.send(latestToken);
                     } else {
                         console.warn('No WebSocket token available - authentication may fail');
                     }
@@ -533,7 +551,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                 };
 
                 ws.onmessage = (event) => {
-                    if (!isMountedRef.current) return;
+                  if (!isMountedRef.current || wsRef.current !== ws) return;
                     const data = event.data;
                     if (data instanceof ArrayBuffer) {
                         // Parse Wire Protocol v1 frame: [Type: 1][Length: 4][Payload: n]
@@ -591,13 +609,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
                 };
 
                 ws.onclose = () => {
-                    if (!isMountedRef.current) return;
+                  if (!isMountedRef.current || wsRef.current !== ws) return;
+                  if (!reconnectingRef.current) {
                     term.writeln("\r\n\x1b[31mConnection closed.\x1b[0m");
+                  }
                 };
 
                 ws.onerror = (e) => {
-                    if (!isMountedRef.current) return;
-                    term.writeln(`\r\n\x1b[31mWebSocket error: ${e}\x1b[0m`);
+                  if (!isMountedRef.current || wsRef.current !== ws) return;
+                  term.writeln(`\r\n\x1b[31mWebSocket error: ${e}\x1b[0m`);
                 };
 
 
