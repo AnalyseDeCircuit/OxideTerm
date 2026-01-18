@@ -872,6 +872,43 @@ export const api = {
       };
     }
     return invoke('connect_manual_preset', { request, cols, rows });
+  },
+
+  // ============ AI API Key Commands ============
+
+  /**
+   * Set AI API key in local encrypted vault
+   * Pass empty string to delete the key
+   */
+  setAiApiKey: async (apiKey: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('set_ai_api_key', { apiKey });
+  },
+
+  /**
+   * Get AI API key from local encrypted vault
+   * Automatically migrates from legacy keychain if needed
+   * Returns null if not set
+   */
+  getAiApiKey: async (): Promise<string | null> => {
+    if (USE_MOCK) return null;
+    return invoke('get_ai_api_key');
+  },
+
+  /**
+   * Check if AI API key exists in vault or keychain
+   */
+  hasAiApiKey: async (): Promise<boolean> => {
+    if (USE_MOCK) return false;
+    return invoke('has_ai_api_key');
+  },
+
+  /**
+   * Delete AI API key from all storage locations (vault and keychain)
+   */
+  deleteAiApiKey: async (): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('delete_ai_api_key');
   }
 };
 

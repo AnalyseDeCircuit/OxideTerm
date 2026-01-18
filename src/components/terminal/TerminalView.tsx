@@ -11,6 +11,7 @@ import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
 import { platform } from '../../lib/platform';
 import { SearchBar, DeepSearchState } from './SearchBar';
+import { AiInlinePanel } from './AiInlinePanel';
 import { SearchMatch } from '../../types';
 import { listen } from '@tauri-apps/api/event';
 import { Lock, Loader2 } from 'lucide-react';
@@ -67,6 +68,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true); // Track mount state for StrictMode
   const [searchOpen, setSearchOpen] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   
   // Search state - synced with SearchAddon's onDidChangeResults
   const [searchResults, setSearchResults] = useState<{ resultIndex: number; resultCount: number }>({ 
@@ -187,17 +189,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
 
   // Focus terminal when it becomes active (tab switch)
   useEffect(() => {
-    if (isActive && terminalRef.current && !searchOpen) {
+    if (isActive && terminalRef.current && !searchOpen && !aiPanelOpen) {
       // Small delay to ensure DOM is ready
       const focusTimeout = setTimeout(() => {
-        if (!searchOpen) { // Double-check before focusing
+        if (!searchOpen && !aiPanelOpen) { // Double-check before focusing
           terminalRef.current?.focus();
         }
         fitAddonRef.current?.fit();
       }, 50);
       return () => clearTimeout(focusTimeout);
     }
-  }, [isActive, searchOpen]);
+  }, [isActive, searchOpen, aiPanelOpen]);
 
   // WebSocket reconnection effect - triggers when ws_url changes (after auto-reconnect)
   useEffect(() => {
@@ -701,19 +703,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
   }, [sessionId]); // Only re-mount if sessionId changes absolutely
 
   const handleContainerClick = () => {
-    if (!searchOpen) {
+    if (!searchOpen && !aiPanelOpen) {
       terminalRef.current?.focus();
     }
   };
 
   const currentTheme = themes[terminalSettings.theme] || themes.default;
 
-  // Handle search keyboard shortcut (Ctrl/Cmd + F)
+  // Handle search keyboard shortcut (Ctrl/Cmd + F) and AI panel (Ctrl/Cmd + I)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
         setSearchOpen(true);
+      }
+      // AI Panel shortcut (Ctrl/Cmd + I)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        // Check if AI is enabled in settings
+        const { settings } = useSettingsStore.getState();
+        if (settings.ai.enabled) {
+          setAiPanelOpen(true);
+        }
       }
     };
 
@@ -891,6 +902,72 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
     }
   }, [sessionId]);
   
+  // === AI Panel Helper Functions ===
+  
+  // Get selected text from terminal
+  const getTerminalSelection = useCallback((): string => {
+    const term = terminalRef.current;
+    if (!term) return '';
+    return term.getSelection() || '';
+  }, []);
+  
+  // Get visible buffer content
+  const getVisibleBuffer = useCallback((): string => {
+    const term = terminalRef.current;
+    if (!term) return '';
+    
+    const { settings } = useSettingsStore.getState();
+    const maxLines = settings.ai.contextVisibleLines;
+    
+    // Get the active buffer
+    const buffer = term.buffer.active;
+    const totalLines = buffer.length;
+    const viewportRows = term.rows;
+    
+    // Calculate range to read (from bottom, limited by maxLines)
+    const endLine = buffer.baseY + viewportRows;
+    const startLine = Math.max(0, endLine - maxLines);
+    
+    const lines: string[] = [];
+    for (let i = startLine; i < endLine && i < totalLines; i++) {
+      const line = buffer.getLine(i);
+      if (line) {
+        lines.push(line.translateToString(true));
+      }
+    }
+    
+    return lines.join('\n');
+  }, []);
+  
+  // Insert text at cursor
+  const handleAiInsert = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    // Send text as if user typed it (but don't execute - let user review)
+    const encoder = new TextEncoder();
+    const payload = encoder.encode(text);
+    const frame = encodeDataFrame(payload);
+    ws.send(frame);
+  }, []);
+  
+  // Execute command (insert + enter)
+  const handleAiExecute = useCallback((command: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    // Send command followed by newline
+    const encoder = new TextEncoder();
+    const payload = encoder.encode(command + '\n');
+    const frame = encodeDataFrame(payload);
+    ws.send(frame);
+  }, []);
+  
+  const handleCloseAiPanel = useCallback(() => {
+    setAiPanelOpen(false);
+    terminalRef.current?.focus();
+  }, []);
+  
   return (
     <div 
       className="terminal-container h-full w-full overflow-hidden relative" 
@@ -943,6 +1020,16 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ sessionId, isActive 
          onDeepSearch={handleDeepSearch}
          onJumpToMatch={handleJumpToMatch}
          deepSearchState={deepSearchState}
+       />
+       
+       {/* AI Inline Panel */}
+       <AiInlinePanel
+         isOpen={aiPanelOpen}
+         onClose={handleCloseAiPanel}
+         getSelection={getTerminalSelection}
+         getVisibleBuffer={getVisibleBuffer}
+         onInsert={handleAiInsert}
+         onExecute={handleAiExecute}
        />
     </div>
   );

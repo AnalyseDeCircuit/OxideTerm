@@ -350,6 +350,11 @@ pub fn run() {
             commands::config::get_ssh_config_path,
             commands::config::create_group,
             commands::config::delete_group,
+            // AI API key commands
+            commands::config::set_ai_api_key,
+            commands::config::get_ai_api_key,
+            commands::config::has_ai_api_key,
+            commands::config::delete_ai_api_key,
             // Oxide file export/import commands
             commands::oxide_export::export_to_oxide,
             commands::oxide_import::validate_oxide_file,

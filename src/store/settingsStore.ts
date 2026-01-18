@@ -90,6 +90,19 @@ export interface SidebarUIState {
   activeSection: SidebarSection;
 }
 
+/** AI context source */
+export type AiContextSource = 'selection' | 'visible' | 'command';
+
+/** AI settings */
+export interface AiSettings {
+  enabled: boolean;
+  enabledConfirmed: boolean;  // User has confirmed the privacy notice
+  baseUrl: string;
+  model: string;
+  contextMaxChars: number;      // Max characters to send
+  contextVisibleLines: number;  // Max visible lines to capture
+}
+
 /** Complete settings structure */
 export interface PersistedSettingsV2 {
   version: 2;
@@ -99,6 +112,7 @@ export interface PersistedSettingsV2 {
   connectionDefaults: ConnectionDefaults;
   treeUI: TreeUIState;
   sidebarUI: SidebarUIState;
+  ai: AiSettings;
 }
 
 // ============================================================================
@@ -147,6 +161,15 @@ const defaultSidebarUIState: SidebarUIState = {
   activeSection: 'sessions',
 };
 
+const defaultAiSettings: AiSettings = {
+  enabled: false,
+  enabledConfirmed: false,
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  contextMaxChars: 8000,
+  contextVisibleLines: 120,
+};
+
 function createDefaultSettings(): PersistedSettingsV2 {
   return {
     version: 2,
@@ -156,6 +179,7 @@ function createDefaultSettings(): PersistedSettingsV2 {
     connectionDefaults: { ...defaultConnectionDefaults },
     treeUI: { ...defaultTreeUIState },
     sidebarUI: { ...defaultSidebarUIState },
+    ai: { ...defaultAiSettings },
   };
 }
 
@@ -174,6 +198,7 @@ function mergeWithDefaults(saved: Partial<PersistedSettingsV2>): PersistedSettin
     connectionDefaults: { ...defaults.connectionDefaults, ...saved.connectionDefaults },
     treeUI: { ...defaults.treeUI, ...saved.treeUI },
     sidebarUI: { ...defaults.sidebarUI, ...saved.sidebarUI },
+    ai: { ...defaults.ai, ...saved.ai },
   };
 }
 
@@ -224,6 +249,7 @@ interface SettingsStore {
   updateBuffer: <K extends keyof BufferSettings>(key: K, value: BufferSettings[K]) => void;
   updateAppearance: <K extends keyof AppearanceSettings>(key: K, value: AppearanceSettings[K]) => void;
   updateConnectionDefaults: <K extends keyof ConnectionDefaults>(key: K, value: ConnectionDefaults[K]) => void;
+  updateAi: <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => void;
   
   // Actions - Tree UI state
   setTreeExpanded: (ids: string[]) => void;
@@ -243,6 +269,7 @@ interface SettingsStore {
   getBuffer: () => BufferSettings;
   getTreeUI: () => TreeUIState;
   getSidebarUI: () => SidebarUIState;
+  getAi: () => AiSettings;
 }
 
 // ============================================================================
@@ -378,6 +405,18 @@ export const useSettingsStore = create<SettingsStore>()(
       });
     },
     
+    // ========== AI Settings ==========
+    updateAi: (key, value) => {
+      set((state) => {
+        const newSettings: PersistedSettingsV2 = {
+          ...state.settings,
+          ai: { ...state.settings.ai, [key]: value },
+        };
+        persistSettings(newSettings);
+        return { settings: newSettings };
+      });
+    },
+    
     // ========== Bulk Operations ==========
     resetToDefaults: () => {
       const newSettings = createDefaultSettings();
@@ -390,6 +429,7 @@ export const useSettingsStore = create<SettingsStore>()(
     getBuffer: () => get().settings.buffer,
     getTreeUI: () => get().settings.treeUI,
     getSidebarUI: () => get().settings.sidebarUI,
+    getAi: () => get().settings.ai,
   }))
 );
 

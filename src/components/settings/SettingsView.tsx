@@ -7,13 +7,21 @@ import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Separator } from '../ui/separator';
 import { 
+    Dialog, 
+    DialogContent, 
+    DialogTitle, 
+    DialogDescription,
+    DialogHeader,
+    DialogFooter
+} from '../ui/dialog';
+import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
@@ -47,11 +55,17 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
 };
 
 export const SettingsView = () => {
-  const [activeTab, setActiveTab] = useState('terminal');
+    const [activeTab, setActiveTab] = useState('terminal');
   
-  // Use unified settings store
-  const { settings, updateTerminal, updateAppearance, updateConnectionDefaults } = useSettingsStore();
-  const { terminal, appearance, connectionDefaults } = settings;
+    // Use unified settings store
+    const { settings, updateTerminal, updateAppearance, updateConnectionDefaults, updateAi } = useSettingsStore();
+    const { terminal, appearance, connectionDefaults, ai } = settings;
+  
+    // AI enable confirmation dialog
+    const [showAiConfirm, setShowAiConfirm] = useState(false);
+    const [hasApiKey, setHasApiKey] = useState(false);
+    const [apiKeyInput, setApiKeyInput] = useState('');
+    const [apiKeySaving, setApiKeySaving] = useState(false);
   
   // Data State
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
@@ -80,6 +94,13 @@ export const SettingsView = () => {
             console.error('Failed to load SSH hosts:', e);
             setSshHosts([]);
         });
+    } else if (activeTab === 'ai') {
+        api.hasAiApiKey()
+          .then(setHasApiKey)
+          .catch((e) => {
+            console.error('Failed to check API key:', e);
+            setHasApiKey(false);
+          });
     }
   }, [activeTab]);
 
@@ -125,11 +146,11 @@ export const SettingsView = () => {
   return (
     <div className="flex h-full w-full bg-theme-bg text-zinc-300">
         {/* Sidebar */}
-        <div className="w-56 bg-theme-bg-panel border-r border-theme-border flex flex-col pt-6 pb-4">
+        <div className="w-56 bg-theme-bg-panel border-r border-theme-border flex flex-col pt-6 pb-4 min-h-0">
             <div className="px-5 mb-6">
                 <h2 className="text-xl font-semibold text-zinc-100">Settings</h2>
             </div>
-            <div className="space-y-1 px-3">
+            <div className="space-y-1 px-3 flex-1 overflow-y-auto min-h-0">
                 <Button 
                     variant={activeTab === 'terminal' ? 'secondary' : 'ghost'} 
                     className="w-full justify-start gap-3 h-10 font-normal"
@@ -157,6 +178,13 @@ export const SettingsView = () => {
                     onClick={() => setActiveTab('ssh')}
                 >
                     <Key className="h-4 w-4" /> SSH Keys
+                </Button>
+                <Button 
+                    variant={activeTab === 'ai' ? 'secondary' : 'ghost'} 
+                    className="w-full justify-start gap-3 h-10 font-normal"
+                    onClick={() => setActiveTab('ai')}
+                >
+                    <Sparkles className="h-4 w-4" /> AI Assistant
                 </Button>
             </div>
         </div>
@@ -498,8 +526,231 @@ export const SettingsView = () => {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'ai' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div>
+                            <h3 className="text-2xl font-medium text-zinc-100 mb-2">AI Assistant</h3>
+                            <p className="text-zinc-500">Configure OpenAI-compatible API and context limits.</p>
+                        </div>
+                        <Separator />
+
+                        {/* AI Settings Section */}
+                        <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                            <h4 className="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">General</h4>
+                            
+                            {/* Enable Toggle - Standard Layout */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <Label className="text-zinc-200">Enable AI Capabilities</Label>
+                                    <p className="text-xs text-zinc-500 mt-0.5">Enable inline chat and context analysis</p>
+                                </div>
+                                <Checkbox 
+                                    id="ai-enabled"
+                                    checked={ai.enabled}
+                                    onCheckedChange={(checked) => {
+                                        if (checked && !ai.enabledConfirmed) {
+                                            setShowAiConfirm(true);
+                                        } else {
+                                            updateAi('enabled', !!checked);
+                                        }
+                                    }}
+                                />
+                            </div>
+
+                            {/* Privacy Note - Integrating subtly */}
+                             <div className="mb-6 p-3 rounded bg-zinc-900/50 border border-zinc-800">
+                                <p className="text-xs text-zinc-500 leading-relaxed">
+                                    <span className="font-semibold text-zinc-400">Privacy Notice:</span> All requests are initiated locally. 
+                                    API keys are stored in the system keychain. Only selected terminal context is sent to the configured endpoint.
+                                </p>
+                            </div>
+
+                            <Separator className="my-6 opacity-50" />
+
+                            {/* API Configuration - Using Form/Grid Layout like Connections */}
+                            <div className={ai.enabled ? "" : "opacity-50 pointer-events-none"}>
+                                <h4 className="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Provider Settings</h4>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mb-6">
+                                    <div className="grid gap-2">
+                                        <Label>Base URL</Label>
+                                        <Input 
+                                            value={ai.baseUrl}
+                                            onChange={(e) => updateAi('baseUrl', e.target.value)}
+                                            placeholder="https://api.openai.com/v1"
+                                            className="bg-theme-bg"
+                                        />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label>Model</Label>
+                                        <Input 
+                                            value={ai.model}
+                                            onChange={(e) => updateAi('model', e.target.value)}
+                                            placeholder="gpt-4o-mini"
+                                            className="bg-theme-bg"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="max-w-3xl mb-6">
+                                    <div className="grid gap-2">
+                                        <Label>API Key</Label>
+                                        <div className="flex gap-2">
+                                            {hasApiKey ? (
+                                                <div className="flex-1 flex items-center gap-2">
+                                                    <div className="flex-1 h-10 px-3 flex items-center bg-zinc-900/50 border border-zinc-700/50 rounded-md text-zinc-400 text-sm italic">
+                                                        ••••••••••••••••••••••••
+                                                    </div>
+                                                    <Button 
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                                                        onClick={async () => {
+                                                            if (confirm('Remove API key?')) {
+                                                                try {
+                                                                    await api.deleteAiApiKey();
+                                                                    setHasApiKey(false);
+                                                                    window.dispatchEvent(new CustomEvent('ai-api-key-updated'));
+                                                                } catch (e) {
+                                                                    alert(`Failed to remove API key: ${e}`);
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Remove
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Input 
+                                                        type="password"
+                                                        placeholder="sk-..."
+                                                        className="flex-1 bg-theme-bg"
+                                                        value={apiKeyInput}
+                                                        onChange={(e) => setApiKeyInput(e.target.value)}
+                                                    />
+                                                    <Button 
+                                                        variant="secondary"
+                                                        disabled={!apiKeyInput.trim() || apiKeySaving}
+                                                        onClick={async () => {
+                                                            if (!apiKeyInput.trim()) return;
+                                                            setApiKeySaving(true);
+                                                            try {
+                                                                await api.setAiApiKey(apiKeyInput);
+                                                                setApiKeyInput('');
+                                                                setHasApiKey(true);
+                                                                window.dispatchEvent(new CustomEvent('ai-api-key-updated'));
+                                                            } catch (e) {
+                                                                alert(`Failed to save API key: ${e}`);
+                                                            } finally {
+                                                                setApiKeySaving(false);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {apiKeySaving ? 'Saving...' : 'Save'}
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-zinc-500">Stored securely in system keychain.</p>
+                                    </div>
+                                </div>
+
+                                <Separator className="my-6 opacity-50" />
+
+                                <h4 className="text-sm font-medium text-zinc-300 mb-4 uppercase tracking-wider">Context Controls</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+                                    <div className="grid gap-2">
+                                        <Label>Max Context Length</Label>
+                                        <Select 
+                                            value={ai.contextMaxChars.toString()}
+                                            onValueChange={(v) => updateAi('contextMaxChars', parseInt(v))}
+                                        >
+                                            <SelectTrigger className="bg-theme-bg">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="2000">2,000 chars (~500 tokens)</SelectItem>
+                                                <SelectItem value="4000">4,000 chars (~1,000 tokens)</SelectItem>
+                                                <SelectItem value="8000">8,000 chars (~2,000 tokens)</SelectItem>
+                                                <SelectItem value="16000">16,000 chars (~4,000 tokens)</SelectItem>
+                                                <SelectItem value="32000">32,000 chars (~8,000 tokens)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-zinc-500">Maximum characters to send for analysis.</p>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Buffer History</Label>
+                                        <Select 
+                                            value={ai.contextVisibleLines.toString()}
+                                            onValueChange={(v) => updateAi('contextVisibleLines', parseInt(v))}
+                                        >
+                                            <SelectTrigger className="bg-theme-bg">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="50">50 lines</SelectItem>
+                                                <SelectItem value="100">100 lines</SelectItem>
+                                                <SelectItem value="200">200 lines</SelectItem>
+                                                <SelectItem value="400">400 lines</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-zinc-500">How many lines of terminal output to include.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
+
+        {/* AI Enable Confirmation Dialog */}
+        <Dialog open={showAiConfirm} onOpenChange={setShowAiConfirm}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Enable AI Capabilities?</DialogTitle>
+                    <DialogDescription>
+                        Confirm enabling AI features for terminal context analysis.
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="p-4 space-y-4">
+                    <p className="text-sm text-zinc-300">
+                        This will allow OxideTerm to send selected terminal context to your configured AI endpoint.
+                    </p>
+                    <div className="space-y-2 text-xs text-zinc-500 bg-zinc-900/30 p-3 rounded border border-theme-border/50">
+                        <div className="flex items-start gap-2">
+                            <div className="w-1 h-1 rounded-full bg-zinc-500 mt-1.5 shrink-0"></div>
+                            <p>All requests are initiated directly from your local machine</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <div className="w-1 h-1 rounded-full bg-zinc-500 mt-1.5 shrink-0"></div>
+                            <p>No intermediate server is used (unless configured otherwise)</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <div className="w-1 h-1 rounded-full bg-zinc-500 mt-1.5 shrink-0"></div>
+                            <p>Only text you specifically select or query is sent to the API</p>
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="ghost" onClick={() => setShowAiConfirm(false)}>Cancel</Button>
+                    <Button 
+                        onClick={() => {
+                            updateAi('enabled', true);
+                            updateAi('enabledConfirmed', true);
+                            setShowAiConfirm(false);
+                        }}
+                    >
+                        Enable
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 };

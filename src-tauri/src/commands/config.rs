@@ -3,13 +3,13 @@
 //! Tauri commands for managing saved connections and SSH config import.
 
 use crate::config::{
-    default_ssh_config_path, parse_ssh_config, ConfigFile, ConfigStorage, Keychain, ProxyHopConfig,
-    SavedAuth, SavedConnection, SshConfigHost,
+    default_ssh_config_path, parse_ssh_config, AiVault, ConfigFile, ConfigStorage, Keychain,
+    ProxyHopConfig, SavedAuth, SavedConnection, SshConfigHost,
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 
 /// Shared config state
 pub struct ConfigState {
@@ -837,4 +837,152 @@ pub async fn get_saved_connection_for_connect(
         name: conn.name.clone(),
         proxy_chain,
     })
+}
+
+// ============ AI API Key Commands (Vault-based with Keychain migration) ============
+
+/// Fixed keychain ID for AI API key (for migration only)
+const AI_API_KEY_KEYCHAIN_ID: &str = "oxideterm-ai-api-key";
+
+/// Helper to get the AI vault instance
+fn get_ai_vault(app_handle: &tauri::AppHandle) -> Result<AiVault, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    Ok(AiVault::new(app_data_dir))
+}
+
+/// Set AI API key - saves to local encrypted vault file
+#[tauri::command]
+pub async fn set_ai_api_key(
+    app_handle: tauri::AppHandle,
+    api_key: String,
+) -> Result<(), String> {
+    let vault = get_ai_vault(&app_handle)?;
+    
+    if api_key.is_empty() {
+        tracing::info!("Deleting AI API key");
+        // Delete from vault
+        vault.delete().map_err(|e| e.to_string())?;
+    } else {
+        tracing::info!("Storing AI API key in vault (length: {})", api_key.len());
+        vault.save(&api_key).map_err(|e| format!("Failed to save API key to vault: {}", e))?;
+        tracing::info!("AI API key stored successfully in vault");
+    }
+    Ok(())
+}
+
+/// Get AI API key - reads from vault, migrates from keychain if needed
+#[tauri::command]
+pub async fn get_ai_api_key(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
+) -> Result<Option<String>, String> {
+    let vault = get_ai_vault(&app_handle)?;
+    
+    // Step 1: Try to load from vault first
+    match vault.load() {
+        Ok(key) => {
+            tracing::debug!("AI API key found in vault (length: {})", key.len());
+            return Ok(Some(key));
+        }
+        Err(crate::config::VaultError::NotFound) => {
+            tracing::debug!("AI API key not in vault, checking keychain for migration...");
+        }
+        Err(e) => {
+            tracing::error!("Failed to read vault: {}", e);
+            return Err(format!("Failed to read vault: {}", e));
+        }
+    }
+    
+    // Step 2: Not in vault - try keychain migration
+    match state.get_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
+        Ok(key) => {
+            tracing::info!("Found API key in keychain, migrating to vault...");
+            
+            // Migrate to vault
+            if let Err(e) = vault.save(&key) {
+                tracing::error!("Failed to migrate key to vault: {}", e);
+                // Still return the key even if migration fails
+                return Ok(Some(key));
+            }
+            
+            // Delete from keychain after successful migration
+            if let Err(e) = state.delete_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
+                tracing::warn!("Failed to delete old keychain entry: {}", e);
+                // Continue anyway - the vault now has the key
+            }
+            
+            tracing::info!("Successfully migrated API key from keychain to vault");
+            Ok(Some(key))
+        }
+        Err(e) => {
+            let e_lower = e.to_lowercase();
+            if e_lower.contains("not found") || e_lower.contains("noentry") || e_lower.contains("no entry") {
+                tracing::debug!("AI API key not found in vault or keychain");
+                Ok(None)
+            } else {
+                // Keychain error, but vault was already checked - return None
+                tracing::warn!("Keychain error during migration check: {}", e);
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Check if AI API key exists (in vault or keychain)
+#[tauri::command]
+pub async fn has_ai_api_key(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
+) -> Result<bool, String> {
+    let vault = get_ai_vault(&app_handle)?;
+    
+    // Check vault first
+    if vault.exists() {
+        tracing::debug!("AI API key exists in vault");
+        return Ok(true);
+    }
+    
+    // Fallback: check keychain (for users who haven't migrated yet)
+    match state.get_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
+        Ok(_) => {
+            tracing::debug!("AI API key exists in keychain (pending migration)");
+            Ok(true)
+        }
+        Err(e) => {
+            let e_lower = e.to_lowercase();
+            if e_lower.contains("not found") || e_lower.contains("noentry") || e_lower.contains("no entry") {
+                tracing::debug!("AI API key does not exist");
+                Ok(false)
+            } else {
+                // Keychain error, but we can still say key doesn't exist if vault check passed
+                tracing::warn!("Keychain check error: {}", e);
+                Ok(false)
+            }
+        }
+    }
+}
+
+/// Delete AI API key - clears both vault and keychain (for clean uninstall)
+#[tauri::command]
+pub async fn delete_ai_api_key(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
+) -> Result<(), String> {
+    let vault = get_ai_vault(&app_handle)?;
+    
+    // Delete from vault
+    if let Err(e) = vault.delete() {
+        tracing::warn!("Failed to delete from vault: {}", e);
+    }
+    
+    // Also try to delete from keychain (clean up legacy)
+    if let Err(e) = state.delete_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
+        tracing::debug!("Keychain delete (may not exist): {}", e);
+    }
+    
+    tracing::info!("AI API key deleted from all storage locations");
+    Ok(())
 }

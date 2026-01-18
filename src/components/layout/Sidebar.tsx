@@ -17,6 +17,7 @@ import {
   Activity,
   Network,
   Database,
+  Sparkles,
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
@@ -517,6 +518,17 @@ export const Sidebar = () => {
                 <Network className="h-5 w-5" />
             </Button>
         </div>
+
+        {/* AI Assistant (placeholder for future sidebar panel) */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-md h-9 w-9 text-zinc-500 cursor-not-allowed opacity-50"
+          title="AI Assistant (Coming Soon) - Use Ctrl/Cmd+I in terminal"
+          disabled
+        >
+          <Sparkles className="h-5 w-5" />
+        </Button>
 
         <div className="flex-1" />
         <Button 

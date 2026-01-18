@@ -47,9 +47,35 @@ impl Keychain {
     /// Store a secret in the keychain
     /// Returns the keychain ID used
     pub fn store(&self, id: &str, secret: &str) -> Result<(), KeychainError> {
-        let entry = Entry::new(&self.service, id)?;
-        entry.set_password(secret)?;
-        Ok(())
+        tracing::info!("Keychain store: service={}, id={}", self.service, id);
+        // Use explicit username to ensure stable keychain identity on macOS
+        let username = whoami::username();
+        let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;
+        match entry.set_password(secret) {
+            Ok(()) => {
+                tracing::info!("Keychain store called successfully, verifying...");
+                // Verify the store actually worked by reading it back
+                match entry.get_password() {
+                    Ok(read_back) => {
+                        if read_back == secret {
+                            tracing::info!("Keychain store verified: id={}", id);
+                            Ok(())
+                        } else {
+                            tracing::error!("Keychain store verification failed: content mismatch");
+                            Err(KeychainError::Keyring(keyring::Error::NoEntry))
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Keychain store verification failed: {:?}", e);
+                        Err(KeychainError::Keyring(e))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Keychain store failed: id={}, error={:?}", id, e);
+                Err(KeychainError::Keyring(e))
+            }
+        }
     }
 
     /// Store a new secret and return its generated ID
@@ -61,17 +87,31 @@ impl Keychain {
 
     /// Retrieve a secret from the keychain
     pub fn get(&self, id: &str) -> Result<String, KeychainError> {
-        let entry = Entry::new(&self.service, id)?;
+        tracing::info!("Keychain get: service={}, id={}", self.service, id);
+        // Use same username-prefixed account as store()
+        let username = whoami::username();
+        let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;
         match entry.get_password() {
-            Ok(secret) => Ok(secret),
-            Err(keyring::Error::NoEntry) => Err(KeychainError::NotFound(id.to_string())),
-            Err(e) => Err(KeychainError::Keyring(e)),
+            Ok(secret) => {
+                tracing::info!("Keychain get success: id={}, len={}", id, secret.len());
+                Ok(secret)
+            },
+            Err(keyring::Error::NoEntry) => {
+                tracing::warn!("Keychain get: no entry for id={}", id);
+                Err(KeychainError::NotFound(id.to_string()))
+            },
+            Err(e) => {
+                tracing::error!("Keychain get failed: id={}, error={:?}", id, e);
+                Err(KeychainError::Keyring(e))
+            },
         }
     }
 
     /// Delete a secret from the keychain
     pub fn delete(&self, id: &str) -> Result<(), KeychainError> {
-        let entry = Entry::new(&self.service, id)?;
+        // Use same username-prefixed account
+        let username = whoami::username();
+        let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;
         match entry.delete_credential() {
             Ok(()) => Ok(()),
             Err(keyring::Error::NoEntry) => Ok(()), // Already deleted
