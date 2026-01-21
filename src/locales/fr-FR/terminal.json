@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Terminal local",
+      "shell": "Shell : {{shell}}",
+      "shell_unknown": "Inconnu",
+      "session_ended": "Session terminée",
+      "exit_code": "Le processus s'est terminé avec le code : {{code}}",
+      "process_terminated": "Processus terminé"
+    },
+    "search": {
+      "visible_buffer": "Tampon visible",
+      "deep_history": "Historique profond",
+      "deep_history_tooltip": "Rechercher dans tout l'historique de la session (au-delà du défilement)",
+      "placeholder_active": "Rechercher dans la sortie du terminal...",
+      "placeholder_deep": "Rechercher dans l'historique complet...",
+      "searching": "Recherche en cours...",
+      "error": "Erreur",
+      "no_results_history": "Aucun résultat dans l'historique",
+      "matches_count": "{{count}} correspondance(s) ({{ms}} ms)",
+      "no_results": "Aucun résultat",
+      "matches_exceeded": "{{count}}+ correspondances",
+      "previous_match": "Correspondance précédente (Maj+Entrée)",
+      "next_match": "Correspondance suivante (Entrée)",
+      "search_full_history": "Rechercher dans l'historique complet (Entrée)",
+      "search_button": "Rechercher",
+      "close": "Fermer (Échap)",
+      "case_sensitive": "Respecter la casse",
+      "regex": "Utiliser une expression régulière",
+      "whole_word": "Mot entier",
+      "click_to_jump": "Cliquez pour accéder à l'emplacement de la correspondance",
+      "line_number": "Ligne {{line}}",
+      "showing_first": "Affichage des 100 premiers sur {{total}} correspondances",
+      "no_matches_in_history": "Aucune correspondance trouvée dans l'historique de la session"
+    },
+    "ai": {
+      "title": "Assistant IA",
+      "api_key_required": "Clé API requise",
+      "api_key_hint": "Configurez votre clé API dans Paramètres → IA pour utiliser cette fonctionnalité.",
+      "context": "Contexte :",
+      "context_selection": "Sélection",
+      "context_visible": "Visible",
+      "context_none": "Aucun",
+      "tokens_estimate": "~{{count}} tokens",
+      "prompt_placeholder": "Demandez de l'aide à l'IA pour les commandes...",
+      "send_shortcut": "pour envoyer",
+      "close_shortcut": "pour fermer",
+      "copy": "Copier",
+      "copied": "Copié",
+      "insert": "Insérer",
+      "execute": "Exécuter"
+    },
+    "paste": {
+      "title": "Lignes multiples détectées ({{count}} lignes)",
+      "more_lines": "... {{count}} lignes supplémentaires",
+      "confirm": "Confirmer",
+      "cancel": "Annuler",
+      "paste": "Coller"
+    },
+    "ssh": {
+      "initialized": "OxideTerm initialisé",
+      "connecting": "Connexion à {{user}}@{{host}}...",
+      "connected": "Connecté.",
+      "reconnecting": "Reconnexion à {{user}}@{{host}}...",
+      "reconnected": "Reconnecté avec succès !",
+      "connection_closed": "Connexion fermée.",
+      "connection_closed_code": "Connexion fermée (code : {{code}})",
+      "ws_error": "Erreur WebSocket : {{error}}",
+      "ws_reconnect_error": "Erreur de reconnexion WebSocket",
+      "ws_establish_failed": "Échec de l'établissement du WebSocket : {{error}}",
+      "server_error": "Erreur serveur : {{error}}",
+      "no_ws_url": "Aucune URL WebSocket disponible pour la session.",
+      "connection_lost": "[OxideTerm] Connexion perdue. Reconnexion en cours...",
+      "attempting_reconnect": "[OxideTerm] Tentative de reconnexion...",
+      "link_restored": "[OxideTerm] Lien restauré. Session shell réinitialisée.",
+      "connection_failed": "[OxideTerm] La connexion a définitivement échoué.",
+      "history_match": "Correspondance historique (Ligne {{line}})",
+      "buffer_empty": "⚠ Tampon vide - affichage de l'instantané en cache :",
+      "buffer_rotated": "⚠ Tampon pivoté - le contexte en direct peut ne pas correspondre. Affichage du cache + actuel :",
+      "cached_match": "Correspondance en cache :",
+      "current_line": "Ligne actuelle à l'index {{index}} :",
+      "fetch_context_failed": "⚠ Échec de la récupération du contexte - affichage de l'instantané en cache :"
+    },
+    "standby": {
+      "connection_lost": "Connexion perdue",
+      "reconnecting": "Reconnexion en cours...",
+      "input_locked": "L'entrée est verrouillée pendant la reconnexion"
+    }
+  }
+}

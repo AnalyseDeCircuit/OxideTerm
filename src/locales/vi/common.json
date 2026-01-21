@@ -1,0 +1,42 @@
+{
+  "common": {
+    "confirm": {
+      "disconnect_node": "Bạn có chắc chắn muốn ngắt kết nối \"{{name}}\" và tất cả các nút con không?",
+      "remove_node": "Bạn có chắc chắn muốn xóa nút \"{{name}}\" và tất cả các nút con không?",
+      "delete_batch": "Bạn có chắc chắn muốn xóa {{count}} kết nối không?"
+    },
+    "actions": {
+      "cancel": "Hủy",
+      "confirm": "Xác nhận",
+      "delete": "Xóa"
+    },
+    "errors": {
+      "delete_failed": "Không thể xóa một số kết nối: {{message}}"
+    }
+  },
+  "layout": {
+    "empty": {
+      "title": "OxideTerm",
+      "no_sessions": "Không có phiên hoạt động",
+      "new_connection": "Kết nối mới"
+    },
+    "connection_monitor": {
+      "title": "Giám sát kết nối"
+    },
+    "loading": "Đang tải..."
+  },
+  "tabbar": {
+    "offline": "Ngoại tuyến",
+    "cancel_reconnect": "Hủy kết nối lại",
+    "reconnect": "Kết nối lại",
+    "close_tab": "Đóng tab"
+  },
+  "tabs": {
+    "settings": "Cài đặt",
+    "connection_monitor": "Giám sát kết nối",
+    "connection_pool": "Nhóm kết nối",
+    "connection_matrix": "Ma trận kết nối",
+    "sftp_prefix": "SFTP",
+    "forwards_prefix": "Chuyển tiếp"
+  }
+}

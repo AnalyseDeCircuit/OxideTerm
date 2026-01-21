@@ -1,0 +1,282 @@
+//! Local Terminal Commands
+//!
+//! Tauri commands for local terminal (PTY) operations.
+//!
+//! # 命令列表
+//!
+//! - `local_list_shells` - 列出可用的 shell
+//! - `local_get_default_shell` - 获取默认 shell
+//! - `local_create_terminal` - 创建本地终端会话
+//! - `local_close_terminal` - 关闭本地终端会话
+//! - `local_resize_terminal` - 调整终端大小
+//! - `local_list_terminals` - 列出所有本地终端
+//! - `local_write_terminal` - 向终端写入数据
+
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
+
+use crate::local::registry::LocalTerminalRegistry;
+use crate::local::session::{LocalTerminalInfo, SessionEvent};
+use crate::local::shell::{scan_shells, default_shell, ShellInfo};
+
+/// Global local terminal registry state
+pub struct LocalTerminalState {
+    pub registry: LocalTerminalRegistry,
+}
+
+impl LocalTerminalState {
+    pub fn new() -> Self {
+        Self {
+            registry: LocalTerminalRegistry::new(),
+        }
+    }
+}
+
+impl Default for LocalTerminalState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Request to create a local terminal
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLocalTerminalRequest {
+    /// Shell path (optional, uses default if not specified)
+    pub shell_path: Option<String>,
+    /// Terminal columns
+    #[serde(default = "default_cols")]
+    pub cols: u16,
+    /// Terminal rows  
+    #[serde(default = "default_rows")]
+    pub rows: u16,
+    /// Working directory (optional)
+    pub cwd: Option<String>,
+}
+
+fn default_cols() -> u16 {
+    80
+}
+
+fn default_rows() -> u16 {
+    24
+}
+
+/// Response from creating a local terminal
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLocalTerminalResponse {
+    /// Session ID
+    pub session_id: String,
+    /// Session info
+    pub info: LocalTerminalInfo,
+}
+
+/// Event emitted when local terminal outputs data
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalTerminalDataEvent {
+    pub session_id: String,
+    pub data: Vec<u8>,
+}
+
+/// Event emitted when local terminal closes
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalTerminalClosedEvent {
+    pub session_id: String,
+    pub exit_code: Option<i32>,
+}
+
+/// List available shells on the system
+#[tauri::command]
+pub async fn local_list_shells() -> Result<Vec<ShellInfo>, String> {
+    Ok(scan_shells())
+}
+
+/// Get the default shell for the current platform
+#[tauri::command]
+pub async fn local_get_default_shell() -> Result<ShellInfo, String> {
+    Ok(default_shell())
+}
+
+/// Create a new local terminal session
+#[tauri::command]
+pub async fn local_create_terminal(
+    request: CreateLocalTerminalRequest,
+    state: State<'_, Arc<LocalTerminalState>>,
+    app: AppHandle,
+) -> Result<CreateLocalTerminalResponse, String> {
+    // Determine which shell to use
+    let shell = if let Some(path) = request.shell_path {
+        // Find shell by path
+        let shells = scan_shells();
+        let path_buf = std::path::PathBuf::from(&path);
+        shells
+            .into_iter()
+            .find(|s| s.path == path_buf)
+            .unwrap_or_else(|| {
+                // Create shell info for custom path
+                let id = std::path::Path::new(&path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("custom")
+                    .to_string();
+                ShellInfo::new(id.clone(), id, path_buf)
+            })
+    } else {
+        default_shell()
+    };
+
+    let cwd = request.cwd.map(std::path::PathBuf::from);
+
+    // Create session through registry
+    let (session_id, mut event_rx) = state
+        .registry
+        .create_session(shell, request.cols, request.rows, cwd)
+        .await
+        .map_err(|e| format!("Failed to create local terminal: {}", e))?;
+
+    // Get session info
+    let info = state
+        .registry
+        .get_session_info(&session_id)
+        .await
+        .ok_or_else(|| "Session not found after creation".to_string())?;
+
+    // Spawn task to forward events to frontend
+    let app_handle = app.clone();
+    let sid = session_id.clone();
+    tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                SessionEvent::Data(data) => {
+                    let event = LocalTerminalDataEvent {
+                        session_id: sid.clone(),
+                        data,
+                    };
+                    if let Err(e) = app_handle.emit(&format!("local-terminal-data:{}", sid), &event) {
+                        tracing::error!("Failed to emit terminal data event: {}", e);
+                    }
+                }
+                SessionEvent::Closed(exit_code) => {
+                    let event = LocalTerminalClosedEvent {
+                        session_id: sid.clone(),
+                        exit_code,
+                    };
+                    if let Err(e) = app_handle.emit(&format!("local-terminal-closed:{}", sid), &event) {
+                        tracing::error!("Failed to emit terminal closed event: {}", e);
+                    }
+                    break;
+                }
+            }
+        }
+        tracing::debug!("Event forwarder for session {} exited", sid);
+    });
+
+    tracing::info!("Created local terminal session: {}", session_id);
+
+    Ok(CreateLocalTerminalResponse { session_id, info })
+}
+
+/// Close a local terminal session
+#[tauri::command]
+pub async fn local_close_terminal(
+    session_id: String,
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<(), String> {
+    state
+        .registry
+        .close_session(&session_id)
+        .await
+        .map_err(|e| format!("Failed to close session: {}", e))?;
+
+    tracing::info!("Closed local terminal session: {}", session_id);
+    Ok(())
+}
+
+/// Resize a local terminal
+#[tauri::command]
+pub async fn local_resize_terminal(
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<(), String> {
+    state
+        .registry
+        .resize_session(&session_id, cols, rows)
+        .await
+        .map_err(|e| format!("Failed to resize session: {}", e))?;
+
+    tracing::debug!("Resized local terminal {}: {}x{}", session_id, cols, rows);
+    Ok(())
+}
+
+/// List all local terminal sessions
+#[tauri::command]
+pub async fn local_list_terminals(
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<Vec<LocalTerminalInfo>, String> {
+    Ok(state.registry.list_sessions().await)
+}
+
+/// Write data to a local terminal (input from frontend)
+#[tauri::command]
+pub async fn local_write_terminal(
+    session_id: String,
+    data: Vec<u8>,
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<(), String> {
+    state
+        .registry
+        .write_to_session(&session_id, &data)
+        .await
+        .map_err(|e| format!("Failed to write to session: {}", e))
+}
+
+/// Get session info for a specific terminal
+#[tauri::command]
+pub async fn local_get_terminal_info(
+    session_id: String,
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<LocalTerminalInfo, String> {
+    state
+        .registry
+        .get_session_info(&session_id)
+        .await
+        .ok_or_else(|| format!("Session not found: {}", session_id))
+}
+
+/// Clean up dead sessions
+#[tauri::command]
+pub async fn local_cleanup_dead_sessions(
+    state: State<'_, Arc<LocalTerminalState>>,
+) -> Result<Vec<String>, String> {
+    Ok(state.registry.cleanup_dead_sessions().await)
+}
+
+/// Get available local drives (Windows: A-Z drives, Unix: root)
+/// 
+/// Returns a list of available drive paths that can be navigated to.
+/// On Windows, this scans A-Z for existing drives.
+/// On Unix, returns just "/" as the root.
+#[tauri::command]
+pub fn local_get_drives() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        let mut drives = Vec::new();
+        for letter in b'A'..=b'Z' {
+            let drive = format!("{}:\\", letter as char);
+            if std::path::Path::new(&drive).exists() {
+                drives.push(drive);
+            }
+        }
+        drives
+    }
+    #[cfg(not(windows))]
+    {
+        vec!["/".to_string()]
+    }
+}

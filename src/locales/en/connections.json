@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "Connecting...",
+      "active": "Active",
+      "idle": "Idle",
+      "disconnecting": "Disconnecting...",
+      "disconnected": "Disconnected",
+      "error": "Error: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "Connection lost - reconnecting...",
+      "connection_closed": "Connection closed"
+    },
+    "toast": {
+      "close_terminal_failed": "Failed to close old terminal",
+      "proxy_chain_established": "Proxy chain connection established",
+      "proxy_chain_desc": "Chain depth {{depth}}. Topology synchronized."
+    },
+    "time": {
+      "just_now": "Just now",
+      "mins_ago": "{{count}} mins ago",
+      "hrs_ago": "{{count}} hrs ago"
+    },
+    "panel": {
+      "title": "Connection Pool",
+      "description": "Manage active SSH connections and keep-alive settings",
+      "refresh": "Refresh",
+      "no_connections": "No active SSH connections",
+      "no_connections_hint": "New connections will appear here",
+      "terminals": "{{count}} Terminals",
+      "sftp": "{{count}} SFTP",
+      "forwards": "{{count}} Forwards",
+      "created": "Created: {{time}}",
+      "idle_hint": "Idle - {{keepAlive}}",
+      "keep_alive_enabled": "Keep Alive",
+      "disconnect_in": "Disconnect in 30m"
+    },
+    "keep_alive": {
+      "enable_tooltip": "Enable Keep Alive (Never disconnect)",
+      "disable_tooltip": "Disable Keep Alive (Disconnect after 30m idle)",
+      "legend_enabled": "Keep Alive: Never auto-disconnect",
+      "legend_disabled": "Standard: Auto-disconnect after 30 mins idle"
+    },
+    "monitor": {
+      "title": "Connection Pool",
+      "loading": "Loading stats...",
+      "idle_timeout": "Idle: {{min}}min",
+      "capacity": "Capacity: {{capacity}}",
+      "active": "Active",
+      "idle": "Idle",
+      "reconnecting": "Reconnecting",
+      "link_down": "Link Down",
+      "terminals": "Terminals",
+      "sftp": "SFTP",
+      "forwards": "Forwards",
+      "summary": "Total: {{total}} connections • Refs: {{refs}}",
+      "live": "Live"
+    }
+  }
+}

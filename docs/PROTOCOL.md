@@ -1,0 +1,848 @@
+# OxideTerm Protocol Documentation
+
+> 本文档记录前后端通信协议，避免开发时的格式不匹配问题。
+
+## 目录
+
+1. [Wire Protocol (WebSocket)](#wire-protocol-websocket)
+2. [Tauri Commands](#tauri-commands)
+   - [Session Commands](#session-commands-v2)
+   - [Config Commands](#config-commands-连接管理)
+   - [SFTP Commands](#sftp-commands)
+   - [Port Forwarding Commands](#port-forwarding-commands)
+   - [Health Commands](#health-commands)
+3. [Events](#events-事件)
+4. [数据类型映射](#数据类型映射)
+
+---
+
+## Wire Protocol (WebSocket)
+
+### 帧格式
+
+```
++--------+--------+--------+--------+--------+-- ... --+
+| Type   | Length (4 bytes, big-endian)      | Payload |
+| (1B)   |                                   |         |
++--------+--------+--------+--------+--------+-- ... --+
+```
+
+### 消息类型
+
+| Type | 名称 | Payload 格式 | 方向 |
+|------|------|--------------|------|
+| 0x00 | Data | 原始字节 (终端 I/O) | 双向 |
+| 0x01 | Resize | cols: u16 BE, rows: u16 BE | Client→Server |
+| 0x02 | Heartbeat | seq: u32 BE | 双向 |
+| 0x03 | Error | UTF-8 错误消息 | Server→Client |
+
+### 心跳机制
+
+- 服务端每 30s 发送心跳 (seq 递增)
+- 客户端收到后立即回显相同 seq
+- 90s 无响应则断开连接
+
+---
+
+## Tauri Commands
+
+### Session Commands (v2)
+
+#### `connect_v2`
+
+**请求:**
+```typescript
+interface ConnectRequest {
+  host: string;
+  port: number;
+  username: string;
+  // Auth 使用 serde flatten + tag
+  auth_type: 'password' | 'key' | 'default_key';
+  password?: string;      // auth_type='password' 时必填
+  key_path?: string;      // auth_type='key' 时必填
+  passphrase?: string;    // 可选，用于加密密钥
+  cols?: number;          // 默认 80
+  rows?: number;          // 默认 24
+  name?: string;          // 自定义会话名称
+}
+```
+
+**Rust 端定义:**
+```rust
+#[derive(Deserialize)]
+pub struct ConnectRequest {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    #[serde(flatten)]
+    pub auth: AuthRequest,  // 使用 flatten 展开
+    #[serde(default = "default_cols")]
+    pub cols: u32,
+    #[serde(default = "default_rows")]
+    pub rows: u32,
+    pub name: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "auth_type", rename_all = "snake_case")]
+pub enum AuthRequest {
+    Password { password: String },
+    Key { key_path: String, passphrase: Option<String> },
+    DefaultKey { passphrase: Option<String> },
+}
+```
+
+**响应:**
+```typescript
+interface ConnectResponseV2 {
+  session_id: string;
+  ws_url: string;      // e.g., "ws://localhost:55880"
+  port: number;
+  session: SessionInfo;
+}
+
+interface SessionInfo {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  state: 'disconnected' | 'connecting' | 'connected' | 'disconnecting' | 'error';
+  error?: string;
+  ws_url?: string;
+  color: string;       // 自动生成的 hex 颜色
+  uptime_secs: number;
+  order: number;       // Tab 排序
+}
+```
+
+#### `disconnect_v2`
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+void (成功) 或 Error string
+```
+
+#### `list_sessions_v2`
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+SessionInfo[]
+```
+
+#### `resize_session_v2`
+
+```typescript
+// 请求
+{ sessionId: string, cols: number, rows: number }
+
+// 响应
+void
+```
+
+#### `reorder_sessions`
+
+```typescript
+// 请求
+{ orderedIds: string[] }  // 按顺序排列的 session ID
+
+// 响应
+void
+```
+
+#### `check_ssh_keys`
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+string[]  // 可用 SSH 密钥路径列表，如 ["~/.ssh/id_rsa", "~/.ssh/id_ed25519"]
+```
+
+#### `get_session_stats`
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+interface SessionStats {
+  total: number;
+  connected: number;
+  connecting: number;
+  disconnected: number;
+  error: number;
+}
+```
+
+#### `get_session`
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+SessionInfo  // 单个会话信息，未找到时抛出错误
+```
+
+---
+
+### Config Commands (连接管理)
+
+#### `get_connections`
+
+获取所有保存的连接。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_recent_connections`
+
+获取最近使用的连接。
+
+```typescript
+// 请求
+{ limit?: number }  // 默认 5
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_connections_by_group`
+
+按分组获取连接。
+
+```typescript
+// 请求
+{ group?: string }  // null 表示未分组
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `search_connections`
+
+搜索连接（匹配名称、主机、用户名）。
+
+```typescript
+// 请求
+{ query: string }
+
+// 响应
+ConnectionInfo[]
+```
+
+#### `get_groups`
+
+获取所有分组名称。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+string[]
+```
+
+#### `save_connection`
+
+创建或更新连接。
+
+```typescript
+// 请求
+interface SaveConnectionRequest {
+  id?: string;           // 有值 = 更新，无值 = 创建
+  name: string;
+  group?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'agent';
+  password?: string;     // auth_type='password' 时必填
+  key_path?: string;     // auth_type='key' 时必填
+  color?: string;
+  tags: string[];
+}
+
+// 响应
+ConnectionInfo
+```
+
+#### `delete_connection`
+
+删除连接（同时删除 keychain 中的密码）。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+void
+```
+
+#### `mark_connection_used`
+
+标记连接为已使用（更新 `last_used_at`）。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+void
+```
+
+#### `get_connection_password`
+
+从 keychain 获取连接密码。
+
+```typescript
+// 请求
+{ id: string }
+
+// 响应
+string  // 明文密码
+```
+
+#### `list_ssh_config_hosts`
+
+列出 `~/.ssh/config` 中的主机配置。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+interface SshHostInfo {
+  alias: string;
+  hostname: string;
+  user?: string;
+  port: number;
+  identity_file?: string;
+}[]
+```
+
+#### `import_ssh_host`
+
+导入 SSH config 主机为保存的连接。
+
+```typescript
+// 请求
+{ alias: string }  // SSH config 中的 Host 别名
+
+// 响应
+ConnectionInfo
+```
+
+#### `get_ssh_config_path`
+
+获取 SSH config 文件路径。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+string  // 如 "/Users/xxx/.ssh/config"
+```
+
+#### `create_group`
+
+创建连接分组。
+
+```typescript
+// 请求
+{ name: string }
+
+// 响应
+void
+```
+
+#### `delete_group`
+
+删除分组（连接移至未分组）。
+
+```typescript
+// 请求
+{ name: string }
+
+// 响应
+void
+```
+
+#### 共享类型定义
+
+```typescript
+interface ConnectionInfo {
+  id: string;
+  name: string;
+  group?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key' | 'agent';
+  key_path?: string;       // 仅 key auth
+  created_at: string;      // ISO 8601
+  last_used_at?: string;   // ISO 8601
+  color?: string;          // hex 颜色
+  tags: string[];
+}
+```
+
+---
+
+### SFTP Commands
+
+所有 SFTP 命令需要先调用 `sftp_init` 初始化会话。
+
+#### `sftp_init`
+
+初始化 SFTP 子系统（复用已连接的 SSH 会话）。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+string  // 当前工作目录路径
+```
+
+#### `sftp_list_dir`
+
+列出目录内容。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  path: string;
+  filter?: ListFilter;
+}
+
+interface ListFilter {
+  show_hidden?: boolean;
+  file_types?: FileType[];
+  name_pattern?: string;
+}
+
+// 响应
+FileInfo[]
+```
+
+#### `sftp_stat`
+
+获取文件/目录信息。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+FileInfo
+```
+
+#### `sftp_preview`
+
+预览文件内容（仅限文本/图片等可预览类型）。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+interface PreviewContent {
+  content_type: 'text' | 'image' | 'binary' | 'unsupported';
+  text?: string;         // 文本内容
+  base64?: string;       // Base64 编码的二进制
+  mime_type?: string;
+  truncated?: boolean;   // 是否被截断
+}
+```
+
+#### `sftp_download`
+
+下载文件（支持进度事件）。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  remotePath: string;
+  localPath: string;
+}
+
+// 响应
+void  // 通过 sftp:progress:{sessionId} 事件推送进度
+```
+
+#### `sftp_upload`
+
+上传文件（支持进度事件）。
+
+```typescript
+// 请求
+{
+  sessionId: string;
+  localPath: string;
+  remotePath: string;
+}
+
+// 响应
+void  // 通过 sftp:progress:{sessionId} 事件推送进度
+```
+
+#### `sftp_delete`
+
+删除文件或目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+void
+```
+
+#### `sftp_mkdir`
+
+创建目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+void
+```
+
+#### `sftp_rename`
+
+重命名/移动文件或目录。
+
+```typescript
+// 请求
+{ sessionId: string; oldPath: string; newPath: string }
+
+// 响应
+void
+```
+
+#### `sftp_pwd`
+
+获取当前工作目录。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+string
+```
+
+#### `sftp_cd`
+
+切换工作目录。
+
+```typescript
+// 请求
+{ sessionId: string; path: string }
+
+// 响应
+string  // 新的工作目录绝对路径
+```
+
+#### `sftp_close`
+
+关闭 SFTP 会话。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+void
+```
+
+#### `sftp_is_initialized`
+
+检查 SFTP 是否已初始化。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+boolean
+```
+
+#### SFTP 共享类型
+
+```typescript
+interface FileInfo {
+  name: string;
+  path: string;
+  file_type: FileType;
+  size: number;
+  modified: string;      // ISO 8601
+  permissions: string;   // 如 "rwxr-xr-x"
+  owner?: string;
+  group?: string;
+}
+
+type FileType = 'file' | 'directory' | 'symlink' | 'unknown';
+```
+
+---
+
+### Port Forwarding Commands
+
+#### `create_port_forward`
+
+创建端口转发。
+
+```typescript
+// 请求
+interface CreateForwardRequest {
+  session_id: string;
+  forward_type: 'local' | 'remote';
+  bind_address: string;   // 本地转发: 本地地址; 远程转发: 远程绑定地址
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  description?: string;
+}
+
+// 响应
+interface ForwardResponse {
+  success: boolean;
+  forward?: ForwardRuleDto;
+  error?: string;
+}
+```
+
+#### `stop_port_forward`
+
+停止端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; forwardId: string }
+
+// 响应
+ForwardResponse
+```
+
+#### `list_port_forwards`
+
+列出会话的所有端口转发。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+ForwardRuleDto[]
+```
+
+#### `stop_all_forwards`
+
+停止会话的所有端口转发。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+void
+```
+
+#### `forward_jupyter`
+
+快捷创建 Jupyter 端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; localPort: number; remotePort: number }
+
+// 响应
+ForwardResponse
+```
+
+#### `forward_tensorboard`
+
+快捷创建 TensorBoard 端口转发。
+
+```typescript
+// 请求
+{ sessionId: string; localPort: number; remotePort: number }
+
+// 响应
+ForwardResponse
+```
+
+#### Port Forwarding 共享类型
+
+```typescript
+interface ForwardRuleDto {
+  id: string;
+  forward_type: 'local' | 'remote' | 'dynamic';
+  bind_address: string;
+  bind_port: number;
+  target_host: string;
+  target_port: number;
+  status: 'starting' | 'active' | 'stopped' | 'error';
+  description?: string;
+}
+```
+
+---
+
+### Health Commands
+
+#### `get_connection_health`
+
+获取会话的详细健康指标。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+interface HealthMetrics {
+  session_id: string;
+  status: HealthStatus;
+  latency: LatencyStats;
+  packets: PacketStats;
+  last_activity: string;  // ISO 8601
+  uptime_secs: number;
+}
+
+interface LatencyStats {
+  current_ms?: number;
+  avg_ms: number;
+  min_ms?: number;
+  max_ms?: number;
+  jitter_ms: number;
+}
+
+interface PacketStats {
+  sent: number;
+  received: number;
+  lost: number;
+  loss_rate: number;  // 0.0 - 1.0
+}
+
+type HealthStatus = 'excellent' | 'good' | 'fair' | 'poor' | 'critical' | 'unknown';
+```
+
+#### `get_quick_health`
+
+获取会话的快速健康检查（适合状态指示器）。
+
+```typescript
+// 请求
+{ sessionId: string }
+
+// 响应
+interface QuickHealthCheck {
+  session_id: string;
+  status: HealthStatus;
+  status_color: string;    // "green" | "yellow" | "orange" | "red" | "gray"
+  latency_ms?: number;
+  message: string;         // 如 "Excellent (12ms)"
+}
+```
+
+#### `get_all_health_status`
+
+获取所有活跃会话的健康状态。
+
+```typescript
+// 请求
+(无参数)
+
+// 响应
+{ [sessionId: string]: QuickHealthCheck }
+```
+
+#### `simulate_health_response`
+
+模拟健康响应（测试用）。
+
+```typescript
+// 请求
+{ sessionId: string; latencyMs: number }
+
+// 响应
+void
+```
+
+---
+
+## Events (事件)
+
+### SFTP 传输进度
+
+**事件名:** `sftp:progress:{sessionId}`
+
+```typescript
+interface TransferProgress {
+  operation: 'download' | 'upload';
+  file_name: string;
+  bytes_transferred: number;
+  total_bytes: number;
+  percentage: number;       // 0-100
+  speed_bps: number;        // bytes per second
+  eta_secs?: number;        // 预计剩余秒数
+}
+```
+
+---
+
+## 数据类型映射
+
+| TypeScript | Rust | 说明 |
+|------------|------|------|
+| `string` | `String` | UTF-8 编码 |
+| `number` | `u16` / `u32` / `i64` | 根据范围选择 |
+| `boolean` | `bool` | |
+| `string \| null` | `Option<String>` | |
+| `{ [key: string]: T }` | `HashMap<String, T>` | |
+| Union types | `#[serde(tag = "...")]` enum | 使用 tag 区分 |
+
+### Serde 注意事项
+
+1. **`#[serde(flatten)]`**: 将嵌套结构展开到父级
+   ```rust
+   struct Parent {
+     #[serde(flatten)]
+     child: Child,  // Child 的字段会出现在 Parent 同级
+   }
+   ```
+
+2. **`#[serde(tag = "type")]`**: 用于 TypeScript union types
+   ```rust
+   #[serde(tag = "auth_type")]
+   enum Auth {
+     Password { password: String },
+     Key { key_path: String },
+   }
+   ```
+   对应 JSON: `{ "auth_type": "password", "password": "xxx" }`
+
+3. **`#[serde(rename_all = "snake_case")]`**: 字段命名风格
+   - Rust: `DefaultKey`
+   - JSON: `"default_key"`
+

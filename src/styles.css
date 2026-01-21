@@ -1,0 +1,334 @@
+@import "tailwindcss";
+
+/* ===== Font Declarations ===== */
+
+/* JetBrains Mono Nerd Font */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono/JetBrainsMonoNerdFontMono-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Meslo Nerd Font */
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MesloLGM Nerd Font';
+  src: url('/fonts/Meslo/MesloLGMNerdFontMono-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Tinos Nerd Font */
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Tinos Nerd Font';
+  src: url('/fonts/Tinos/TinosNerdFont-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@theme {
+  /* Oxide-Industrial Palette (Legacy - kept for backward compatibility) */
+  --color-oxide-bg: #09090b;       /* Deep Void */
+  --color-oxide-panel: #18181b;    /* Machine Grey */
+  --color-oxide-border: #27272a;   /* Structural Steel */
+  --color-oxide-accent: #ea580c;   /* Rust/Oxide Orange */
+  --color-oxide-accent-hover: #c2410c;
+  --color-oxide-text: #f4f4f5;     /* Zinc 100 */
+  --color-oxide-text-muted: #a1a1aa; /* Zinc 400 */
+  
+  /* Theme System Colors - Dynamically updated via CSS variables */
+  --color-theme-bg: var(--theme-bg);
+  --color-theme-bg-panel: var(--theme-bg-panel);
+  --color-theme-bg-hover: var(--theme-bg-hover);
+  --color-theme-border: var(--theme-border);
+  --color-theme-text: var(--theme-text);
+  --color-theme-text-muted: var(--theme-text-muted);
+  --color-theme-accent: var(--theme-accent);
+  --color-theme-accent-hover: var(--theme-accent-hover);
+  
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+
+  /* Spacing - High Density overrides if needed, or just use standard tight scales */
+  
+  /* Borders */
+  --radius-sm: 2px;
+  --radius-md: 0px; /* Force sharp corners generally */
+  --radius-lg: 0px;
+}
+
+/* Reset & Base Styles */
+:root {
+  color-scheme: dark;
+  --background: var(--color-oxide-bg);
+  --foreground: var(--color-oxide-text);
+  
+  /* Theme Variables - Default Theme (Neutral) */
+  --theme-bg: #09090b;
+  --theme-bg-panel: #18181b;
+  --theme-bg-hover: #27272a;
+  --theme-border: #27272a;
+  --theme-text: #f4f4f5;
+  --theme-text-muted: #a1a1aa;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+}
+
+/* Neutral Theme (Default) */
+[data-theme="neutral"] {
+  --theme-bg: #09090b;
+  --theme-bg-panel: #18181b;
+  --theme-bg-hover: #27272a;
+  --theme-border: #27272a;
+  --theme-text: #f4f4f5;
+  --theme-text-muted: #a1a1aa;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+}
+
+/* Oxide Theme (Vibrant Rust Orange) */
+[data-theme="oxide"] {
+  --theme-bg: #331a0d;
+  --theme-bg-panel: #4d2414;
+  --theme-bg-hover: #663018;
+  --theme-border: #663018;
+  --theme-text: #fef3e2;
+  --theme-text-muted: #d4a574;
+  --theme-accent: #FF6B00;
+  --theme-accent-hover: #FF8533;
+}
+
+/* Dracula Theme */
+[data-theme="dracula"] {
+  --theme-bg: #282a36;
+  --theme-bg-panel: #34354a;
+  --theme-bg-hover: #44475a;
+  --theme-border: #44475a;
+  --theme-text: #f8f8f2;
+  --theme-text-muted: #6272a4;
+  --theme-accent: #bd93f9;
+  --theme-accent-hover: #9572d4;
+}
+
+/* Nord Theme */
+[data-theme="nord"] {
+  --theme-bg: #2e3440;
+  --theme-bg-panel: #3b4252;
+  --theme-bg-hover: #434c5e;
+  --theme-border: #3b4252;
+  --theme-text: #eceff4;
+  --theme-text-muted: #81a1c1;
+  --theme-accent: #88c0d0;
+  --theme-accent-hover: #5e81ac;
+}
+
+/* Solarized Dark Theme */
+[data-theme="solarized-dark"] {
+  --theme-bg: #002b36;
+  --theme-bg-panel: #073642;
+  --theme-bg-hover: #0a4a58;
+  --theme-border: #073642;
+  --theme-text: #fdf6e3;
+  --theme-text-muted: #93a1a1;
+  --theme-accent: #268bd2;
+  --theme-accent-hover: #2aa198;
+}
+
+/* Monokai Theme */
+[data-theme="monokai"] {
+  --theme-bg: #272822;
+  --theme-bg-panel: #34352a;
+  --theme-bg-hover: #49483e;
+  --theme-border: #49483e;
+  --theme-text: #f8f8f2;
+  --theme-text-muted: #75715e;
+  --theme-accent: #66d9ef;
+  --theme-accent-hover: #a6e22e;
+}
+
+/* GitHub Dark Theme */
+[data-theme="github-dark"] {
+  --theme-bg: #0d1117;
+  --theme-bg-panel: #161b22;
+  --theme-bg-hover: #1c2128;
+  --theme-border: #21262d;
+  --theme-text: #f0f6fc;
+  --theme-text-muted: #8b949e;
+  --theme-accent: #58a6ff;
+  --theme-accent-hover: #1f6feb;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* App-like feel */
+}
+
+/* Scrollbar styling for WebKit */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-oxide-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-oxide-border);
+  border: 2px solid var(--color-oxide-bg); /* Padding effect */
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--color-oxide-bg);
+}
+
+/* Thin scrollbar for tab bar */
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--color-oxide-border);
+  border-radius: 2px;
+  border: none;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Utility classes for the Industrial look */
+.industrial-border {
+  border: 1px solid var(--color-oxide-border);
+}
+
+.industrial-panel {
+  background-color: var(--color-oxide-panel);
+  border: 1px solid var(--color-oxide-border);
+}
+
+/* Terminal Pixel-Perfect Rendering */
+.terminal-container {
+  /* GPU acceleration for smooth rendering */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  
+  /* Contain layout recalculations */
+  contain: layout style;
+  
+  /* Prevent text selection issues */
+  user-select: none;
+}
+
+/* xterm.js specific optimizations */
+.xterm {
+  /* Use antialiased rendering for clear text */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Ensure monospace grid integrity - CRITICAL */
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+}
+
+.xterm-viewport {
+  /* Prevent scroll-induced repaints */
+  contain: layout style;
+}
+
+.xterm-screen {
+  /* Let xterm.js handle canvas sizing */
+}
+
+.xterm canvas {
+  /* WebGL addon handles DPI scaling internally */
+}
+
+/* Data Visualization Animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}

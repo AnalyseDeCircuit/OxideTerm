@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Lokales Terminal",
+      "shell": "Shell: {{shell}}",
+      "shell_unknown": "Unbekannt",
+      "session_ended": "Sitzung beendet",
+      "exit_code": "Prozess mit Code beendet: {{code}}",
+      "process_terminated": "Prozess beendet"
+    },
+    "search": {
+      "visible_buffer": "Sichtbarer Puffer",
+      "deep_history": "Tiefe Historie",
+      "deep_history_tooltip": "Gesamten Sitzungsverlauf durchsuchen (über Scrollback hinaus)",
+      "placeholder_active": "Terminalausgabe durchsuchen...",
+      "placeholder_deep": "Gesamten Verlauf durchsuchen...",
+      "searching": "Suche läuft...",
+      "error": "Fehler",
+      "no_results_history": "Keine Ergebnisse im Verlauf",
+      "matches_count": "{{count}} Treffer ({{ms}}ms)",
+      "no_results": "Keine Ergebnisse",
+      "matches_exceeded": "{{count}}+ Treffer",
+      "previous_match": "Vorheriger Treffer (Umschalt+Eingabe)",
+      "next_match": "Nächster Treffer (Eingabe)",
+      "search_full_history": "Gesamten Verlauf durchsuchen (Eingabe)",
+      "search_button": "Suchen",
+      "close": "Schließen (Esc)",
+      "case_sensitive": "Groß-/Kleinschreibung beachten",
+      "regex": "Regulären Ausdruck verwenden",
+      "whole_word": "Ganzes Wort",
+      "click_to_jump": "Klicken, um zur Trefferposition zu springen",
+      "line_number": "Zeile {{line}}",
+      "showing_first": "Zeige erste 100 von {{total}} Treffern",
+      "no_matches_in_history": "Keine Treffer im Sitzungsverlauf gefunden"
+    },
+    "ai": {
+      "title": "KI-Assistent",
+      "api_key_required": "API-Schlüssel erforderlich",
+      "api_key_hint": "Konfigurieren Sie Ihren API-Schlüssel unter Einstellungen → KI, um diese Funktion zu nutzen.",
+      "context": "Kontext:",
+      "context_selection": "Auswahl",
+      "context_visible": "Sichtbar",
+      "context_none": "Keiner",
+      "tokens_estimate": "~{{count}} Token",
+      "prompt_placeholder": "Fragen Sie die KI nach Hilfe bei Befehlen...",
+      "send_shortcut": "zum Senden",
+      "close_shortcut": "zum Schließen",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "insert": "Einfügen",
+      "execute": "Ausführen"
+    },
+    "paste": {
+      "title": "Mehrere Zeilen erkannt ({{count}} Zeilen)",
+      "more_lines": "... {{count}} weitere Zeilen",
+      "confirm": "Bestätigen",
+      "cancel": "Abbrechen",
+      "paste": "Einfügen"
+    },
+    "ssh": {
+      "initialized": "OxideTerm initialisiert",
+      "connecting": "Verbindung zu {{user}}@{{host}} wird hergestellt...",
+      "connected": "Verbunden.",
+      "reconnecting": "Wiederverbindung zu {{user}}@{{host}}...",
+      "reconnected": "Erfolgreich wiederverbunden!",
+      "connection_closed": "Verbindung geschlossen.",
+      "connection_closed_code": "Verbindung geschlossen (Code: {{code}})",
+      "ws_error": "WebSocket-Fehler: {{error}}",
+      "ws_reconnect_error": "WebSocket-Wiederverbindungsfehler",
+      "ws_establish_failed": "WebSocket konnte nicht hergestellt werden: {{error}}",
+      "server_error": "Serverfehler: {{error}}",
+      "no_ws_url": "Keine WebSocket-URL für Sitzung verfügbar.",
+      "connection_lost": "[OxideTerm] Verbindung verloren. Wiederverbindung läuft...",
+      "attempting_reconnect": "[OxideTerm] Wiederverbindungsversuch...",
+      "link_restored": "[OxideTerm] Verbindung wiederhergestellt. Shell-Sitzung zurückgesetzt.",
+      "connection_failed": "[OxideTerm] Verbindung endgültig fehlgeschlagen.",
+      "history_match": "Verlaufstreffer (Zeile {{line}})",
+      "buffer_empty": "⚠ Puffer leer - zeige zwischengespeicherten Snapshot:",
+      "buffer_rotated": "⚠ Puffer rotiert - Live-Kontext stimmt möglicherweise nicht überein. Zeige Cache + aktuell:",
+      "cached_match": "Zwischengespeicherter Treffer:",
+      "current_line": "Aktuelle Zeile bei Index {{index}}:",
+      "fetch_context_failed": "⚠ Kontext konnte nicht abgerufen werden - zeige zwischengespeicherten Snapshot:"
+    },
+    "standby": {
+      "connection_lost": "Verbindung verloren",
+      "reconnecting": "Wiederverbindung läuft...",
+      "input_locked": "Eingabe ist während der Wiederverbindung gesperrt"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "common": {
+    "confirm": {
+      "disconnect_node": "Möchten Sie wirklich \"{{name}}\" und alle untergeordneten Knoten trennen?",
+      "remove_node": "Möchten Sie wirklich den Knoten \"{{name}}\" und alle untergeordneten Knoten entfernen?",
+      "delete_batch": "Möchten Sie wirklich {{count}} Verbindung(en) löschen?"
+    },
+    "actions": {
+      "cancel": "Abbrechen",
+      "confirm": "Bestätigen",
+      "delete": "Löschen"
+    },
+    "errors": {
+      "delete_failed": "Einige Verbindungen konnten nicht gelöscht werden: {{message}}"
+    }
+  },
+  "layout": {
+    "empty": {
+      "title": "OxideTerm",
+      "no_sessions": "Keine aktiven Sitzungen",
+      "new_connection": "Neue Verbindung"
+    },
+    "connection_monitor": {
+      "title": "Verbindungsmonitor"
+    },
+    "loading": "Wird geladen..."
+  },
+  "tabbar": {
+    "offline": "Offline",
+    "cancel_reconnect": "Wiederverbindung abbrechen",
+    "reconnect": "Erneut verbinden",
+    "close_tab": "Tab schließen"
+  },
+  "tabs": {
+    "settings": "Einstellungen",
+    "connection_monitor": "Verbindungsmonitor",
+    "connection_pool": "Verbindungspool",
+    "connection_matrix": "Verbindungsmatrix",
+    "sftp_prefix": "SFTP",
+    "forwards_prefix": "Weiterleitungen"
+  }
+}

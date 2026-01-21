@@ -1,0 +1,297 @@
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+
+// zh-CN 翻译文件
+import zhCNCommon from './locales/zh-CN/common.json';
+import zhCNSidebar from './locales/zh-CN/sidebar.json';
+import zhCNSettings from './locales/zh-CN/settings.json';
+import zhCNConnections from './locales/zh-CN/connections.json';
+import zhCNForwards from './locales/zh-CN/forwards.json';
+import zhCNModals from './locales/zh-CN/modals.json';
+import zhCNSessions from './locales/zh-CN/sessions.json';
+import zhCNSettingsView from './locales/zh-CN/settings_view.json';
+import zhCNSftp from './locales/zh-CN/sftp.json';
+import zhCNTerminal from './locales/zh-CN/terminal.json';
+import zhCNTopology from './locales/zh-CN/topology.json';
+
+// en 翻译文件
+import enCommon from './locales/en/common.json';
+import enSidebar from './locales/en/sidebar.json';
+import enSettings from './locales/en/settings.json';
+import enConnections from './locales/en/connections.json';
+import enForwards from './locales/en/forwards.json';
+import enModals from './locales/en/modals.json';
+import enSessions from './locales/en/sessions.json';
+import enSettingsView from './locales/en/settings_view.json';
+import enSftp from './locales/en/sftp.json';
+import enTerminal from './locales/en/terminal.json';
+import enTopology from './locales/en/topology.json';
+
+// fr-FR 翻译文件
+import frFRCommon from './locales/fr-FR/common.json';
+import frFRSidebar from './locales/fr-FR/sidebar.json';
+import frFRSettings from './locales/fr-FR/settings.json';
+import frFRConnections from './locales/fr-FR/connections.json';
+import frFRForwards from './locales/fr-FR/forwards.json';
+import frFRModals from './locales/fr-FR/modals.json';
+import frFRSessions from './locales/fr-FR/sessions.json';
+import frFRSettingsView from './locales/fr-FR/settings_view.json';
+import frFRSftp from './locales/fr-FR/sftp.json';
+import frFRTerminal from './locales/fr-FR/terminal.json';
+import frFRTopology from './locales/fr-FR/topology.json';
+
+// ja 翻译文件
+import jaCommon from './locales/ja/common.json';
+import jaSidebar from './locales/ja/sidebar.json';
+import jaSettings from './locales/ja/settings.json';
+import jaConnections from './locales/ja/connections.json';
+import jaForwards from './locales/ja/forwards.json';
+import jaModals from './locales/ja/modals.json';
+import jaSessions from './locales/ja/sessions.json';
+import jaSettingsView from './locales/ja/settings_view.json';
+import jaSftp from './locales/ja/sftp.json';
+import jaTerminal from './locales/ja/terminal.json';
+import jaTopology from './locales/ja/topology.json';
+
+// es-ES 翻译文件
+import esESCommon from './locales/es-ES/common.json';
+import esESSidebar from './locales/es-ES/sidebar.json';
+import esESSettings from './locales/es-ES/settings.json';
+import esESConnections from './locales/es-ES/connections.json';
+import esESForwards from './locales/es-ES/forwards.json';
+import esESModals from './locales/es-ES/modals.json';
+import esESSessions from './locales/es-ES/sessions.json';
+import esESSettingsView from './locales/es-ES/settings_view.json';
+import esESSftp from './locales/es-ES/sftp.json';
+import esESTerminal from './locales/es-ES/terminal.json';
+import esESTopology from './locales/es-ES/topology.json';
+
+// pt-BR 翻译文件
+import ptBRCommon from './locales/pt-BR/common.json';
+import ptBRSidebar from './locales/pt-BR/sidebar.json';
+import ptBRSettings from './locales/pt-BR/settings.json';
+import ptBRConnections from './locales/pt-BR/connections.json';
+import ptBRForwards from './locales/pt-BR/forwards.json';
+import ptBRModals from './locales/pt-BR/modals.json';
+import ptBRSessions from './locales/pt-BR/sessions.json';
+import ptBRSettingsView from './locales/pt-BR/settings_view.json';
+import ptBRSftp from './locales/pt-BR/sftp.json';
+import ptBRTerminal from './locales/pt-BR/terminal.json';
+import ptBRTopology from './locales/pt-BR/topology.json';
+
+// vi 翻译文件
+import viCommon from './locales/vi/common.json';
+import viSidebar from './locales/vi/sidebar.json';
+import viSettings from './locales/vi/settings.json';
+import viConnections from './locales/vi/connections.json';
+import viForwards from './locales/vi/forwards.json';
+import viModals from './locales/vi/modals.json';
+import viSessions from './locales/vi/sessions.json';
+import viSettingsView from './locales/vi/settings_view.json';
+import viSftp from './locales/vi/sftp.json';
+import viTerminal from './locales/vi/terminal.json';
+import viTopology from './locales/vi/topology.json';
+
+// ko 翻译文件
+import koCommon from './locales/ko/common.json';
+import koSidebar from './locales/ko/sidebar.json';
+import koSettings from './locales/ko/settings.json';
+import koConnections from './locales/ko/connections.json';
+import koForwards from './locales/ko/forwards.json';
+import koModals from './locales/ko/modals.json';
+import koSessions from './locales/ko/sessions.json';
+import koSettingsView from './locales/ko/settings_view.json';
+import koSftp from './locales/ko/sftp.json';
+import koTerminal from './locales/ko/terminal.json';
+import koTopology from './locales/ko/topology.json';
+
+// de 翻译文件
+import deCommon from './locales/de/common.json';
+import deSidebar from './locales/de/sidebar.json';
+import deSettings from './locales/de/settings.json';
+import deConnections from './locales/de/connections.json';
+import deForwards from './locales/de/forwards.json';
+import deModals from './locales/de/modals.json';
+import deSessions from './locales/de/sessions.json';
+import deSettingsView from './locales/de/settings_view.json';
+import deSftp from './locales/de/sftp.json';
+import deTerminal from './locales/de/terminal.json';
+import deTopology from './locales/de/topology.json';
+
+// 合并翻译资源
+const zhCN = {
+  ...zhCNCommon,
+  ...zhCNSidebar,
+  ...zhCNSettings,
+  ...zhCNConnections,
+  ...zhCNForwards,
+  ...zhCNModals,
+  ...zhCNSessions,
+  ...zhCNSettingsView,
+  ...zhCNSftp,
+  ...zhCNTerminal,
+  ...zhCNTopology,
+};
+
+const enUS = {
+  ...enCommon,
+  ...enSidebar,
+  ...enSettings,
+  ...enConnections,
+  ...enForwards,
+  ...enModals,
+  ...enSessions,
+  ...enSettingsView,
+  ...enSftp,
+  ...enTerminal,
+  ...enTopology,
+};
+
+const frFR = {
+  ...frFRCommon,
+  ...frFRSidebar,
+  ...frFRSettings,
+  ...frFRConnections,
+  ...frFRForwards,
+  ...frFRModals,
+  ...frFRSessions,
+  ...frFRSettingsView,
+  ...frFRSftp,
+  ...frFRTerminal,
+  ...frFRTopology,
+};
+
+const ja = {
+  ...jaCommon,
+  ...jaSidebar,
+  ...jaSettings,
+  ...jaConnections,
+  ...jaForwards,
+  ...jaModals,
+  ...jaSessions,
+  ...jaSettingsView,
+  ...jaSftp,
+  ...jaTerminal,
+  ...jaTopology,
+};
+
+const esES = {
+  ...esESCommon,
+  ...esESSidebar,
+  ...esESSettings,
+  ...esESConnections,
+  ...esESForwards,
+  ...esESModals,
+  ...esESSessions,
+  ...esESSettingsView,
+  ...esESSftp,
+  ...esESTerminal,
+  ...esESTopology,
+};
+
+const ptBR = {
+  ...ptBRCommon,
+  ...ptBRSidebar,
+  ...ptBRSettings,
+  ...ptBRConnections,
+  ...ptBRForwards,
+  ...ptBRModals,
+  ...ptBRSessions,
+  ...ptBRSettingsView,
+  ...ptBRSftp,
+  ...ptBRTerminal,
+  ...ptBRTopology,
+};
+
+const vi = {
+  ...viCommon,
+  ...viSidebar,
+  ...viSettings,
+  ...viConnections,
+  ...viForwards,
+  ...viModals,
+  ...viSessions,
+  ...viSettingsView,
+  ...viSftp,
+  ...viTerminal,
+  ...viTopology,
+};
+
+const ko = {
+  ...koCommon,
+  ...koSidebar,
+  ...koSettings,
+  ...koConnections,
+  ...koForwards,
+  ...koModals,
+  ...koSessions,
+  ...koSettingsView,
+  ...koSftp,
+  ...koTerminal,
+  ...koTopology,
+};
+
+const de = {
+  ...deCommon,
+  ...deSidebar,
+  ...deSettings,
+  ...deConnections,
+  ...deForwards,
+  ...deModals,
+  ...deSessions,
+  ...deSettingsView,
+  ...deSftp,
+  ...deTerminal,
+  ...deTopology,
+};
+
+// 获取初始语言：优先本地存储 -> 浏览器语言 -> 默认中文
+const getInitialLanguage = () => {
+  const saved = localStorage.getItem('app_lang');
+  if (saved) return saved;
+  
+  const browser = navigator.language;
+  if (browser.startsWith('en')) return 'en';
+  if (browser.startsWith('fr')) return 'fr-FR';
+  if (browser.startsWith('ja')) return 'ja';
+  if (browser.startsWith('es')) return 'es-ES';
+  if (browser.startsWith('pt')) return 'pt-BR';
+  if (browser.startsWith('vi')) return 'vi';
+  if (browser.startsWith('ko')) return 'ko';
+  if (browser.startsWith('de')) return 'de';
+  
+  return 'zh-CN';
+};
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: {
+      'zh-CN': { translation: zhCN },
+      'en': { translation: enUS },
+      'fr-FR': { translation: frFR },
+      'ja': { translation: ja },
+      'es-ES': { translation: esES },
+      'pt-BR': { translation: ptBR },
+      'vi': { translation: vi },
+      'ko': { translation: ko },
+      'de': { translation: de }
+    },
+    lng: getInitialLanguage(),
+    fallbackLng: 'en',
+    
+    // React handles caching/escaping
+    interpolation: {
+      escapeValue: false 
+    },
+
+    // 调试模式 (仅开发环境启用)
+    debug: import.meta.env.DEV,
+    
+    // 反应式设置
+    react: {
+      useSuspense: false // 静态资源不需要 suspense
+    }
+  });
+
+export default i18n;

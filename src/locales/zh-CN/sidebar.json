@@ -1,0 +1,33 @@
+{
+  "sidebar": {
+    "actions": {
+      "expand": "展开侧边栏",
+      "collapse": "折叠侧边栏",
+      "new_local_terminal": "新建本地终端",
+      "open_pylance_guide": "打开 Pylance 指南"
+    },
+    "panels": {
+      "sessions": "活动会话",
+      "saved": "保存的连接",
+      "saved_title": "保存的连接",
+      "sftp": "文件传输 (SFTP)",
+      "sftp_sessions": "SFTP 会话",
+      "forwards": "端口转发",
+      "forwards_title": "端口转发",
+      "connection_pool": "连接池",
+      "connection_monitor": "连接监控",
+      "connection_matrix": "连接矩阵",
+      "ai_assistant": "AI 助手 (敬请期待)",
+      "settings": "设置",
+      "no_saved_connections": "无保存的连接",
+      "no_active_sessions": "无活动会话",
+      "no_connected_sessions": "无已连接会话",
+      "import_tooltip": "从 .oxide 文件导入",
+      "export_tooltip": "导出到 .oxide 文件"
+    },
+    "tooltips": {
+      "settings": "设置",
+      "ai_hint": "AI 助手 (即将推出) - 在终端使用 Ctrl/Cmd+I"
+    }
+  }
+}

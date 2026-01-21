@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "연결 중...",
+      "active": "활성",
+      "idle": "유휴",
+      "disconnecting": "연결 해제 중...",
+      "disconnected": "연결 해제됨",
+      "error": "오류: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "연결 끊김 - 재연결 중...",
+      "connection_closed": "연결이 닫힘"
+    },
+    "toast": {
+      "close_terminal_failed": "이전 터미널 닫기 실패",
+      "proxy_chain_established": "프록시 체인 연결 설정됨",
+      "proxy_chain_desc": "체인 깊이 {{depth}}. 토폴로지 동기화됨."
+    },
+    "time": {
+      "just_now": "방금",
+      "mins_ago": "{{count}}분 전",
+      "hrs_ago": "{{count}}시간 전"
+    },
+    "panel": {
+      "title": "연결 풀",
+      "description": "활성 SSH 연결 및 keep-alive 설정 관리",
+      "refresh": "새로고침",
+      "no_connections": "활성 SSH 연결 없음",
+      "no_connections_hint": "새 연결이 여기에 표시됩니다",
+      "terminals": "{{count}} 터미널",
+      "sftp": "{{count}} SFTP",
+      "forwards": "{{count}} 포워딩",
+      "created": "생성: {{time}}",
+      "idle_hint": "유휴 - {{keepAlive}}",
+      "keep_alive_enabled": "Keep Alive",
+      "disconnect_in": "30분 후 연결 해제"
+    },
+    "keep_alive": {
+      "enable_tooltip": "Keep Alive 활성화 (자동 연결 해제 안함)",
+      "disable_tooltip": "Keep Alive 비활성화 (30분 유휴 후 연결 해제)",
+      "legend_enabled": "Keep Alive: 자동 연결 해제 안함",
+      "legend_disabled": "표준: 30분 유휴 후 자동 연결 해제"
+    },
+    "monitor": {
+      "title": "연결 풀",
+      "loading": "통계 로딩 중...",
+      "idle_timeout": "유휴: {{min}}분",
+      "capacity": "용량: {{capacity}}",
+      "active": "활성",
+      "idle": "유휴",
+      "reconnecting": "재연결 중",
+      "link_down": "연결 끊김",
+      "terminals": "터미널",
+      "sftp": "SFTP",
+      "forwards": "포워딩",
+      "summary": "총: {{total}} 연결 • 참조: {{refs}}",
+      "live": "실시간"
+    }
+  }
+}

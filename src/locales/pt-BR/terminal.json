@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Terminal local",
+      "shell": "Shell: {{shell}}",
+      "shell_unknown": "Desconhecido",
+      "session_ended": "Sessão encerrada",
+      "exit_code": "O processo terminou com código {{code}}",
+      "process_terminated": "Processo terminado"
+    },
+    "search": {
+      "visible_buffer": "Buffer visível",
+      "deep_history": "Histórico profundo",
+      "deep_history_tooltip": "Pesquisar em todo o histórico da sessão (além do scrollback)",
+      "placeholder_active": "Pesquisar na saída do terminal...",
+      "placeholder_deep": "Pesquisar no histórico completo...",
+      "searching": "Pesquisando...",
+      "error": "Erro",
+      "no_results_history": "Sem resultados no histórico",
+      "matches_count": "{{count}} correspondências ({{ms}}ms)",
+      "no_results": "Sem resultados",
+      "matches_exceeded": "{{count}}+ correspondências",
+      "previous_match": "Correspondência anterior (Shift+Enter)",
+      "next_match": "Próxima correspondência (Enter)",
+      "search_full_history": "Pesquisar histórico completo (Enter)",
+      "search_button": "Pesquisar",
+      "close": "Fechar (Esc)",
+      "case_sensitive": "Diferenciar maiúsculas",
+      "regex": "Usar expressão regular",
+      "whole_word": "Palavra inteira",
+      "click_to_jump": "Clique para ir à correspondência",
+      "line_number": "Linha {{line}}",
+      "showing_first": "Mostrando primeiras 100 de {{total}}",
+      "no_matches_in_history": "Nenhuma correspondência encontrada no histórico da sessão"
+    },
+    "ai": {
+      "title": "Assistente IA",
+      "api_key_required": "Chave de API necessária",
+      "api_key_hint": "Configure sua chave de API em Configurações → IA para usar este recurso.",
+      "context": "Contexto:",
+      "context_selection": "Seleção",
+      "context_visible": "Visível",
+      "context_none": "Nenhum",
+      "tokens_estimate": "~{{count}} tokens",
+      "prompt_placeholder": "Pergunte à IA sobre comandos...",
+      "send_shortcut": "Enviar",
+      "close_shortcut": "Fechar",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "insert": "Inserir",
+      "execute": "Executar"
+    },
+    "paste": {
+      "title": "Múltiplas linhas detectadas ({{count}} linhas)",
+      "more_lines": "... {{count}} linhas a mais",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar",
+      "paste": "Colar"
+    },
+    "ssh": {
+      "initialized": "OxideTerm inicializado",
+      "connecting": "Conectando a {{user}}@{{host}}...",
+      "connected": "Conectado.",
+      "reconnecting": "Reconectando a {{user}}@{{host}}...",
+      "reconnected": "Reconexão bem-sucedida!",
+      "connection_closed": "Conexão fechada.",
+      "connection_closed_code": "Conexão fechada (código: {{code}})",
+      "ws_error": "Erro WebSocket: {{error}}",
+      "ws_reconnect_error": "Erro de reconexão WebSocket",
+      "ws_establish_failed": "Falha ao estabelecer WebSocket: {{error}}",
+      "server_error": "Erro do servidor: {{error}}",
+      "no_ws_url": "Nenhuma URL WebSocket disponível para a sessão.",
+      "connection_lost": "[OxideTerm] Conexão perdida. Reconectando...",
+      "attempting_reconnect": "[OxideTerm] Tentando reconectar...",
+      "link_restored": "[OxideTerm] Link restaurado. Sessão de shell reiniciada.",
+      "connection_failed": "[OxideTerm] Conexão falhou permanentemente.",
+      "history_match": "Correspondência no histórico (linha {{line}})",
+      "buffer_empty": "⚠ Buffer vazio - mostrando snapshot em cache:",
+      "buffer_rotated": "⚠ Buffer rotacionado - contexto ao vivo pode não corresponder. Mostrando cache + atual:",
+      "cached_match": "Correspondência em cache:",
+      "current_line": "Linha atual no índice {{index}}:",
+      "fetch_context_failed": "⚠ Falha ao buscar contexto - mostrando snapshot em cache:"
+    },
+    "standby": {
+      "connection_lost": "Conexão perdida",
+      "reconnecting": "Reconectando...",
+      "input_locked": "Entrada bloqueada durante reconexão"
+    }
+  }
+}

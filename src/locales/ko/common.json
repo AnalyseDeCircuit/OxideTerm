@@ -1,0 +1,42 @@
+{
+  "common": {
+    "confirm": {
+      "disconnect_node": "\"{{name}}\" 및 모든 하위 노드의 연결을 해제하시겠습니까?",
+      "remove_node": "\"{{name}}\" 노드와 모든 하위 노드를 삭제하시겠습니까?",
+      "delete_batch": "{{count}}개의 연결을 삭제하시겠습니까?"
+    },
+    "actions": {
+      "cancel": "취소",
+      "confirm": "확인",
+      "delete": "삭제"
+    },
+    "errors": {
+      "delete_failed": "일부 연결 삭제 실패: {{message}}"
+    }
+  },
+  "layout": {
+    "empty": {
+      "title": "OxideTerm",
+      "no_sessions": "활성 세션 없음",
+      "new_connection": "새 연결"
+    },
+    "connection_monitor": {
+      "title": "연결 모니터"
+    },
+    "loading": "로딩 중..."
+  },
+  "tabbar": {
+    "offline": "오프라인",
+    "cancel_reconnect": "재연결 취소",
+    "reconnect": "재연결",
+    "close_tab": "탭 닫기"
+  },
+  "tabs": {
+    "settings": "설정",
+    "connection_monitor": "연결 모니터",
+    "connection_pool": "연결 풀",
+    "connection_matrix": "연결 매트릭스",
+    "sftp_prefix": "SFTP",
+    "forwards_prefix": "포워딩"
+  }
+}

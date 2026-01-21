@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Local Terminal",
+      "shell": "Shell: {{shell}}",
+      "shell_unknown": "Unknown",
+      "session_ended": "Session ended",
+      "exit_code": "Process exited with code: {{code}}",
+      "process_terminated": "Process terminated"
+    },
+    "search": {
+      "visible_buffer": "Visible Buffer",
+      "deep_history": "Deep History",
+      "deep_history_tooltip": "Search entire session history (beyond scrollback)",
+      "placeholder_active": "Search terminal output...",
+      "placeholder_deep": "Search full history...",
+      "searching": "Searching...",
+      "error": "Error",
+      "no_results_history": "No results in history",
+      "matches_count": "{{count}} matches ({{ms}}ms)",
+      "no_results": "No results",
+      "matches_exceeded": "{{count}}+ matches",
+      "previous_match": "Previous match (Shift+Enter)",
+      "next_match": "Next match (Enter)",
+      "search_full_history": "Search full history (Enter)",
+      "search_button": "Search",
+      "close": "Close (Esc)",
+      "case_sensitive": "Case Sensitive",
+      "regex": "Use Regular Expression",
+      "whole_word": "Match Whole Word",
+      "click_to_jump": "Click to jump to match location",
+      "line_number": "Line {{line}}",
+      "showing_first": "Showing first 100 of {{total}} matches",
+      "no_matches_in_history": "No matches found in session history"
+    },
+    "ai": {
+      "title": "AI Assistant",
+      "api_key_required": "API Key Required",
+      "api_key_hint": "Configure your API key in Settings → AI to use this feature.",
+      "context": "Context:",
+      "context_selection": "Selection",
+      "context_visible": "Visible",
+      "context_none": "None",
+      "tokens_estimate": "~{{count}} tokens",
+      "prompt_placeholder": "Ask AI for help with commands...",
+      "send_shortcut": "to send",
+      "close_shortcut": "to close",
+      "copy": "Copy",
+      "copied": "Copied",
+      "insert": "Insert",
+      "execute": "Execute"
+    },
+    "paste": {
+      "title": "Multiple lines detected ({{count}} lines)",
+      "more_lines": "... {{count}} more lines",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "paste": "Paste"
+    },
+    "ssh": {
+      "initialized": "Initialized OxideTerm",
+      "connecting": "Connecting to {{user}}@{{host}}...",
+      "connected": "Connected.",
+      "reconnecting": "Reconnecting to {{user}}@{{host}}...",
+      "reconnected": "Reconnected successfully!",
+      "connection_closed": "Connection closed.",
+      "connection_closed_code": "Connection closed (code: {{code}})",
+      "ws_error": "WebSocket error: {{error}}",
+      "ws_reconnect_error": "WebSocket reconnection error",
+      "ws_establish_failed": "Failed to establish WebSocket: {{error}}",
+      "server_error": "Server error: {{error}}",
+      "no_ws_url": "No WebSocket URL available for session.",
+      "connection_lost": "[OxideTerm] Connection lost. Reconnecting...",
+      "attempting_reconnect": "[OxideTerm] Attempting to reconnect...",
+      "link_restored": "[OxideTerm] Link restored. Shell session reset.",
+      "connection_failed": "[OxideTerm] Connection permanently failed.",
+      "history_match": "History Match (Line {{line}})",
+      "buffer_empty": "⚠ Buffer empty - showing cached snapshot:",
+      "buffer_rotated": "⚠ Buffer rotated - live context may not match. Showing cached + current:",
+      "cached_match": "Cached match:",
+      "current_line": "Current line at index {{index}}:",
+      "fetch_context_failed": "⚠ Failed to fetch context - showing cached snapshot:"
+    },
+    "standby": {
+      "connection_lost": "Connection Lost",
+      "reconnecting": "Reconnecting...",
+      "input_locked": "Input is locked during reconnection"
+    }
+  }
+}

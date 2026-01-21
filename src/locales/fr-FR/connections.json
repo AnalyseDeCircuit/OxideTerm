@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "Connexion en cours...",
+      "active": "Actif",
+      "idle": "Inactif",
+      "disconnecting": "Déconnexion en cours...",
+      "disconnected": "Déconnecté",
+      "error": "Erreur : {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "Connexion perdue - reconnexion en cours...",
+      "connection_closed": "Connexion fermée"
+    },
+    "toast": {
+      "close_terminal_failed": "Échec de la fermeture de l'ancien terminal",
+      "proxy_chain_established": "Connexion de chaîne proxy établie",
+      "proxy_chain_desc": "Profondeur de chaîne {{depth}}. Topologie synchronisée."
+    },
+    "time": {
+      "just_now": "À l'instant",
+      "mins_ago": "Il y a {{count}} min",
+      "hrs_ago": "Il y a {{count}} h"
+    },
+    "panel": {
+      "title": "Pool de connexions",
+      "description": "Gérer les connexions SSH actives et les paramètres de maintien en vie",
+      "refresh": "Actualiser",
+      "no_connections": "Aucune connexion SSH active",
+      "no_connections_hint": "Les nouvelles connexions apparaîtront ici",
+      "terminals": "{{count}} Terminaux",
+      "sftp": "{{count}} SFTP",
+      "forwards": "{{count}} Transferts",
+      "created": "Créé : {{time}}",
+      "idle_hint": "Inactif - {{keepAlive}}",
+      "keep_alive_enabled": "Maintien en vie",
+      "disconnect_in": "Déconnexion dans 30 min"
+    },
+    "keep_alive": {
+      "enable_tooltip": "Activer le maintien en vie (jamais déconnecter)",
+      "disable_tooltip": "Désactiver le maintien en vie (déconnecter après 30 min d'inactivité)",
+      "legend_enabled": "Maintien en vie : jamais de déconnexion automatique",
+      "legend_disabled": "Standard : déconnexion automatique après 30 min d'inactivité"
+    },
+    "monitor": {
+      "title": "Pool de connexions",
+      "loading": "Chargement des statistiques...",
+      "idle_timeout": "Inactif : {{min}} min",
+      "capacity": "Capacité : {{capacity}}",
+      "active": "Actif",
+      "idle": "Inactif",
+      "reconnecting": "Reconnexion",
+      "link_down": "Lien coupé",
+      "terminals": "Terminaux",
+      "sftp": "SFTP",
+      "forwards": "Transferts",
+      "summary": "Total : {{total}} connexions • Réf : {{refs}}",
+      "live": "En direct"
+    }
+  }
+}

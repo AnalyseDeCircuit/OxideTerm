@@ -1,0 +1,388 @@
+//! SFTP data types
+
+use serde::{Deserialize, Serialize};
+
+/// File entry information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileInfo {
+    /// File name (not full path)
+    pub name: String,
+    /// Full path
+    pub path: String,
+    /// File type
+    pub file_type: FileType,
+    /// File size in bytes
+    pub size: u64,
+    /// Last modified time (Unix timestamp)
+    pub modified: i64,
+    /// File permissions (octal string, e.g., "755")
+    pub permissions: String,
+    /// Owner username (if available)
+    pub owner: Option<String>,
+    /// Group name (if available)
+    pub group: Option<String>,
+    /// Is symbolic link
+    pub is_symlink: bool,
+    /// Symlink target (if is_symlink)
+    pub symlink_target: Option<String>,
+}
+
+/// File type enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FileType {
+    File,
+    Directory,
+    Symlink,
+    Unknown,
+}
+
+impl FileType {
+    /// Get icon name for UI
+    pub fn icon(&self) -> &'static str {
+        match self {
+            FileType::File => "file",
+            FileType::Directory => "folder",
+            FileType::Symlink => "link",
+            FileType::Unknown => "file-question",
+        }
+    }
+}
+
+/// File preview content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PreviewContent {
+    /// Plain text content (code, config, logs, etc.)
+    Text {
+        data: String,
+        mime_type: Option<String>,
+        /// Language hint for syntax highlighting (e.g., "rust", "python", "bash")
+        language: Option<String>,
+    },
+    /// Base64-encoded image content
+    Image { data: String, mime_type: String },
+    /// Base64-encoded video content (for small videos < 50MB)
+    Video { data: String, mime_type: String },
+    /// Base64-encoded audio content (for small audio < 50MB)
+    Audio { data: String, mime_type: String },
+    /// Base64-encoded PDF content (native or converted from Office)
+    Pdf {
+        data: String,
+        /// Original MIME type if converted from Office document
+        original_mime: Option<String>,
+    },
+    /// Hex dump for binary files (incremental loading)
+    Hex {
+        /// Hex dump string
+        data: String,
+        /// Total file size
+        total_size: u64,
+        /// Current offset (for incremental loading)
+        offset: u64,
+        /// Bytes shown in this chunk
+        chunk_size: u64,
+        /// Whether there's more data to load
+        has_more: bool,
+    },
+    /// File is too large to preview
+    TooLarge {
+        size: u64,
+        max_size: u64,
+        /// Recommend downloading instead
+        recommend_download: bool,
+    },
+    /// File type cannot be previewed
+    Unsupported {
+        mime_type: String,
+        /// Human-readable reason
+        reason: String,
+    },
+}
+
+/// Transfer progress information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferProgress {
+    /// Unique transfer ID
+    pub id: String,
+    /// Remote file path
+    pub remote_path: String,
+    /// Local file path
+    pub local_path: String,
+    /// Transfer direction
+    pub direction: TransferDirection,
+    /// Current state
+    pub state: TransferState,
+    /// Total bytes to transfer
+    pub total_bytes: u64,
+    /// Bytes transferred so far
+    pub transferred_bytes: u64,
+    /// Transfer speed in bytes/second
+    pub speed: u64,
+    /// Estimated time remaining in seconds
+    pub eta_seconds: Option<u64>,
+    /// Error message if failed
+    pub error: Option<String>,
+}
+
+impl TransferProgress {
+    /// Calculate progress percentage (0-100)
+    pub fn percentage(&self) -> f64 {
+        if self.total_bytes == 0 {
+            100.0
+        } else {
+            (self.transferred_bytes as f64 / self.total_bytes as f64) * 100.0
+        }
+    }
+}
+
+/// Transfer direction
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransferDirection {
+    Upload,
+    Download,
+}
+
+/// Transfer state
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TransferState {
+    /// Waiting in queue
+    Pending,
+    /// Currently transferring
+    InProgress,
+    /// Paused by user
+    Paused,
+    /// Completed successfully
+    Completed,
+    /// Failed with error
+    Failed,
+    /// Cancelled by user
+    Cancelled,
+}
+
+/// Transfer request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferRequest {
+    /// Session ID to use for transfer
+    pub session_id: String,
+    /// Remote file path
+    pub remote_path: String,
+    /// Local file path
+    pub local_path: String,
+    /// Transfer direction
+    pub direction: TransferDirection,
+}
+
+/// SFTP operation result for batch operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchResult {
+    /// Successfully processed paths
+    pub success: Vec<String>,
+    /// Failed paths with error messages
+    pub failed: Vec<(String, String)>,
+}
+
+/// Sort order for directory listing
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    #[default]
+    Name,
+    NameDesc,
+    Size,
+    SizeDesc,
+    Modified,
+    ModifiedDesc,
+    Type,
+    TypeDesc,
+}
+
+/// Filter for directory listing
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListFilter {
+    /// Show hidden files (starting with .)
+    #[serde(default)]
+    pub show_hidden: bool,
+    /// File name pattern to match (glob-style)
+    pub pattern: Option<String>,
+    /// Sort order
+    #[serde(default)]
+    pub sort: SortOrder,
+}
+
+/// Constants for SFTP operations
+pub mod constants {
+    /// Default chunk size for file transfers (64 KB)
+    pub const DEFAULT_CHUNK_SIZE: usize = 64 * 1024;
+
+    /// Maximum file size for preview (10 MB)
+    pub const MAX_PREVIEW_SIZE: u64 = 10 * 1024 * 1024;
+
+    /// Maximum text preview size (1 MB)
+    pub const MAX_TEXT_PREVIEW_SIZE: u64 = 1024 * 1024;
+
+    /// Maximum video/audio preview size (50 MB)
+    pub const MAX_MEDIA_PREVIEW_SIZE: u64 = 50 * 1024 * 1024;
+
+    /// Maximum Office document size for conversion (10 MB)
+    pub const MAX_OFFICE_CONVERT_SIZE: u64 = 10 * 1024 * 1024;
+
+    /// Hex preview chunk size (16 KB)
+    pub const HEX_CHUNK_SIZE: u64 = 16 * 1024;
+
+    /// Maximum concurrent transfers
+    pub const MAX_CONCURRENT_TRANSFERS: usize = 3;
+
+    /// Buffer size for streaming transfers
+    pub const STREAM_BUFFER_SIZE: usize = 256 * 1024;
+}
+
+/// Map file extension to syntax highlighting language
+pub fn extension_to_language(ext: &str) -> Option<String> {
+    let lang = match ext.to_lowercase().as_str() {
+        // Shell scripts
+        "sh" | "bash" | "zsh" | "fish" => "bash",
+        // Config files
+        "conf" | "cfg" | "ini" | "properties" => "ini",
+        "yaml" | "yml" => "yaml",
+        "toml" => "toml",
+        "json" | "jsonc" | "json5" => "json",
+        "xml" | "svg" | "xsd" | "xsl" => "xml",
+        "html" | "htm" | "xhtml" => "html",
+        // Programming languages
+        "rs" => "rust",
+        "py" | "pyw" | "pyi" => "python",
+        "js" | "mjs" | "cjs" => "javascript",
+        "ts" | "mts" | "cts" => "typescript",
+        "jsx" => "jsx",
+        "tsx" => "tsx",
+        "c" | "h" => "c",
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx" | "hh" => "cpp",
+        "java" => "java",
+        "go" => "go",
+        "rb" | "rake" | "gemspec" => "ruby",
+        "php" => "php",
+        "swift" => "swift",
+        "kt" | "kts" => "kotlin",
+        "scala" | "sc" => "scala",
+        "r" | "rmd" => "r",
+        "lua" => "lua",
+        "pl" | "pm" => "perl",
+        "sql" => "sql",
+        // Markup/Data
+        "md" | "markdown" => "markdown",
+        "tex" | "latex" => "latex",
+        "css" | "scss" | "sass" | "less" => "css",
+        "graphql" | "gql" => "graphql",
+        // DevOps/System
+        "dockerfile" => "docker",
+        "makefile" | "mk" => "makefile",
+        "cmake" => "cmake",
+        "nginx" => "nginx",
+        "diff" | "patch" => "diff",
+        "log" => "log",
+        // Special files
+        "env" | "envrc" => "bash",
+        "gitignore" | "dockerignore" => "gitignore",
+        "editorconfig" => "ini",
+        _ => return None,
+    };
+    Some(lang.to_string())
+}
+
+/// Check if file extension indicates a text/script file
+pub fn is_text_extension(ext: &str) -> bool {
+    matches!(
+        ext.to_lowercase().as_str(),
+        // Scripts & configs
+        "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" |
+        "conf" | "cfg" | "ini" | "properties" | "env" | "envrc" |
+        "yaml" | "yml" | "toml" | "json" | "jsonc" | "json5" |
+        "xml" | "svg" | "xsd" | "xsl" | "html" | "htm" | "xhtml" |
+        // Code
+        "rs" | "py" | "pyw" | "pyi" | "js" | "mjs" | "cjs" | "ts" | "mts" |
+        "jsx" | "tsx" | "c" | "h" | "cpp" | "cc" | "cxx" | "hpp" | "hxx" |
+        "java" | "go" | "rb" | "rake" | "php" | "swift" | "kt" | "kts" |
+        "scala" | "r" | "rmd" | "lua" | "pl" | "pm" | "sql" |
+        // Text/Docs
+        "txt" | "text" | "md" | "markdown" | "rst" | "adoc" | "org" |
+        "tex" | "latex" | "css" | "scss" | "sass" | "less" |
+        // DevOps
+        "dockerfile" | "makefile" | "mk" | "cmake" | "gradle" |
+        "gitignore" | "dockerignore" | "editorconfig" |
+        "diff" | "patch" | "log" | "csv" | "tsv"
+    )
+}
+
+/// Check if MIME type indicates video
+pub fn is_video_mime(mime: &str) -> bool {
+    mime.starts_with("video/")
+}
+
+/// Check if MIME type indicates audio
+pub fn is_audio_mime(mime: &str) -> bool {
+    mime.starts_with("audio/")
+}
+
+/// Check if file is an Office document
+pub fn is_office_extension(ext: &str) -> bool {
+    matches!(
+        ext.to_lowercase().as_str(),
+        // Microsoft Office
+        "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
+        // LibreOffice
+        "odt" | "ods" | "odp" | "odg" |
+        // Legacy
+        "rtf"
+    )
+}
+
+/// Check if file is a PDF
+pub fn is_pdf_extension(ext: &str) -> bool {
+    ext.eq_ignore_ascii_case("pdf")
+}
+
+/// Generate hex dump from bytes
+pub fn generate_hex_dump(data: &[u8], offset: u64) -> String {
+    use std::fmt::Write;
+
+    let mut result = String::new();
+    let bytes_per_line = 16;
+
+    for (i, chunk) in data.chunks(bytes_per_line).enumerate() {
+        let addr = offset + (i * bytes_per_line) as u64;
+
+        // Address
+        write!(result, "{:08X}  ", addr).unwrap();
+
+        // Hex bytes
+        for (j, byte) in chunk.iter().enumerate() {
+            if j == 8 {
+                result.push(' ');
+            }
+            write!(result, "{:02X} ", byte).unwrap();
+        }
+
+        // Padding for incomplete lines
+        for j in chunk.len()..bytes_per_line {
+            if j == 8 {
+                result.push(' ');
+            }
+            result.push_str("   ");
+        }
+
+        // ASCII representation
+        result.push_str(" |");
+        for byte in chunk {
+            let c = if *byte >= 0x20 && *byte < 0x7F {
+                *byte as char
+            } else {
+                '.'
+            };
+            result.push(c);
+        }
+        result.push_str("|\n");
+    }
+
+    result
+}

@@ -1,0 +1,42 @@
+{
+  "common": {
+    "confirm": {
+      "disconnect_node": "\"{{name}}\" とそのすべての子ノードを切断してもよろしいですか？",
+      "remove_node": "ノード \"{{name}}\" とそのすべての子ノードを削除してもよろしいですか？",
+      "delete_batch": "{{count}}件の接続を削除してもよろしいですか？"
+    },
+    "actions": {
+      "cancel": "キャンセル",
+      "confirm": "確認",
+      "delete": "削除"
+    },
+    "errors": {
+      "delete_failed": "一部の接続の削除に失敗しました: {{message}}"
+    }
+  },
+  "layout": {
+    "empty": {
+      "title": "OxideTerm",
+      "no_sessions": "アクティブなセッションがありません",
+      "new_connection": "新規接続"
+    },
+    "connection_monitor": {
+      "title": "接続モニター"
+    },
+    "loading": "読み込み中..."
+  },
+  "tabbar": {
+    "offline": "オフライン",
+    "cancel_reconnect": "再接続をキャンセル",
+    "reconnect": "再接続",
+    "close_tab": "タブを閉じる"
+  },
+  "tabs": {
+    "settings": "設定",
+    "connection_monitor": "接続モニター",
+    "connection_pool": "接続プール",
+    "connection_matrix": "接続マトリックス",
+    "sftp_prefix": "SFTP",
+    "forwards_prefix": "転送"
+  }
+}
