@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Terminal local",
+      "shell": "Shell: {{shell}}",
+      "shell_unknown": "Desconocido",
+      "session_ended": "Sesión terminada",
+      "exit_code": "El proceso terminó con código {{code}}",
+      "process_terminated": "Proceso terminado"
+    },
+    "search": {
+      "visible_buffer": "Buffer visible",
+      "deep_history": "Historial profundo",
+      "deep_history_tooltip": "Buscar en todo el historial de sesión (más allá del scrollback)",
+      "placeholder_active": "Buscar en salida del terminal...",
+      "placeholder_deep": "Buscar en historial completo...",
+      "searching": "Buscando...",
+      "error": "Error",
+      "no_results_history": "Sin resultados en historial",
+      "matches_count": "{{count}} coincidencias ({{ms}}ms)",
+      "no_results": "Sin resultados",
+      "matches_exceeded": "{{count}}+ coincidencias",
+      "previous_match": "Coincidencia anterior (Shift+Enter)",
+      "next_match": "Siguiente coincidencia (Enter)",
+      "search_full_history": "Buscar historial completo (Enter)",
+      "search_button": "Buscar",
+      "close": "Cerrar (Esc)",
+      "case_sensitive": "Distinguir mayúsculas",
+      "regex": "Usar expresión regular",
+      "whole_word": "Palabra completa",
+      "click_to_jump": "Clic para ir a coincidencia",
+      "line_number": "Línea {{line}}",
+      "showing_first": "Mostrando primeras 100 de {{total}}",
+      "no_matches_in_history": "No se encontraron coincidencias en el historial de sesión"
+    },
+    "ai": {
+      "title": "Asistente IA",
+      "api_key_required": "Se requiere clave API",
+      "api_key_hint": "Configura tu clave API en Configuración → IA para usar esta función.",
+      "context": "Contexto:",
+      "context_selection": "Selección",
+      "context_visible": "Visible",
+      "context_none": "Ninguno",
+      "tokens_estimate": "~{{count}} tokens",
+      "prompt_placeholder": "Pregunta a la IA sobre comandos...",
+      "send_shortcut": "Enviar",
+      "close_shortcut": "Cerrar",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "insert": "Insertar",
+      "execute": "Ejecutar"
+    },
+    "paste": {
+      "title": "Múltiples líneas detectadas ({{count}} líneas)",
+      "more_lines": "... {{count}} líneas más",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar",
+      "paste": "Pegar"
+    },
+    "ssh": {
+      "initialized": "OxideTerm inicializado",
+      "connecting": "Conectando a {{user}}@{{host}}...",
+      "connected": "Conectado.",
+      "reconnecting": "Reconectando a {{user}}@{{host}}...",
+      "reconnected": "¡Reconexión exitosa!",
+      "connection_closed": "Conexión cerrada.",
+      "connection_closed_code": "Conexión cerrada (código: {{code}})",
+      "ws_error": "Error WebSocket: {{error}}",
+      "ws_reconnect_error": "Error de reconexión WebSocket",
+      "ws_establish_failed": "Error al establecer WebSocket: {{error}}",
+      "server_error": "Error del servidor: {{error}}",
+      "no_ws_url": "No hay URL WebSocket disponible para la sesión.",
+      "connection_lost": "[OxideTerm] Conexión perdida. Reconectando...",
+      "attempting_reconnect": "[OxideTerm] Intentando reconectar...",
+      "link_restored": "[OxideTerm] Enlace restaurado. Sesión de shell reiniciada.",
+      "connection_failed": "[OxideTerm] Conexión fallida permanentemente.",
+      "history_match": "Coincidencia en historial (línea {{line}})",
+      "buffer_empty": "⚠ Buffer vacío - mostrando snapshot en caché:",
+      "buffer_rotated": "⚠ Buffer rotado - contexto en vivo puede no coincidir. Mostrando caché + actual:",
+      "cached_match": "Coincidencia en caché:",
+      "current_line": "Línea actual en índice {{index}}:",
+      "fetch_context_failed": "⚠ Error al obtener contexto - mostrando snapshot en caché:"
+    },
+    "standby": {
+      "connection_lost": "Conexión perdida",
+      "reconnecting": "Reconectando...",
+      "input_locked": "Entrada bloqueada durante reconexión"
+    }
+  }
+}

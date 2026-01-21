@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "接続中...",
+      "active": "アクティブ",
+      "idle": "アイドル",
+      "disconnecting": "切断中...",
+      "disconnected": "切断済み",
+      "error": "エラー: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "接続が切断されました - 再接続中...",
+      "connection_closed": "接続が閉じられました"
+    },
+    "toast": {
+      "close_terminal_failed": "古いターミナルの終了に失敗しました",
+      "proxy_chain_established": "プロキシチェーン接続が確立されました",
+      "proxy_chain_desc": "チェーン深度{{depth}}。トポロジが同期されました。"
+    },
+    "time": {
+      "just_now": "たった今",
+      "mins_ago": "{{count}}分前",
+      "hrs_ago": "{{count}}時間前"
+    },
+    "panel": {
+      "title": "接続プール",
+      "description": "アクティブなSSH接続とキープアライブ設定を管理",
+      "refresh": "更新",
+      "no_connections": "アクティブなSSH接続がありません",
+      "no_connections_hint": "新しい接続はここに表示されます",
+      "terminals": "{{count}}個のターミナル",
+      "sftp": "{{count}}個のSFTP",
+      "forwards": "{{count}}個の転送",
+      "created": "作成: {{time}}",
+      "idle_hint": "アイドル - {{keepAlive}}",
+      "keep_alive_enabled": "キープアライブ",
+      "disconnect_in": "30分後に切断"
+    },
+    "keep_alive": {
+      "enable_tooltip": "キープアライブを有効にする（切断しない）",
+      "disable_tooltip": "キープアライブを無効にする（30分のアイドル後に切断）",
+      "legend_enabled": "キープアライブ: 自動切断なし",
+      "legend_disabled": "標準: 30分のアイドル後に自動切断"
+    },
+    "monitor": {
+      "title": "接続プール",
+      "loading": "統計を読み込み中...",
+      "idle_timeout": "アイドル: {{min}}分",
+      "capacity": "容量: {{capacity}}",
+      "active": "アクティブ",
+      "idle": "アイドル",
+      "reconnecting": "再接続中",
+      "link_down": "リンクダウン",
+      "terminals": "ターミナル",
+      "sftp": "SFTP",
+      "forwards": "転送",
+      "summary": "合計: {{total}}接続 • 参照: {{refs}}",
+      "live": "ライブ"
+    }
+  }
+}

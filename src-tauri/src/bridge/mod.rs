@@ -1,0 +1,14 @@
+//! WebSocket Bridge module
+//!
+//! This module provides WebSocket server functionality for bridging
+//! SSH sessions to the frontend xterm.js terminal.
+
+mod manager;
+mod protocol;
+mod server;
+
+pub use manager::BridgeManager;
+pub use protocol::{
+    data_frame, error_frame, heartbeat_frame, resize_frame, Frame, FrameCodec, MessageType,
+};
+pub use server::{DisconnectReason, WsBridge};

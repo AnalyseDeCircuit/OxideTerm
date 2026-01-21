@@ -1,0 +1,1896 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { 
+  Folder, 
+  File, 
+  ArrowUp, 
+  RefreshCw, 
+  Home, 
+  Download,
+  Upload,
+  Trash2,
+  Edit3,
+  Copy,
+  Eye,
+  FolderPlus,
+  Search,
+  ArrowUpDown,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  HardDrive,
+  FolderOpen,
+  CornerDownLeft,
+  GitCompare
+} from 'lucide-react';
+import { useAppStore } from '../../store/appStore';
+import { useTransferStore } from '../../store/transferStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useToast } from '../../hooks/useToast';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { cn } from '../../lib/utils';
+import { TransferQueue } from './TransferQueue';
+import { TransferConflictDialog, ConflictInfo, ConflictResolution } from './TransferConflictDialog';
+import { PathBreadcrumb } from './PathBreadcrumb';
+import { FileDiffDialog } from './FileDiffDialog';
+import { api } from '../../lib/api';
+import { FileInfo } from '../../types';
+import { listen } from '@tauri-apps/api/event';
+import { readDir, stat, remove, rename, mkdir } from '@tauri-apps/plugin-fs';
+import { homeDir } from '@tauri-apps/api/path';
+import { open } from '@tauri-apps/plugin-dialog';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from '../ui/dialog';
+import { platform } from '../../lib/platform';
+
+// Types for Transfer Events (should match Backend TransferProgress)
+interface TransferProgressEvent {
+    id: string;
+    remote_path: string;
+    local_path: string;
+    direction: string;
+    state: string;
+    total_bytes: number;
+    transferred_bytes: number;
+    speed: number;
+    eta_seconds: number | null;
+    error: string | null;
+}
+
+interface TransferCompleteEvent {
+    transfer_id: string;
+    session_id: string;
+    success: boolean;
+    error?: string;
+}
+
+// Format file size to human readable format
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const size = bytes / Math.pow(1024, i);
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
+// Sort options
+type SortField = 'name' | 'size' | 'modified';
+type SortDirection = 'asc' | 'desc';
+
+const FileList = ({ 
+  title, 
+  path, 
+  files, 
+  onNavigate, 
+  onRefresh,
+  active,
+  onActivate,
+  onPreview,
+  onTransfer,
+  onDelete,
+  onRename,
+  onNewFolder,
+  selected,
+  setSelected,
+  lastSelected,
+  setLastSelected,
+  isDragOver,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  filter,
+  onFilterChange,
+  sortField,
+  sortDirection,
+  onSortChange,
+  onBrowse,
+  onShowDrives,
+  isPathEditable = false,
+  pathInputValue,
+  onPathInputChange,
+  onPathInputSubmit,
+  isRemote = false,
+  t
+}: { 
+  title: string, 
+  path: string, 
+  files: FileInfo[],
+  onNavigate: (path: string) => void,
+  onRefresh: () => void,
+  active: boolean,
+  onActivate: () => void,
+  onPreview?: (file: FileInfo) => void,
+  onTransfer?: (files: string[], direction: 'upload' | 'download') => void,
+  onDelete?: (files: string[]) => void,
+  onRename?: (oldName: string) => void,
+  onNewFolder?: () => void,
+  selected: Set<string>,
+  setSelected: (s: Set<string>) => void,
+  lastSelected: string | null,
+  setLastSelected: (s: string | null) => void,
+  isDragOver?: boolean,
+  onDragOver?: (e: React.DragEvent) => void,
+  onDragLeave?: (e: React.DragEvent) => void,
+  onDrop?: (e: React.DragEvent) => void,
+  filter?: string,
+  onFilterChange?: (v: string) => void,
+  sortField?: SortField,
+  sortDirection?: SortDirection,
+  onSortChange?: (field: SortField) => void,
+  onBrowse?: () => void,
+  onShowDrives?: () => void,
+  isPathEditable?: boolean,
+  pathInputValue?: string,
+  onPathInputChange?: (v: string) => void,
+  onPathInputSubmit?: () => void,
+  isRemote?: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string
+}) => {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number, file?: FileInfo} | null>(null);
+
+  const handleSelect = (name: string, multi: boolean, range: boolean) => {
+    onActivate();
+    const newSelected = new Set(multi ? selected : []);
+    
+    if (range && lastSelected && files.length > 0) {
+       let start = files.findIndex(f => f.name === lastSelected);
+       let end = files.findIndex(f => f.name === name);
+       if (start > -1 && end > -1) {
+           const [min, max] = [Math.min(start, end), Math.max(start, end)];
+           for (let i = min; i <= max; i++) {
+               newSelected.add(files[i].name);
+           }
+       }
+    } else {
+        if (newSelected.has(name) && multi) {
+            newSelected.delete(name);
+        } else {
+            newSelected.add(name);
+        }
+    }
+    
+    setSelected(newSelected);
+    setLastSelected(name);
+  };
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!active) return;
+    
+    const selectedFiles = Array.from(selected);
+    const isLocalPane = !isRemote;
+    
+    // Ctrl/Cmd + A: Select all
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+      e.preventDefault();
+      setSelected(new Set(files.map(f => f.name)));
+      return;
+    }
+    
+    // Enter: Open directory or preview file
+    if (e.key === 'Enter' && selectedFiles.length === 1) {
+      e.preventDefault();
+      const file = files.find(f => f.name === selectedFiles[0]);
+      if (file) {
+        if (file.file_type === 'Directory') {
+          const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
+          onNavigate(newPath);
+        } else if (onPreview) {
+          onPreview(file);
+        }
+      }
+      return;
+    }
+    
+    // Arrow keys for transfer
+    if (e.key === 'ArrowRight' && isLocalPane && selectedFiles.length > 0 && onTransfer) {
+      e.preventDefault();
+      onTransfer(selectedFiles, 'upload');
+      return;
+    }
+    if (e.key === 'ArrowLeft' && !isLocalPane && selectedFiles.length > 0 && onTransfer) {
+      e.preventDefault();
+      onTransfer(selectedFiles, 'download');
+      return;
+    }
+    
+    // Delete key
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFiles.length > 0 && onDelete) {
+      e.preventDefault();
+      onDelete(selectedFiles);
+      return;
+    }
+    
+    // F2: Rename
+    if (e.key === 'F2' && selectedFiles.length === 1 && onRename) {
+      e.preventDefault();
+      onRename(selectedFiles[0]);
+      return;
+    }
+  }, [active, selected, files, isRemote, path, onNavigate, onPreview, onTransfer, onDelete, onRename, setSelected]);
+
+  // Context menu handler
+  const handleContextMenu = (e: React.MouseEvent, file?: FileInfo) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (file && !selected.has(file.name)) {
+      setSelected(new Set([file.name]));
+      setLastSelected(file.name);
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, file });
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
+
+  const isLocalPane = !isRemote;
+
+  return (
+    <div 
+      className={cn(
+        "flex flex-col h-full bg-theme-bg border transition-all duration-200",
+        active ? "border-oxide-accent/50" : "border-theme-border",
+        isDragOver && "border-oxide-accent border-2 bg-theme-accent/10 ring-2 ring-oxide-accent/30"
+      )}
+      onClick={onActivate}
+      onContextMenu={(e) => handleContextMenu(e)}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {/* Header */}
+      <div className={cn(
+        "flex items-center gap-2 p-2 border-b transition-colors h-10",
+        active ? "bg-zinc-800/50 border-oxide-accent/30" : "bg-theme-bg-panel border-theme-border"
+      )}>
+        <span className="font-semibold text-xs text-zinc-400 uppercase tracking-wider min-w-12">{title}</span>
+        {/* Path bar - breadcrumb navigation or editable input */}
+        <div className="flex-1 flex items-center gap-1 bg-zinc-950 border border-theme-border px-2 py-0.5 rounded-sm overflow-hidden">
+          {isPathEditable && pathInputValue !== undefined ? (
+            <input
+              type="text"
+              value={pathInputValue}
+              onChange={(e) => onPathInputChange?.(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onPathInputSubmit?.();
+                }
+                if (e.key === 'Escape') {
+                  onPathInputChange?.(path);
+                }
+              }}
+              onBlur={() => onPathInputChange?.(path)}
+              className="flex-1 bg-transparent text-zinc-300 text-xs outline-none"
+              placeholder={t('sftp.file_list.path_placeholder')}
+              autoFocus
+            />
+          ) : (
+            <PathBreadcrumb 
+              path={path}
+              isRemote={isRemote}
+              onNavigate={onNavigate}
+              className="flex-1"
+            />
+          )}
+          {isPathEditable && (
+            <Button size="icon" variant="ghost" className="h-4 w-4 shrink-0" onClick={onPathInputSubmit} title={t('sftp.file_list.go')}>
+              <CornerDownLeft className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+        {/* Show drives button (local only) */}
+        {onShowDrives && (
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onShowDrives} title={t('sftp.toolbar.show_drives')}>
+            <HardDrive className="h-3 w-3" />
+          </Button>
+        )}
+        {/* Browse button (local only) */}
+        {onBrowse && (
+          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onBrowse} title={t('sftp.toolbar.browse_folder')}>
+            <FolderOpen className="h-3 w-3" />
+          </Button>
+        )}
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onNavigate('..')} title={t('sftp.toolbar.go_up')}>
+           <ArrowUp className="h-3 w-3" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => onNavigate('~')} title={t('sftp.toolbar.home')}>
+           <Home className="h-3 w-3" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onRefresh} title={t('sftp.toolbar.refresh')}>
+           <RefreshCw className="h-3 w-3" />
+        </Button>
+        {/* Transfer selected files */}
+        {onTransfer && selected.size > 0 && (
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-6 px-2 text-xs gap-1"
+            onClick={() => onTransfer(Array.from(selected), isLocalPane ? 'upload' : 'download')}
+          >
+            {isLocalPane ? <Upload className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+            {isLocalPane ? t('sftp.toolbar.upload_count', { count: selected.size }) : t('sftp.toolbar.download_count', { count: selected.size })}
+          </Button>
+        )}
+      </div>
+
+      {/* Column Headers with Sort */}
+      <div className="flex items-center px-2 py-1 bg-zinc-900 border-b border-theme-border text-xs text-zinc-500">
+        <button 
+          className={cn(
+            "flex-1 flex items-center gap-1 hover:text-zinc-300 transition-colors text-left",
+            sortField === 'name' && "text-theme-accent"
+          )}
+          onClick={() => onSortChange?.('name')}
+        >
+          {t('sftp.file_list.col_name')}
+          {sortField === 'name' && (
+            sortDirection === 'asc' ? <ArrowUpAZ className="h-3 w-3" /> : <ArrowDownAZ className="h-3 w-3" />
+          )}
+        </button>
+        <button 
+          className={cn(
+            "w-20 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
+            sortField === 'size' && "text-theme-accent"
+          )}
+          onClick={() => onSortChange?.('size')}
+        >
+          {t('sftp.file_list.col_size')}
+          {sortField === 'size' && <ArrowUpDown className="h-3 w-3" />}
+        </button>
+        <button 
+          className={cn(
+            "w-24 flex items-center justify-end gap-1 hover:text-zinc-300 transition-colors",
+            sortField === 'modified' && "text-theme-accent"
+          )}
+          onClick={() => onSortChange?.('modified')}
+        >
+          {t('sftp.file_list.col_modified')}
+          {sortField === 'modified' && <ArrowUpDown className="h-3 w-3" />}
+        </button>
+      </div>
+
+      {/* Filter Input */}
+      {onFilterChange && (
+        <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 border-b border-theme-border">
+          <Search className="h-3 w-3 text-zinc-500" />
+          <input
+            type="text"
+            value={filter || ''}
+            onChange={(e) => onFilterChange(e.target.value)}
+            placeholder={t('sftp.file_list.filter_placeholder')}
+            className="flex-1 bg-transparent text-xs text-zinc-300 placeholder:text-zinc-600 outline-none"
+          />
+          {filter && (
+            <button 
+              onClick={() => onFilterChange('')}
+              className="text-zinc-500 hover:text-zinc-300 text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* File List */}
+      <div 
+        ref={listRef}
+        className="flex-1 overflow-y-auto outline-none" 
+        tabIndex={0} 
+        onClick={() => setSelected(new Set())}
+        onKeyDown={handleKeyDown}
+      >
+        {files.map((file) => {
+          const isSelected = selected.has(file.name);
+          return (
+            <div 
+              key={file.name}
+              draggable
+              onDragStart={(e) => {
+                  e.dataTransfer.setData('application/json', JSON.stringify({
+                      files: Array.from(selected.size > 0 ? selected : [file.name]),
+                      source: title.includes('Remote') ? 'remote' : 'local',
+                      basePath: path
+                  }));
+              }}
+              onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelect(file.name, e.metaKey || e.ctrlKey, e.shiftKey);
+              }}
+              onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (file.file_type === 'Directory') {
+                      const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
+                      onNavigate(newPath);
+                  } else if (onPreview) {
+                      onPreview(file);
+                  }
+              }}
+              onContextMenu={(e) => handleContextMenu(e, file)}
+              className={cn(
+                "flex items-center px-2 py-1 text-xs cursor-default select-none border-b border-transparent hover:bg-zinc-800",
+                isSelected && "bg-theme-accent/20 text-theme-accent"
+              )}
+            >
+              <div className="flex-1 flex items-center gap-2 truncate">
+                {file.file_type === 'Directory' ? <Folder className="h-3.5 w-3.5 text-blue-400" /> : <File className="h-3.5 w-3.5 text-zinc-400" />}
+                <span>{file.name}</span>
+              </div>
+              <div className="w-20 text-right text-zinc-500">
+                {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}
+              </div>
+              <div className="w-24 text-right text-zinc-600">
+                {file.modified ? new Date(file.modified * 1000).toLocaleDateString() : '-'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-theme-bg-panel border border-theme-border rounded-sm shadow-lg py-1 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {/* Transfer */}
+          {onTransfer && selected.size > 0 && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onTransfer(Array.from(selected), isLocalPane ? 'upload' : 'download');
+                setContextMenu(null);
+              }}
+            >
+              {isLocalPane ? <Upload className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+              {isLocalPane ? t('sftp.context.upload') : t('sftp.context.download')}
+            </button>
+          )}
+          
+          {/* Preview (only for files) */}
+          {contextMenu.file && contextMenu.file.file_type !== 'Directory' && onPreview && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onPreview(contextMenu.file!);
+                setContextMenu(null);
+              }}
+            >
+              <Eye className="h-3 w-3" /> {t('sftp.context.preview')}
+            </button>
+          )}
+          
+          {/* Rename */}
+          {contextMenu.file && selected.size === 1 && onRename && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onRename(contextMenu.file!.name);
+                setContextMenu(null);
+              }}
+            >
+              <Edit3 className="h-3 w-3" /> {t('sftp.context.rename')}
+            </button>
+          )}
+          
+          {/* Copy Path */}
+          {contextMenu.file && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                const fullPath = `${path}/${contextMenu.file!.name}`;
+                navigator.clipboard.writeText(fullPath);
+                setContextMenu(null);
+              }}
+            >
+              <Copy className="h-3 w-3" /> {t('sftp.context.copy_path')}
+            </button>
+          )}
+          
+          {/* Delete */}
+          {selected.size > 0 && onDelete && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2 text-red-400"
+              onClick={() => {
+                onDelete(Array.from(selected));
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 className="h-3 w-3" /> {t('sftp.context.delete')}
+            </button>
+          )}
+          
+          <div className="border-t border-theme-border my-1" />
+          
+          {/* New Folder */}
+          {onNewFolder && (
+            <button 
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 flex items-center gap-2"
+              onClick={() => {
+                onNewFolder();
+                setContextMenu(null);
+              }}
+            >
+              <FolderPlus className="h-3 w-3" /> {t('sftp.context.new_folder')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const SFTPView = ({ sessionId }: { sessionId: string }) => {
+  const { t } = useTranslation();
+  const { getSession } = useAppStore();
+  const session = getSession(sessionId);
+  const { error: toastError } = useToast();
+  const [remoteFiles, setRemoteFiles] = useState<FileInfo[]>([]);
+  const [remotePath, setRemotePath] = useState('/home/' + (session?.username || 'user'));
+  
+  const [localFiles, setLocalFiles] = useState<FileInfo[]>([]);
+  const [localPath, setLocalPath] = useState('');
+  const [localHome, setLocalHome] = useState('');
+
+  const [activePane, setActivePane] = useState<'local' | 'remote'>('remote');
+  const [sftpInitialized, setSftpInitialized] = useState(false);
+
+  // Path input state for editable path bars
+  const [localPathInput, setLocalPathInput] = useState('');
+  const [remotePathInput, setRemotePathInput] = useState('');
+  const [isLocalPathEditing, setIsLocalPathEditing] = useState(false);
+  const [isRemotePathEditing, setIsRemotePathEditing] = useState(false);
+
+  // Drives dialog state (Windows support)
+  const [showDrivesDialog, setShowDrivesDialog] = useState(false);
+  const [availableDrives, setAvailableDrives] = useState<string[]>([]);
+
+  // Selection state (lifted up for cross-pane operations)
+  const [localSelected, setLocalSelected] = useState<Set<string>>(new Set());
+  const [localLastSelected, setLocalLastSelected] = useState<string | null>(null);
+  const [remoteSelected, setRemoteSelected] = useState<Set<string>>(new Set());
+  const [remoteLastSelected, setRemoteLastSelected] = useState<string | null>(null);
+
+  // Preview State
+  const [previewFile, setPreviewFile] = useState<{
+    name: string;
+    path: string;
+    type: 'text' | 'image' | 'video' | 'audio' | 'pdf' | 'hex' | 'too-large' | 'unsupported';
+    data: string;
+    mimeType?: string;
+    language?: string | null;
+    // Hex specific
+    hexOffset?: number;
+    hexTotalSize?: number;
+    hexHasMore?: boolean;
+    // Too large specific
+    recommendDownload?: boolean;
+    maxSize?: number;
+    fileSize?: number;
+    // Unsupported specific
+    reason?: string;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [hexLoadingMore, setHexLoadingMore] = useState(false);
+
+  // Dialog States
+  const [renameDialog, setRenameDialog] = useState<{oldName: string, isRemote: boolean} | null>(null);
+  const [newFolderDialog, setNewFolderDialog] = useState<{isRemote: boolean} | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{files: string[], isRemote: boolean} | null>(null);
+  const [inputValue, setInputValue] = useState('');
+
+  // Transfer conflict dialog state
+  const [conflictDialog, setConflictDialog] = useState<{
+    conflicts: ConflictInfo[];
+    currentIndex: number;
+    pendingTransfers: Array<{
+      file: string;
+      direction: 'upload' | 'download';
+      basePath: string;
+      fileInfo: FileInfo | undefined;
+    }>;
+    resolvedActions: Map<string, ConflictResolution>;
+  } | null>(null);
+
+  // Diff compare dialog state
+  const [diffDialog, setDiffDialog] = useState<{
+    localFile: { path: string; content: string };
+    remoteFile: { path: string; content: string };
+  } | null>(null);
+
+  // Drag and Drop state
+  const [localDragOver, setLocalDragOver] = useState(false);
+  const [remoteDragOver, setRemoteDragOver] = useState(false);
+
+  // Filter and Sort state
+  const [localFilter, setLocalFilter] = useState('');
+  const [remoteFilter, setRemoteFilter] = useState('');
+  const [localSortField, setLocalSortField] = useState<SortField>('name');
+  const [localSortDirection, setLocalSortDirection] = useState<SortDirection>('asc');
+  const [remoteSortField, setRemoteSortField] = useState<SortField>('name');
+  const [remoteSortDirection, setRemoteSortDirection] = useState<SortDirection>('asc');
+
+  // Sort handler
+  const handleSortChange = (isLocal: boolean, field: SortField) => {
+    if (isLocal) {
+      if (localSortField === field) {
+        setLocalSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+      } else {
+        setLocalSortField(field);
+        setLocalSortDirection('asc');
+      }
+    } else {
+      if (remoteSortField === field) {
+        setRemoteSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+      } else {
+        setRemoteSortField(field);
+        setRemoteSortDirection('asc');
+      }
+    }
+  };
+
+  // Filter and sort files
+  const filterAndSortFiles = useCallback((
+    files: FileInfo[],
+    filter: string,
+    sortField: SortField,
+    sortDirection: SortDirection
+  ): FileInfo[] => {
+    // Filter
+    let filtered = files;
+    if (filter.trim()) {
+      const lowerFilter = filter.toLowerCase();
+      filtered = files.filter(f => f.name.toLowerCase().includes(lowerFilter));
+    }
+
+    // Sort (directories first, then by field)
+    const sorted = [...filtered].sort((a, b) => {
+      // Directories always first
+      if (a.file_type === 'Directory' && b.file_type !== 'Directory') return -1;
+      if (a.file_type !== 'Directory' && b.file_type === 'Directory') return 1;
+
+      let cmp = 0;
+      switch (sortField) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case 'size':
+          cmp = a.size - b.size;
+          break;
+        case 'modified':
+          cmp = (a.modified || 0) - (b.modified || 0);
+          break;
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+    return sorted;
+  }, []);
+
+  // Memoized filtered/sorted file lists
+  const displayLocalFiles = useMemo(
+    () => filterAndSortFiles(localFiles, localFilter, localSortField, localSortDirection),
+    [localFiles, localFilter, localSortField, localSortDirection, filterAndSortFiles]
+  );
+
+  const displayRemoteFiles = useMemo(
+    () => filterAndSortFiles(remoteFiles, remoteFilter, remoteSortField, remoteSortDirection),
+    [remoteFiles, remoteFilter, remoteSortField, remoteSortDirection, filterAndSortFiles]
+  );
+
+  // Initialize local home directory
+  useEffect(() => {
+    homeDir().then(home => {
+      setLocalHome(home);
+      setLocalPath(home);
+      setLocalPathInput(home);
+    }).catch(() => {
+      setLocalPath('/');
+      setLocalPathInput('/');
+    });
+  }, []);
+
+  // Sync path input when path changes
+  useEffect(() => {
+    if (!isLocalPathEditing) {
+      setLocalPathInput(localPath);
+    }
+  }, [localPath, isLocalPathEditing]);
+
+  useEffect(() => {
+    if (!isRemotePathEditing) {
+      setRemotePathInput(remotePath);
+    }
+  }, [remotePath, isRemotePathEditing]);
+
+  // Initialize SFTP on mount
+  useEffect(() => {
+     if (!session) return;
+     
+     api.sftpIsInitialized(sessionId)
+        .then(initialized => {
+            if (initialized) {
+                setSftpInitialized(true);
+                return api.sftpPwd(sessionId);
+            } else {
+                return api.sftpInit(sessionId).then(cwd => {
+                    setSftpInitialized(true);
+                    return cwd;
+                });
+            }
+        })
+        .then(cwd => {
+            if (cwd) setRemotePath(cwd);
+        })
+        .catch(err => console.error("SFTP Init Error:", err));
+  }, [sessionId, session]);
+
+  // Refresh remote (only after initialization)
+  useEffect(() => {
+     if (!session || !sftpInitialized) return;
+     api.sftpListDir(sessionId, remotePath)
+        .then(setRemoteFiles)
+        .catch(err => console.error("SFTP List Error:", err));
+  }, [sessionId, remotePath, session, sftpInitialized]);
+
+  // Refresh local files using Tauri fs plugin
+  const refreshLocalFiles = useCallback(async () => {
+    if (!localPath) return;
+    try {
+      const entries = await readDir(localPath);
+      const files: FileInfo[] = await Promise.all(
+        entries.map(async (entry) => {
+          const fullPath = `${localPath}/${entry.name}`;
+          const isDir = entry.isDirectory === true;
+          try {
+            const info = await stat(fullPath);
+            return {
+              name: entry.name,
+              path: fullPath,
+              file_type: isDir ? 'Directory' : 'File',
+              size: info.size || 0,
+              modified: info.mtime ? Math.floor(info.mtime.getTime() / 1000) : 0,
+              permissions: ''
+            } satisfies FileInfo;
+          } catch {
+            return {
+              name: entry.name,
+              path: fullPath,
+              file_type: isDir ? 'Directory' : 'File',
+              size: 0,
+              modified: 0,
+              permissions: ''
+            } satisfies FileInfo;
+          }
+        })
+      );
+      // Sort: directories first, then alphabetically
+      files.sort((a, b) => {
+        if (a.file_type === 'Directory' && b.file_type !== 'Directory') return -1;
+        if (a.file_type !== 'Directory' && b.file_type === 'Directory') return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setLocalFiles(files);
+    } catch (err) {
+      console.error("Local list error:", err);
+      setLocalFiles([]);
+    }
+  }, [localPath]);
+
+  useEffect(() => {
+    refreshLocalFiles();
+  }, [refreshLocalFiles]);
+
+  // Cross-platform path utilities
+  const getParentPath = useCallback((currentPath: string, isRemote: boolean): string => {
+    if (isRemote) {
+      // Remote: always use / separator
+      const parts = currentPath.split('/').filter(Boolean);
+      parts.pop();
+      return parts.length === 0 ? '/' : '/' + parts.join('/');
+    } else {
+      // Local: handle Windows drive letters and Unix paths
+      // Check for Windows drive root (C:\, D:\, etc.)
+      if (/^[A-Za-z]:\\?$/.test(currentPath) || /^[A-Za-z]:$/.test(currentPath)) {
+        // Already at drive root, show drives dialog
+        return '__DRIVES__';
+      }
+      // Check for Unix root
+      if (currentPath === '/') {
+        return '/';
+      }
+      // Handle both separators
+      const normalized = currentPath.replace(/\\/g, '/');
+      const parts = normalized.split('/').filter(Boolean);
+      parts.pop();
+      
+      // If on Windows and went up to drive letter
+      if (parts.length === 1 && /^[A-Za-z]:$/.test(parts[0])) {
+        return parts[0] + '\\';
+      }
+      // Unix or Windows path
+      if (parts.length === 0) {
+        // Check if original was Windows path
+        if (/^[A-Za-z]:/.test(currentPath)) {
+          return currentPath.substring(0, 3); // Keep drive root like C:\
+        }
+        return '/';
+      }
+      // Reconstruct with proper separator
+      const separator = currentPath.includes('\\') ? '\\' : '/';
+      const result = parts.join(separator);
+      // Ensure Windows paths have trailing slash for root
+      if (/^[A-Za-z]:$/.test(result)) {
+        return result + '\\';
+      }
+      return currentPath.startsWith('/') ? '/' + result : result;
+    }
+  }, []);
+
+  // Browse folder using system dialog (local only)
+  const handleBrowseFolder = useCallback(async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: localPath || undefined
+      });
+      if (selected && typeof selected === 'string') {
+        setLocalPath(selected);
+        setLocalPathInput(selected);
+        setIsLocalPathEditing(false);
+      }
+    } catch (err) {
+      console.error('Browse folder error:', err);
+    }
+  }, [localPath]);
+
+  // Show drives dialog
+  const handleShowDrives = useCallback(async () => {
+    try {
+      const drives = await api.localGetDrives();
+      setAvailableDrives(drives);
+      setShowDrivesDialog(true);
+    } catch (err) {
+      console.error('Get drives error:', err);
+      // Fallback to root
+      setAvailableDrives(['/']);
+      setShowDrivesDialog(true);
+    }
+  }, []);
+
+  // Navigate to drive
+  const handleSelectDrive = useCallback((drive: string) => {
+    setLocalPath(drive);
+    setLocalPathInput(drive);
+    setShowDrivesDialog(false);
+  }, []);
+
+  // Handle local path navigation with Windows support
+  const handleLocalNavigate = useCallback((target: string) => {
+    if (target === '..') {
+      const parent = getParentPath(localPath, false);
+      if (parent === '__DRIVES__') {
+        handleShowDrives();
+      } else {
+        setLocalPath(parent);
+      }
+    } else if (target === '~') {
+      setLocalPath(localHome);
+    } else {
+      setLocalPath(target);
+    }
+    setIsLocalPathEditing(false);
+  }, [localPath, localHome, getParentPath, handleShowDrives]);
+
+  // Handle remote path navigation
+  const handleRemoteNavigate = useCallback((target: string) => {
+    if (target === '..') {
+      setRemotePath(getParentPath(remotePath, true));
+    } else if (target === '~') {
+      setRemotePath('/home/' + session?.username);
+    } else {
+      setRemotePath(target);
+    }
+    setIsRemotePathEditing(false);
+  }, [remotePath, session?.username, getParentPath]);
+
+  // Handle path input submission
+  const handleLocalPathSubmit = useCallback(() => {
+    if (localPathInput.trim()) {
+      setLocalPath(localPathInput.trim());
+    }
+    setIsLocalPathEditing(false);
+  }, [localPathInput]);
+
+  const handleRemotePathSubmit = useCallback(() => {
+    if (remotePathInput.trim()) {
+      setRemotePath(remotePathInput.trim());
+    }
+    setIsRemotePathEditing(false);
+  }, [remotePathInput]);
+
+  // Get transfer store actions
+  const { addTransfer, updateProgress, setTransferState, getAllTransfers } = useTransferStore();
+
+  // Event Listeners for Transfer Progress
+  useEffect(() => {
+      // 使用 mounted 标志防止组件卸载后仍处理事件
+      let mounted = true;
+      let unlistenProgressFn: (() => void) | null = null;
+      let unlistenCompleteFn: (() => void) | null = null;
+      
+      const setupListeners = async () => {
+        unlistenProgressFn = await listen<TransferProgressEvent>(`sftp:progress:${sessionId}`, (event) => {
+          if (!mounted) return; // 组件已卸载，忽略事件
+          
+          const { remote_path, local_path, transferred_bytes, total_bytes } = event.payload;
+          // Find matching transfer by path (normalize paths for comparison)
+          const transfers = getAllTransfers();
+          const normalizePath = (p: string) => p.replace(/\/+/g, '/').replace(/\/$/, '');
+          const normalizedRemote = normalizePath(remote_path);
+          const normalizedLocal = normalizePath(local_path);
+          
+          const match = transfers.find(t => {
+            const tRemote = normalizePath(t.remotePath);
+            const tLocal = normalizePath(t.localPath);
+            return tRemote === normalizedRemote || tLocal === normalizedLocal ||
+                   normalizedRemote.endsWith(tRemote) || tRemote.endsWith(normalizedRemote) ||
+                   normalizedLocal.endsWith(tLocal) || tLocal.endsWith(normalizedLocal);
+          });
+          
+          if (match) {
+            updateProgress(match.id, transferred_bytes, total_bytes);
+          } else {
+            console.log('[SFTP Progress] No match found for:', { remote_path, local_path, transfers: transfers.map(t => ({ remotePath: t.remotePath, localPath: t.localPath })) });
+          }
+        });
+        
+        unlistenCompleteFn = await listen<TransferCompleteEvent>(`sftp:complete:${sessionId}`, (event) => {
+          if (!mounted) return; // 组件已卸载，忽略事件
+          
+          const { transfer_id, success, error } = event.payload;
+          if (success) {
+              setTransferState(transfer_id, 'completed');
+              // Refresh file lists
+              refreshLocalFiles();
+              api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+          } else {
+              setTransferState(transfer_id, 'error', error || 'Transfer failed');
+          }
+        });
+      };
+      
+      setupListeners();
+      
+      return () => { 
+          mounted = false;
+          if (unlistenProgressFn) unlistenProgressFn();
+          if (unlistenCompleteFn) unlistenCompleteFn();
+      };
+  }, [sessionId, updateProgress, setTransferState, refreshLocalFiles, remotePath, getAllTransfers]);
+
+  // Toast notifications
+  const { success: toastSuccess } = useToast();
+
+  // Get SFTP settings
+  const sftpSettings = useSettingsStore((state) => state.settings.sftp);
+
+  // Generate unique filename for "Keep Both" option
+  const generateUniqueName = (name: string, existingFiles: FileInfo[]): string => {
+    const existingNames = new Set(existingFiles.map(f => f.name));
+    const lastDot = name.lastIndexOf('.');
+    const baseName = lastDot > 0 ? name.slice(0, lastDot) : name;
+    const ext = lastDot > 0 ? name.slice(lastDot) : '';
+    
+    let counter = 1;
+    let newName = `${baseName} (${counter})${ext}`;
+    while (existingNames.has(newName)) {
+      counter++;
+      newName = `${baseName} (${counter})${ext}`;
+    }
+    return newName;
+  };
+
+  // Execute single file transfer
+  const executeTransfer = async (
+    file: string,
+    direction: 'upload' | 'download',
+    basePath: string,
+    fileInfo: FileInfo | undefined,
+    targetFileName?: string  // For rename option
+  ): Promise<boolean> => {
+    const isDirectory = fileInfo?.file_type === 'Directory';
+    const actualFileName = targetFileName || file;
+    
+    const localFilePath = direction === 'upload' 
+      ? `${basePath}/${file}` 
+      : `${localPath}/${actualFileName}`;
+    const remoteFilePath = direction === 'upload'
+      ? `${remotePath}/${actualFileName}`
+      : `${basePath}/${file}`;
+    
+    const transferId = addTransfer({
+      id: `${sessionId}-${Date.now()}-${file}`,
+      sessionId,
+      name: isDirectory ? `${actualFileName}/` : actualFileName,
+      localPath: localFilePath,
+      remotePath: remoteFilePath,
+      direction,
+      size: fileInfo?.size || 0,
+    });
+    
+    try {
+      if (direction === 'upload') {
+        if (isDirectory) {
+          await api.sftpUploadDir(sessionId, localFilePath, remoteFilePath);
+        } else {
+          await api.sftpUpload(sessionId, localFilePath, remoteFilePath, transferId);
+        }
+      } else {
+        if (isDirectory) {
+          await api.sftpDownloadDir(sessionId, remoteFilePath, localFilePath);
+        } else {
+          await api.sftpDownload(sessionId, remoteFilePath, localFilePath, transferId);
+        }
+      }
+      setTransferState(transferId, 'completed');
+      return true;
+    } catch (err) {
+      console.error("Transfer failed:", err);
+      setTransferState(transferId, 'error', String(err));
+      return false;
+    }
+  };
+
+  // Process conflict resolution and continue transfers
+  const processConflictResolution = async (
+    resolution: ConflictResolution,
+    applyToAll: boolean
+  ) => {
+    if (!conflictDialog) return;
+    
+    const { conflicts, currentIndex, pendingTransfers, resolvedActions } = conflictDialog;
+    const currentConflict = conflicts[currentIndex];
+    
+    // Store the resolution
+    const newResolvedActions = new Map(resolvedActions);
+    
+    if (applyToAll) {
+      // Apply to current and all remaining conflicts
+      for (let i = currentIndex; i < conflicts.length; i++) {
+        newResolvedActions.set(conflicts[i].fileName, resolution);
+      }
+      setConflictDialog(null);
+      
+      // Execute all remaining transfers with resolved actions
+      await executeResolvedTransfers(pendingTransfers, newResolvedActions);
+    } else {
+      newResolvedActions.set(currentConflict.fileName, resolution);
+      
+      if (currentIndex + 1 < conflicts.length) {
+        // Move to next conflict
+        setConflictDialog({
+          ...conflictDialog,
+          currentIndex: currentIndex + 1,
+          resolvedActions: newResolvedActions,
+        });
+      } else {
+        // All conflicts resolved, execute transfers
+        setConflictDialog(null);
+        await executeResolvedTransfers(pendingTransfers, newResolvedActions);
+      }
+    }
+  };
+
+  // Execute transfers with resolved conflict actions
+  const executeResolvedTransfers = async (
+    pendingTransfers: Array<{
+      file: string;
+      direction: 'upload' | 'download';
+      basePath: string;
+      fileInfo: FileInfo | undefined;
+    }>,
+    resolvedActions: Map<string, ConflictResolution>
+  ) => {
+    let successCount = 0;
+    let failCount = 0;
+    let skippedCount = 0;
+    
+    const targetFiles = pendingTransfers[0]?.direction === 'upload' ? remoteFiles : localFiles;
+    
+    for (const transfer of pendingTransfers) {
+      const resolution = resolvedActions.get(transfer.file);
+      
+      if (resolution === 'skip' || resolution === 'cancel') {
+        skippedCount++;
+        continue;
+      }
+      
+      if (resolution === 'skip-older') {
+        // Check if source is newer
+        const targetFile = targetFiles.find(f => f.name === transfer.file);
+        if (targetFile && transfer.fileInfo?.modified && targetFile.modified) {
+          if (transfer.fileInfo.modified <= targetFile.modified) {
+            skippedCount++;
+            continue;
+          }
+        }
+      }
+      
+      let targetFileName: string | undefined;
+      if (resolution === 'rename') {
+        targetFileName = generateUniqueName(transfer.file, targetFiles);
+      }
+      
+      const success = await executeTransfer(
+        transfer.file,
+        transfer.direction,
+        transfer.basePath,
+        transfer.fileInfo,
+        targetFileName
+      );
+      
+      if (success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+    
+    // Show toast notification
+    const isUpload = pendingTransfers[0]?.direction === 'upload';
+    if (successCount > 0 && failCount === 0) {
+      const msg = skippedCount > 0 
+        ? t('sftp.toast.transferred_skipped', { count: successCount, skipped: skippedCount })
+        : t('sftp.toast.transferred_count', { count: successCount });
+      toastSuccess(isUpload ? t('sftp.toast.upload_complete') : t('sftp.toast.download_complete'), msg);
+    } else if (failCount > 0 && successCount === 0) {
+      toastError(isUpload ? t('sftp.toast.upload_failed') : t('sftp.toast.download_failed'), t('sftp.toast.failed_count', { count: failCount }));
+    } else if (successCount > 0 || failCount > 0) {
+      toastError(isUpload ? t('sftp.toast.upload_partial') : t('sftp.toast.download_partial'), t('sftp.toast.partial_detail', { success: successCount, failed: failCount, skipped: skippedCount }));
+    }
+    
+    // Refresh file lists
+    if (pendingTransfers[0]?.direction === 'upload') {
+      api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+    } else {
+      refreshLocalFiles();
+    }
+  };
+
+  // Transfer handler (upload/download) - supports both files and directories
+  const handleTransfer = async (files: string[], direction: 'upload' | 'download', basePath: string) => {
+    const sourceFiles = direction === 'upload' ? localFiles : remoteFiles;
+    const targetFiles = direction === 'upload' ? remoteFiles : localFiles;
+    const conflictAction = sftpSettings?.conflictAction || 'ask';
+    
+    // Build pending transfers list
+    const pendingTransfers = files.map(file => ({
+      file,
+      direction,
+      basePath,
+      fileInfo: sourceFiles.find(f => f.name === file),
+    }));
+    
+    // Check for conflicts (only for files, not directories)
+    const conflicts: ConflictInfo[] = [];
+    for (const transfer of pendingTransfers) {
+      if (transfer.fileInfo?.file_type === 'Directory') continue;
+      
+      const targetFile = targetFiles.find(f => f.name === transfer.file);
+      if (targetFile && targetFile.file_type !== 'Directory') {
+        conflicts.push({
+          fileName: transfer.file,
+          sourceFile: {
+            size: transfer.fileInfo?.size || 0,
+            modified: transfer.fileInfo?.modified || null,
+          },
+          targetFile: {
+            size: targetFile.size,
+            modified: targetFile.modified,
+          },
+          direction,
+        });
+      }
+    }
+    
+    // Handle conflicts based on settings
+    if (conflicts.length > 0 && conflictAction === 'ask') {
+      // Show conflict dialog
+      setConflictDialog({
+        conflicts,
+        currentIndex: 0,
+        pendingTransfers,
+        resolvedActions: new Map(),
+      });
+      return;
+    }
+    
+    // Apply default action to all conflicts
+    const resolvedActions = new Map<string, ConflictResolution>();
+    for (const conflict of conflicts) {
+      resolvedActions.set(conflict.fileName, conflictAction as ConflictResolution);
+    }
+    
+    // Execute transfers
+    await executeResolvedTransfers(pendingTransfers, resolvedActions);
+  };
+
+  // Delete handler - uses recursive delete for directories
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    const { files, isRemote } = deleteConfirm;
+    try {
+      if (isRemote) {
+        let totalDeleted = 0;
+        for (const file of files) {
+          const filePath = `${remotePath}/${file}`;
+          // Check if it's a directory
+          const fileInfo = remoteFiles.find(f => f.name === file);
+          if (fileInfo?.file_type === 'Directory') {
+            const count = await api.sftpDeleteRecursive(sessionId, filePath);
+            totalDeleted += count;
+          } else {
+            await api.sftpDelete(sessionId, filePath);
+            totalDeleted += 1;
+          }
+        }
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        setRemoteSelected(new Set());
+        toastSuccess(t('sftp.toast.deleted'), t('sftp.toast.deleted_count', { count: totalDeleted }));
+      } else {
+        // Local delete
+        for (const file of files) {
+          const filePath = localPath.endsWith('/') ? `${localPath}${file}` : `${localPath}/${file}`;
+          await remove(filePath, { recursive: true });
+        }
+        refreshLocalFiles();
+        setLocalSelected(new Set());
+        toastSuccess(t('sftp.toast.deleted'), t('sftp.toast.deleted_count', { count: files.length }));
+      }
+    } catch (err) {
+      console.error("Delete failed:", err);
+      toastError(t('sftp.toast.delete_failed'), String(err));
+    }
+    setDeleteConfirm(null);
+  };
+
+  // Rename handler
+  const handleRename = async () => {
+    if (!renameDialog || !inputValue.trim()) return;
+    const { oldName, isRemote } = renameDialog;
+    try {
+      if (isRemote) {
+        await api.sftpRename(sessionId, `${remotePath}/${oldName}`, `${remotePath}/${inputValue}`);
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        setRemoteSelected(new Set());
+        toastSuccess(t('sftp.toast.renamed'), t('sftp.toast.renamed_detail', { old: oldName, new: inputValue }));
+      } else {
+        // Local rename
+        const oldPath = localPath.endsWith('/') ? `${localPath}${oldName}` : `${localPath}/${oldName}`;
+        const newPath = localPath.endsWith('/') ? `${localPath}${inputValue}` : `${localPath}/${inputValue}`;
+        await rename(oldPath, newPath);
+        refreshLocalFiles();
+        setLocalSelected(new Set());
+        toastSuccess(t('sftp.toast.renamed'), t('sftp.toast.renamed_detail', { old: oldName, new: inputValue }));
+      }
+    } catch (err) {
+      console.error("Rename failed:", err);
+      toastError(t('sftp.toast.rename_failed'), String(err));
+    }
+    setRenameDialog(null);
+    setInputValue('');
+  };
+
+  // New folder handler
+  const handleNewFolder = async () => {
+    if (!newFolderDialog || !inputValue.trim()) return;
+    const { isRemote } = newFolderDialog;
+    try {
+      if (isRemote) {
+        await api.sftpMkdir(sessionId, `${remotePath}/${inputValue}`);
+        api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+        toastSuccess(t('sftp.toast.folder_created'), inputValue);
+      } else {
+        // Local mkdir
+        const newPath = localPath.endsWith('/') ? `${localPath}${inputValue}` : `${localPath}/${inputValue}`;
+        await mkdir(newPath, { recursive: true });
+        refreshLocalFiles();
+        toastSuccess(t('sftp.toast.folder_created'), inputValue);
+      }
+    } catch (err) {
+      console.error("New folder failed:", err);
+      toastError(t('sftp.toast.create_folder_failed'), String(err));
+    }
+    setNewFolderDialog(null);
+    setInputValue('');
+  };
+
+  const handleDrop = async (e: React.DragEvent, target: 'local' | 'remote') => {
+      e.preventDefault();
+      try {
+          const data = JSON.parse(e.dataTransfer.getData('application/json'));
+          const { files, source, basePath } = data;
+          
+          if (source === target) return; // Ignore self-drop
+
+          if (source === 'local' && target === 'remote') {
+              await handleTransfer(files, 'upload', basePath);
+          } else if (source === 'remote' && target === 'local') {
+              await handleTransfer(files, 'download', basePath);
+          }
+      } catch (err) {
+          console.error("Drop failed:", err);
+      }
+  };
+
+  const handlePreview = async (file: FileInfo) => {
+      setPreviewLoading(true);
+      try {
+          const fullPath = `${remotePath}/${file.name}`;
+          const content = await api.sftpPreview(sessionId, fullPath);
+          
+          // Handle all response types from backend
+          if ('TooLarge' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'too-large',
+                  data: '',
+                  fileSize: content.TooLarge.size,
+                  maxSize: content.TooLarge.max_size,
+                  recommendDownload: content.TooLarge.recommend_download,
+              });
+              return;
+          }
+          
+          if ('Unsupported' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'unsupported',
+                  data: '',
+                  mimeType: content.Unsupported.mime_type,
+                  reason: content.Unsupported.reason,
+              });
+              return;
+          }
+          
+          if ('Text' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'text',
+                  data: content.Text.data,
+                  mimeType: content.Text.mime_type || undefined,
+                  language: content.Text.language,
+              });
+              return;
+          }
+          
+          if ('Image' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'image',
+                  data: content.Image.data,
+                  mimeType: content.Image.mime_type,
+              });
+              return;
+          }
+          
+          if ('Video' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'video',
+                  data: content.Video.data,
+                  mimeType: content.Video.mime_type,
+              });
+              return;
+          }
+          
+          if ('Audio' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'audio',
+                  data: content.Audio.data,
+                  mimeType: content.Audio.mime_type,
+              });
+              return;
+          }
+          
+          if ('Pdf' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'pdf',
+                  data: content.Pdf.data,
+                  mimeType: content.Pdf.original_mime || 'application/pdf',
+              });
+              return;
+          }
+          
+          if ('Hex' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'hex',
+                  data: content.Hex.data,
+                  hexOffset: content.Hex.offset,
+                  hexTotalSize: content.Hex.total_size,
+                  hexHasMore: content.Hex.has_more,
+              });
+              return;
+          }
+      } catch (e) {
+          console.error("Preview failed:", e);
+          toastError(t('sftp.toast.preview_failed'), String(e));
+      } finally {
+          setPreviewLoading(false);
+      }
+  };
+
+  const handleLoadMoreHex = async () => {
+      if (!previewFile || previewFile.type !== 'hex' || !previewFile.hexHasMore) return;
+      
+      setHexLoadingMore(true);
+      try {
+          const newOffset = (previewFile.hexOffset || 0) + 16 * 1024; // 16KB chunks
+          const content = await api.sftpPreviewHex(sessionId, previewFile.path, newOffset);
+          
+          if ('Hex' in content) {
+              setPreviewFile({
+                  ...previewFile,
+                  data: previewFile.data + content.Hex.data,
+                  hexOffset: newOffset,
+                  hexHasMore: content.Hex.has_more,
+              });
+          }
+      } catch (e) {
+          console.error("Load more hex failed:", e);
+          toastError(t('sftp.toast.load_more_failed'), String(e));
+      } finally {
+          setHexLoadingMore(false);
+      }
+  };
+
+  // Handle file comparison (diff view)
+  const handleCompare = async () => {
+    if (!previewFile || previewFile.type !== 'text') return;
+    
+    // Check if local file exists with same name
+    const localFilePath = `${localPath}/${previewFile.name}`;
+    const localFileInfo = localFiles.find(f => f.name === previewFile.name);
+    
+    if (!localFileInfo || localFileInfo.file_type !== 'File') {
+      toastError(t('sftp.toast.compare_failed'), t('sftp.toast.compare_no_local'));
+      return;
+    }
+    
+    try {
+      // Read local file content
+      const { readTextFile } = await import('@tauri-apps/plugin-fs');
+      const localContent = await readTextFile(localFilePath);
+      
+      setDiffDialog({
+        localFile: { path: localFilePath, content: localContent },
+        remoteFile: { path: previewFile.path, content: previewFile.data },
+      });
+    } catch (e) {
+      console.error("Compare failed:", e);
+      toastError(t('sftp.toast.compare_failed'), String(e));
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full bg-theme-bg p-2 gap-2">
+      <div className="flex-1 flex gap-2 min-h-0">
+        {/* Local Pane */}
+        <div className="flex-1 min-w-0">
+           <FileList 
+             title={t('sftp.file_list.local')} 
+             path={localPath} 
+             files={displayLocalFiles}
+             onNavigate={handleLocalNavigate}
+             onRefresh={refreshLocalFiles}
+             active={activePane === 'local'}
+             onActivate={() => setActivePane('local')}
+             onTransfer={(files, dir) => handleTransfer(files, dir, localPath)}
+             onDelete={(files) => setDeleteConfirm({ files, isRemote: false })}
+             onRename={(name) => { setRenameDialog({ oldName: name, isRemote: false }); setInputValue(name); }}
+             onNewFolder={() => setNewFolderDialog({ isRemote: false })}
+             selected={localSelected}
+             setSelected={setLocalSelected}
+             lastSelected={localLastSelected}
+             setLastSelected={setLocalLastSelected}
+             isDragOver={localDragOver}
+             onDragOver={(e) => { e.preventDefault(); setLocalDragOver(true); }}
+             onDragLeave={() => setLocalDragOver(false)}
+             onDrop={(e) => { setLocalDragOver(false); handleDrop(e, 'local'); }}
+             filter={localFilter}
+             onFilterChange={setLocalFilter}
+             sortField={localSortField}
+             sortDirection={localSortDirection}
+             onSortChange={(field) => handleSortChange(true, field)}
+             onBrowse={handleBrowseFolder}
+             onShowDrives={platform.isWindows ? handleShowDrives : undefined}
+             isPathEditable={isLocalPathEditing}
+             pathInputValue={localPathInput}
+             onPathInputChange={(v) => { setLocalPathInput(v); setIsLocalPathEditing(true); }}
+             onPathInputSubmit={handleLocalPathSubmit}
+             t={t}
+           />
+        </div>
+
+        {/* Remote Pane */}
+        <div className="flex-1 min-w-0">
+           <FileList 
+             title={t('sftp.file_list.remote', { host: session?.host })}
+             path={remotePath}
+             files={displayRemoteFiles}
+             onNavigate={handleRemoteNavigate}
+             onRefresh={() => api.sftpListDir(sessionId, remotePath).then(setRemoteFiles)}
+             active={activePane === 'remote'}
+             onActivate={() => setActivePane('remote')}
+             onPreview={handlePreview}
+             onTransfer={(files, dir) => handleTransfer(files, dir, remotePath)}
+             onDelete={(files) => setDeleteConfirm({ files, isRemote: true })}
+             onRename={(name) => { setRenameDialog({ oldName: name, isRemote: true }); setInputValue(name); }}
+             onNewFolder={() => setNewFolderDialog({ isRemote: true })}
+             selected={remoteSelected}
+             setSelected={setRemoteSelected}
+             lastSelected={remoteLastSelected}
+             setLastSelected={setRemoteLastSelected}
+             isDragOver={remoteDragOver}
+             onDragOver={(e) => { e.preventDefault(); setRemoteDragOver(true); }}
+             onDragLeave={() => setRemoteDragOver(false)}
+             onDrop={(e) => { setRemoteDragOver(false); handleDrop(e, 'remote'); }}
+             filter={remoteFilter}
+             onFilterChange={setRemoteFilter}
+             sortField={remoteSortField}
+             sortDirection={remoteSortDirection}
+             onSortChange={(field) => handleSortChange(false, field)}
+             isPathEditable={isRemotePathEditing}
+             pathInputValue={remotePathInput}
+             onPathInputChange={(v) => { setRemotePathInput(v); setIsRemotePathEditing(true); }}
+             onPathInputSubmit={handleRemotePathSubmit}
+             isRemote={true}
+             t={t}
+           />
+        </div>
+      </div>
+      
+      {/* Drives Selection Dialog */}
+      <Dialog open={showDrivesDialog} onOpenChange={setShowDrivesDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              {t('sftp.dialogs.select_drive')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('sftp.dialogs.select_drive_desc')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-4 gap-2 py-4">
+            {availableDrives.map((drive) => (
+              <Button
+                key={drive}
+                variant="outline"
+                className="h-16 flex flex-col items-center justify-center gap-1"
+                onClick={() => handleSelectDrive(drive)}
+              >
+                <HardDrive className="h-6 w-6" />
+                <span className="text-xs font-mono">{drive}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Queue Panel */}
+      <TransferQueue sessionId={sessionId} />
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 gap-0" aria-describedby="preview-desc">
+            <DialogHeader className="px-4 py-2 border-b border-theme-border bg-theme-bg-panel flex flex-row items-center justify-between">
+                <div className="flex flex-col gap-1">
+                    <DialogTitle className="text-sm font-mono flex items-center gap-2">
+                        {previewFile?.name}
+                        {previewFile?.type === 'hex' && previewFile.hexTotalSize && (
+                            <span className="text-xs text-zinc-500">
+                                ({formatFileSize(previewFile.hexTotalSize)})
+                            </span>
+                        )}
+                        {previewFile?.language && (
+                            <span className="text-xs px-1.5 py-0.5 bg-theme-accent/20 text-theme-accent rounded">
+                                {previewFile.language}
+                            </span>
+                        )}
+                    </DialogTitle>
+                    <DialogDescription id="preview-desc" className="sr-only">{t('sftp.preview.description')}</DialogDescription>
+                </div>
+            </DialogHeader>
+            
+            {/* Preview Content Area */}
+            <div className="flex-1 overflow-auto bg-zinc-950">
+                {/* Loading State */}
+                {previewLoading && (
+                    <div className="flex items-center justify-center h-full">
+                        <RefreshCw className="h-6 w-6 animate-spin text-zinc-400" />
+                    </div>
+                )}
+                
+                {/* Text Preview with syntax highlighting */}
+                {!previewLoading && previewFile?.type === 'text' && (
+                    <pre className="p-4 font-mono text-xs text-zinc-300 whitespace-pre overflow-x-auto">
+                        <code>{previewFile.data}</code>
+                    </pre>
+                )}
+                
+                {/* Image Preview */}
+                {!previewLoading && previewFile?.type === 'image' && (
+                    <div className="flex items-center justify-center h-full p-4">
+                        <img 
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                            alt={previewFile.name}
+                            className="max-w-full max-h-full object-contain"
+                        />
+                    </div>
+                )}
+                
+                {/* Video Preview */}
+                {!previewLoading && previewFile?.type === 'video' && (
+                    <div className="flex items-center justify-center h-full p-4">
+                        <video 
+                            controls
+                            className="max-w-full max-h-full"
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                        >
+                            {t('sftp.preview.video_unsupported')}
+                        </video>
+                    </div>
+                )}
+                
+                {/* Audio Preview */}
+                {!previewLoading && previewFile?.type === 'audio' && (
+                    <div className="flex flex-col items-center justify-center h-full p-4 gap-4">
+                        <div className="text-6xl">🎵</div>
+                        <div className="text-zinc-400">{previewFile.name}</div>
+                        <audio 
+                            controls
+                            className="w-full max-w-md"
+                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                        >
+                            {t('sftp.preview.audio_unsupported')}
+                        </audio>
+                    </div>
+                )}
+                
+                {/* PDF Preview */}
+                {!previewLoading && previewFile?.type === 'pdf' && (
+                    <iframe
+                        src={`data:application/pdf;base64,${previewFile.data}`}
+                        className="w-full h-full"
+                        title={previewFile.name}
+                    />
+                )}
+                
+                {/* Hex Preview */}
+                {!previewLoading && previewFile?.type === 'hex' && (
+                    <div className="p-4">
+                        <div className="text-xs text-zinc-500 mb-2 flex items-center gap-2">
+                            <span>{t('sftp.preview.hex_view')}</span>
+                            <span>•</span>
+                            <span>{t('sftp.preview.showing_first', { size: formatFileSize((previewFile.hexOffset || 0) + 16384) })}</span>
+                            {previewFile.hexTotalSize && (
+                                <>
+                                    <span>•</span>
+                                    <span>{t('sftp.preview.total_size', { size: formatFileSize(previewFile.hexTotalSize) })}</span>
+                                </>
+                            )}
+                        </div>
+                        <pre className="font-mono text-xs text-zinc-300 whitespace-pre overflow-x-auto leading-5">
+                            {previewFile.data}
+                        </pre>
+                        {previewFile.hexHasMore && (
+                            <div className="mt-4 flex justify-center">
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    onClick={handleLoadMoreHex}
+                                    disabled={hexLoadingMore}
+                                >
+                                    {hexLoadingMore ? (
+                                        <>
+                                            <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                                            {t('sftp.preview.loading')}
+                                        </>
+                                    ) : (
+                                        t('sftp.preview.load_more')
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {/* Too Large */}
+                {!previewLoading && previewFile?.type === 'too-large' && (
+                    <div className="flex flex-col items-center justify-center h-full p-8 gap-4">
+                        <div className="text-6xl">📦</div>
+                        <div className="text-zinc-300 text-lg">{t('sftp.preview.too_large')}</div>
+                        <div className="text-zinc-500 text-sm text-center">
+                            <p>{t('sftp.preview.file_size', { size: formatFileSize(previewFile.fileSize || 0) })}</p>
+                            <p>{t('sftp.preview.preview_limit', { size: formatFileSize(previewFile.maxSize || 0) })}</p>
+                        </div>
+                        {previewFile.recommendDownload && (
+                            <p className="text-zinc-400 text-sm">{t('sftp.preview.recommend_download')}</p>
+                        )}
+                    </div>
+                )}
+                
+                {/* Unsupported */}
+                {!previewLoading && previewFile?.type === 'unsupported' && (
+                    <div className="flex flex-col items-center justify-center h-full p-8 gap-4">
+                        <div className="text-6xl">❓</div>
+                        <div className="text-zinc-300 text-lg">{t('sftp.preview.unsupported')}</div>
+                        <div className="text-zinc-500 text-sm text-center">
+                            <p>{t('sftp.preview.type', { type: previewFile.mimeType })}</p>
+                            {previewFile.reason && <p className="mt-2">{previewFile.reason}</p>}
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+            <DialogFooter className="p-2 border-t border-theme-border bg-theme-bg-panel justify-between sm:justify-between">
+                <div className="text-xs text-zinc-500 self-center px-2 truncate max-w-md">
+                    {previewFile?.path}
+                </div>
+                <div className="flex gap-2">
+                    {/* Compare button - only for text files */}
+                    {previewFile?.type === 'text' && localFiles.some(f => f.name === previewFile.name && f.file_type === 'File') && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleCompare}
+                        title={t('sftp.preview.compare_tooltip')}
+                      >
+                        <GitCompare className="h-3 w-3 mr-2" /> {t('sftp.preview.compare')}
+                      </Button>
+                    )}
+                    <Button variant="secondary" size="sm" onClick={async () => {
+                        if (!previewFile) return;
+                        try {
+                            const localDest = `${localPath}/${previewFile.name}`;
+                            await api.sftpDownload(sessionId, previewFile.path, localDest);
+                            refreshLocalFiles();
+                            setPreviewFile(null);
+                        } catch (e) {
+                            console.error("Download failed:", e);
+                        }
+                    }}>
+                        <Download className="h-3 w-3 mr-2" /> {t('sftp.preview.download')}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)}>{t('sftp.preview.close')}</Button>
+                </div>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={!!renameDialog} onOpenChange={(open) => !open && setRenameDialog(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="rename-desc">
+          <DialogHeader>
+            <DialogTitle>{t('sftp.dialogs.rename')}</DialogTitle>
+            <DialogDescription id="rename-desc">{t('sftp.dialogs.rename_desc')}</DialogDescription>
+          </DialogHeader>
+          <Input 
+            value={inputValue} 
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRenameDialog(null)}>{t('sftp.dialogs.cancel')}</Button>
+            <Button onClick={handleRename}>{t('sftp.dialogs.rename')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Folder Dialog */}
+      <Dialog open={!!newFolderDialog} onOpenChange={(open) => !open && setNewFolderDialog(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="newfolder-desc">
+          <DialogHeader>
+            <DialogTitle>{t('sftp.dialogs.new_folder')}</DialogTitle>
+            <DialogDescription id="newfolder-desc">{t('sftp.dialogs.new_folder_desc')}</DialogDescription>
+          </DialogHeader>
+          <Input 
+            value={inputValue} 
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleNewFolder()}
+            placeholder={t('sftp.dialogs.new_folder_placeholder')}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNewFolderDialog(null)}>{t('sftp.dialogs.cancel')}</Button>
+            <Button onClick={handleNewFolder}>{t('sftp.dialogs.create')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm" aria-describedby="delete-desc">
+          <DialogHeader>
+            <DialogTitle>{t('sftp.dialogs.delete')}</DialogTitle>
+            <DialogDescription id="delete-desc">
+              {t('sftp.dialogs.delete_confirm', { count: deleteConfirm?.files.length || 0 })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-32 overflow-auto text-xs text-zinc-400 bg-zinc-950 p-2 rounded">
+            {deleteConfirm?.files.map(f => <div key={f}>{f}</div>)}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('sftp.dialogs.cancel')}</Button>
+            <Button variant="destructive" onClick={handleDelete}>{t('sftp.dialogs.delete')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Conflict Dialog */}
+      <TransferConflictDialog
+        isOpen={!!conflictDialog}
+        conflicts={conflictDialog?.conflicts || []}
+        currentIndex={conflictDialog?.currentIndex || 0}
+        onResolve={processConflictResolution}
+        onCancel={() => setConflictDialog(null)}
+      />
+
+      {/* File Diff Dialog */}
+      <FileDiffDialog
+        isOpen={!!diffDialog}
+        onClose={() => setDiffDialog(null)}
+        localFile={diffDialog?.localFile || null}
+        remoteFile={diffDialog?.remoteFile || null}
+      />
+    </div>
+  );
+};

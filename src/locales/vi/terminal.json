@@ -1,0 +1,90 @@
+{
+  "terminal": {
+    "local": {
+      "title": "Terminal cục bộ",
+      "shell": "Shell: {{shell}}",
+      "shell_unknown": "Không xác định",
+      "session_ended": "Phiên đã kết thúc",
+      "exit_code": "Tiến trình thoát với mã: {{code}}",
+      "process_terminated": "Tiến trình đã kết thúc"
+    },
+    "search": {
+      "visible_buffer": "Buffer hiện tại",
+      "deep_history": "Lịch sử sâu",
+      "deep_history_tooltip": "Tìm kiếm toàn bộ lịch sử phiên (ngoài scrollback)",
+      "placeholder_active": "Tìm kiếm đầu ra terminal...",
+      "placeholder_deep": "Tìm kiếm toàn bộ lịch sử...",
+      "searching": "Đang tìm kiếm...",
+      "error": "Lỗi",
+      "no_results_history": "Không có kết quả trong lịch sử",
+      "matches_count": "{{count}} kết quả ({{ms}}ms)",
+      "no_results": "Không có kết quả",
+      "matches_exceeded": "{{count}}+ kết quả",
+      "previous_match": "Kết quả trước (Shift+Enter)",
+      "next_match": "Kết quả tiếp (Enter)",
+      "search_full_history": "Tìm kiếm toàn bộ lịch sử (Enter)",
+      "search_button": "Tìm kiếm",
+      "close": "Đóng (Esc)",
+      "case_sensitive": "Phân biệt chữ hoa",
+      "regex": "Sử dụng biểu thức chính quy",
+      "whole_word": "Khớp toàn từ",
+      "click_to_jump": "Nhấn để nhảy đến vị trí kết quả",
+      "line_number": "Dòng {{line}}",
+      "showing_first": "Hiển thị 100 kết quả đầu tiên trong {{total}} kết quả",
+      "no_matches_in_history": "Không tìm thấy kết quả trong lịch sử phiên"
+    },
+    "ai": {
+      "title": "Trợ lý AI",
+      "api_key_required": "Cần API Key",
+      "api_key_hint": "Cấu hình API key của bạn trong Cài đặt → AI để sử dụng tính năng này.",
+      "context": "Ngữ cảnh:",
+      "context_selection": "Đã chọn",
+      "context_visible": "Hiện tại",
+      "context_none": "Không có",
+      "tokens_estimate": "~{{count}} token",
+      "prompt_placeholder": "Hỏi AI để được trợ giúp với lệnh...",
+      "send_shortcut": "để gửi",
+      "close_shortcut": "để đóng",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "insert": "Chèn",
+      "execute": "Thực thi"
+    },
+    "paste": {
+      "title": "Phát hiện nhiều dòng ({{count}} dòng)",
+      "more_lines": "... {{count}} dòng nữa",
+      "confirm": "Xác nhận",
+      "cancel": "Hủy",
+      "paste": "Dán"
+    },
+    "ssh": {
+      "initialized": "Đã khởi tạo OxideTerm",
+      "connecting": "Đang kết nối đến {{user}}@{{host}}...",
+      "connected": "Đã kết nối.",
+      "reconnecting": "Đang kết nối lại đến {{user}}@{{host}}...",
+      "reconnected": "Đã kết nối lại thành công!",
+      "connection_closed": "Kết nối đã đóng.",
+      "connection_closed_code": "Kết nối đã đóng (mã: {{code}})",
+      "ws_error": "Lỗi WebSocket: {{error}}",
+      "ws_reconnect_error": "Lỗi kết nối lại WebSocket",
+      "ws_establish_failed": "Không thể thiết lập WebSocket: {{error}}",
+      "server_error": "Lỗi máy chủ: {{error}}",
+      "no_ws_url": "Không có URL WebSocket khả dụng cho phiên.",
+      "connection_lost": "[OxideTerm] Mất kết nối. Đang kết nối lại...",
+      "attempting_reconnect": "[OxideTerm] Đang cố gắng kết nối lại...",
+      "link_restored": "[OxideTerm] Đã khôi phục kết nối. Phiên shell đã reset.",
+      "connection_failed": "[OxideTerm] Kết nối thất bại vĩnh viễn.",
+      "history_match": "Khớp lịch sử (Dòng {{line}})",
+      "buffer_empty": "⚠ Buffer trống - hiển thị snapshot được cache:",
+      "buffer_rotated": "⚠ Buffer đã xoay - ngữ cảnh trực tiếp có thể không khớp. Hiển thị cache + hiện tại:",
+      "cached_match": "Kết quả được cache:",
+      "current_line": "Dòng hiện tại tại vị trí {{index}}:",
+      "fetch_context_failed": "⚠ Không thể lấy ngữ cảnh - hiển thị snapshot được cache:"
+    },
+    "standby": {
+      "connection_lost": "Mất kết nối",
+      "reconnecting": "Đang kết nối lại...",
+      "input_locked": "Đầu vào bị khóa trong quá trình kết nối lại"
+    }
+  }
+}

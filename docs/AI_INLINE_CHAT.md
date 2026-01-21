@@ -1,0 +1,365 @@
+# AI 内联终端助手
+
+> 直接在终端中与 AI 对话，获取命令建议、错误诊断和代码解释。
+
+## 🎯 功能概览
+
+AI 内联助手为您的终端体验带来智能增强：
+
+- **🔍 上下文感知**：自动捕获选中文本或可见终端输出作为对话上下文
+- **💬 流式响应**：实时显示 AI 生成的内容，无需等待
+- **🔒 隐私优先**：所有请求直接从本地发起，API Key 存储在系统钥匙串
+- **🌐 OpenAI 兼容**：支持 OpenAI、Ollama、DeepSeek、OneAPI 等任意兼容端点
+- **📋 非破坏性输出**：AI 建议仅作预览，您可选择插入、执行或复制
+
+---
+
+## 🚀 快速开始
+
+### 1. 启用 AI 功能
+
+首次使用需要在设置中启用 AI 功能：
+
+1. 打开设置
+2. 切换到 **AI** 标签页
+3. 启用 **Enable AI Capabilities** 开关
+4. 阅读并确认隐私声明
+
+### 2. 配置 API 端点
+
+配置您的 AI 服务提供商：
+
+```
+Base URL: https://api.openai.com/v1  (默认)
+Model:    gpt-4o-mini                 (推荐)
+API Key:  sk-...                      (存储在本地加密保险箱)
+```
+
+**支持的服务提供商**：
+- **OpenAI** - `https://api.openai.com/v1`
+- **Ollama** - `http://localhost:11434/v1`
+- **DeepSeek** - `https://api.deepseek.com/v1`
+- **OneAPI** - 您的自定义网关地址
+
+### 3. 开始使用
+
+在任意终端窗口中：
+
+1. 按下 **`Ctrl+Shift+I`** (Windows)、**`Ctrl+I`** (Linux) 或 **`⌘I`** (macOS)
+2. 在弹出的 Overlay 面板中输入您的问题
+3. AI 会根据当前上下文生成响应
+
+---
+
+## 💡 使用场景
+
+### 场景 1：命令错误诊断
+
+```bash
+$ git push origin mainn
+fatal: 'mainn' does not match any known branch
+```
+
+**操作**：
+1. 选中错误输出
+2. 按 `Ctrl+I`
+3. 输入："这个错误是什么意思？"
+
+**AI 响应**：
+> "您尝试推送到名为 'mainn' 的分支，但该分支不存在。正确的分支名可能是 'main'。请使用：`git push origin main`"
+
+**一键执行**：点击"Execute"按钮直接执行建议的命令
+
+---
+
+### 场景 2：命令生成
+
+**操作**：
+1. 按 `Ctrl+I`
+2. 输入："查找所有大于 100MB 的文件"
+
+**AI 响应**：
+```bash
+find . -type f -size +100M -exec ls -lh {} \; | awk '{ print $9 ": " $5 }'
+```
+
+**一键插入**：点击"Insert"按钮将命令插入到终端（但不执行）
+
+---
+
+### 场景 3：日志分析
+
+```bash
+$ npm run build
+...
+ERROR in ./src/index.js 15:12
+Module not found: Error: Can't resolve 'react-dom/client'
+```
+
+**操作**：
+1. 按 `Ctrl+I`（自动捕获可见缓冲区）
+2. 输入："如何修复？"
+
+**AI 响应**：
+> "缺少 `react-dom` 依赖。请运行：`npm install react-dom`"
+
+---
+
+## 🎨 Overlay 界面
+
+```
+┌────────────────────────────────────────────────────────┐
+│ AI Inline Chat                                    [×]  │
+├────────────────────────────────────────────────────────┤
+│  Context: ● Selection  ○ Visible Buffer               │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ 您的问题...                                       │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ AI Response:                                     │ │
+│  │                                                  │ │
+│  │ 根据错误信息，您需要...                          │ │
+│  │                                                  │ │
+│  │ ```bash                                          │ │
+│  │ npm install react-dom                            │ │
+│  │ ```                                              │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                        │
+│  [Insert]  [Execute]  [Copy]               Tokens: 245│
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ⚙️ 上下文策略
+
+AI 助手支持两种上下文模式：
+
+### 1. Selection（选中文本）
+
+- **触发**：当您在终端中选中文本时
+- **优先级**：最高
+- **用途**：针对特定错误消息或命令输出提问
+
+**示例**：
+```bash
+# 选中这行错误
+command not found: kubectl
+```
+AI 可以识别具体问题并提供精准建议。
+
+---
+
+### 2. Visible Buffer（可见缓冲区）
+
+- **触发**：未选中文本时自动使用
+- **范围**：当前屏幕可见的终端输出（默认最多 120 行）
+- **用途**：分析完整的命令执行过程和上下文
+
+**示例**：
+```bash
+$ docker build -t myapp .
+Step 1/5 : FROM node:18
+ ---> Pulling from library/node
+...
+ERROR: failed to solve: node:18: not found
+```
+AI 可以看到整个构建过程，提供更全面的解决方案。
+
+---
+
+## 🔒 隐私与安全
+
+### 数据传输
+
+- ✅ **本地发起请求**：所有 API 调用直接从您的本地机器发起
+- ✅ **无中转服务器**：OxideTerm 不运行任何中转代理
+- ✅ **上下文可控**：仅发送您选中的文本或可见缓冲区
+
+### API Key 存储
+
+- ✅ **本地加密保险箱**：API Key 存储在本地数据目录的 `ai.vault` 文件中
+  - 使用基于机器指纹（Hostname + Username）的 XOR 混淆加密
+  - 绑定到当前设备，无法直接复制到其他机器使用
+  - 避免了开发模式下系统钥匙串的签名问题
+- ❌ **绝不落盘**：API Key 不会写入配置文件或 localStorage
+- ❌ **不进入日志**：API Key 不会出现在任何日志中
+
+### 上下文限制
+
+您可以配置上下文上限以控制成本：
+
+- **最大字符数**：默认 8,000 字符（约 2,000 tokens）
+- **可见行数**：默认 120 行
+- **Token 估算**：实时显示，防止意外高额费用（是估算，未引入tokenizer）
+
+---
+
+## 🎛️ 高级配置
+
+### 设置位置
+
+设置 → AI 标签页
+
+### 可配置项
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| **Enable AI** | `false` | 全局开关，首次启用需确认 |
+| **Base URL** | `https://api.openai.com/v1` | API 端点地址 |
+| **Model** | `gpt-4o-mini` | 使用的模型 |
+| **API Key** | (空) | 存储在系统钥匙串 |
+| **Max Characters** | `8000` | 最大上下文字符数 |
+| **Visible Lines** | `120` | 可见缓冲区行数 |
+
+### 使用自托管 Ollama
+
+```
+Base URL: http://localhost:11434/v1
+Model:    llama3.2
+API Key:  (留空，Ollama 不需要)
+```
+
+### 使用 DeepSeek
+
+```
+Base URL: https://api.deepseek.com/v1
+Model:    deepseek-chat
+API Key:  sk-... (从 DeepSeek 控制台获取)
+```
+
+---
+
+## 🔧 操作按钮
+
+AI 响应面板提供三个操作按钮：
+
+### Insert（插入）
+
+- 将 AI 建议的命令**插入**到终端输入框
+- **不会自动执行**
+- 您可以在执行前检查和修改命令
+
+### Execute（执行）
+
+- 直接在终端中**执行** AI 建议的命令
+- ⚠️ 仅在您完全信任 AI 建议时使用
+- 建议用于简单的只读命令（如 `ls`, `cat`）
+
+### Copy（复制）
+
+- 将 AI 响应复制到剪贴板
+- 适用于需要粘贴到其他应用的场景
+
+---
+
+## 📊 Token 估算
+
+Overlay 底部实时显示 Token 消耗估算：
+
+```
+Tokens: 245  (约 $0.0001 @ gpt-4o-mini)
+```
+
+**估算方式**：
+- 简化算法：~4 个字符 = 1 token
+- 对于 GPT 模型足够准确（±10%）
+- 帮助您控制 API 成本
+
+---
+
+## ❓ 常见问题
+
+### Q: 支持哪些 AI 模型？
+
+A: 任何兼容 OpenAI Chat Completions API 的模型，包括：
+- OpenAI GPT 系列（gpt-4, gpt-3.5-turbo, gpt-4o-mini）
+- Anthropic Claude（通过代理）
+- 本地模型（Ollama, LM Studio）
+- 国内厂商（DeepSeek, 通义千问等，通过 OneAPI）
+
+---
+
+### Q: API Key 是否安全？
+
+A: 是的。API Key 存储在本地加密保险箱 (`ai.vault`) 中：
+- 使用机器指纹进行加密混淆
+- 防止明文存储在配置文件中
+- 仅限本机读取
+
+OxideTerm 自身无法访问其他应用的 API Key，反之亦然。
+
+---
+
+### Q: 如何禁用 AI 功能？
+
+A: 
+1. 打开设置 → AI 标签页
+2. 关闭 **Enable AI Capabilities** 开关
+3. Overlay 快捷键将不再响应
+
+---
+
+### Q: 可以使用免费的本地 AI 模型吗？
+
+A: 可以！推荐使用 Ollama：
+
+1. 安装 Ollama：`brew install ollama` (macOS)
+2. 拉取模型：`ollama pull llama3.2`
+3. 配置 Base URL：`http://localhost:11434/v1`
+4. Model：`llama3.2`
+5. API Key：留空
+
+---
+
+### Q: 为什么响应速度慢？
+
+A: 可能的原因：
+- **网络延迟**：OpenAI API 服务器可能较慢，考虑使用 Ollama 本地模型
+- **模型选择**：`gpt-4` 比 `gpt-3.5-turbo` 慢，`gpt-4o-mini` 速度最快
+- **上下文过大**：减少 `Max Characters` 配置值
+
+---
+
+### Q: 会发送我的终端历史吗？
+
+A: **不会**。仅发送：
+- 您主动选中的文本
+- 或当前屏幕可见的内容（最多 120 行）
+
+完整的滚动缓冲区（可能有数万行）不会被发送。
+
+---
+
+## 🛣️ 未来计划
+
+- [ ] **Sidebar 对话面板**：持久化对话历史
+- [ ] **Command Context 抽取**：自动识别最后一条命令及其输出
+- [ ] **精确 Tokenizer**：使用 tiktoken 进行精确 token 计数
+- [ ] **多轮对话**：在 Overlay 中支持连续追问
+- [ ] **代码高亮**：AI 返回的代码块语法高亮
+
+---
+
+## 📝 快捷键参考
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl+I` / `⌘I` | 打开 AI Inline Panel |
+| `Esc` | 关闭 Overlay |
+| `Ctrl+Enter` / `⌘Enter` | 发送问题（在输入框中） |
+
+---
+
+## 🙏 致谢
+
+AI 内联助手的设计灵感来自：
+- [GitHub Copilot](https://github.com/features/copilot) - 代码补全
+- [Cursor AI](https://cursor.sh/) - 编辑器内 AI 对话
+- [Warp Terminal](https://www.warp.dev/) - AI 命令建议
+
+---
+
+*文档版本: v1.1.0 | 最后更新: 2026-01-19*

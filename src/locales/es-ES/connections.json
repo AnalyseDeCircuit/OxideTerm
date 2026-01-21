@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "Conectando...",
+      "active": "Activo",
+      "idle": "Inactivo",
+      "disconnecting": "Desconectando...",
+      "disconnected": "Desconectado",
+      "error": "Error: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "Conexión perdida - Reconectando...",
+      "connection_closed": "Conexión cerrada"
+    },
+    "toast": {
+      "close_terminal_failed": "Error al cerrar terminal antigua",
+      "proxy_chain_established": "Conexión de cadena proxy establecida",
+      "proxy_chain_desc": "Profundidad de cadena {{depth}}. Topología sincronizada."
+    },
+    "time": {
+      "just_now": "Ahora mismo",
+      "mins_ago": "hace {{count}} min",
+      "hrs_ago": "hace {{count}} h"
+    },
+    "panel": {
+      "title": "Pool de conexiones",
+      "description": "Gestionar conexiones SSH activas y configuración de keep-alive",
+      "refresh": "Actualizar",
+      "no_connections": "No hay conexiones SSH activas",
+      "no_connections_hint": "Las nuevas conexiones aparecerán aquí",
+      "terminals": "{{count}} terminales",
+      "sftp": "{{count}} SFTP",
+      "forwards": "{{count}} reenvíos",
+      "created": "Creada: {{time}}",
+      "idle_hint": "Inactivo - {{keepAlive}}",
+      "keep_alive_enabled": "Keep-alive",
+      "disconnect_in": "Desconectar en 30 min"
+    },
+    "keep_alive": {
+      "enable_tooltip": "Habilitar keep-alive (nunca desconectar)",
+      "disable_tooltip": "Deshabilitar keep-alive (desconectar después de 30 min inactivo)",
+      "legend_enabled": "Keep-alive: sin desconexión automática",
+      "legend_disabled": "Estándar: desconexión automática después de 30 min inactivo"
+    },
+    "monitor": {
+      "title": "Pool de conexiones",
+      "loading": "Cargando estadísticas...",
+      "idle_timeout": "Inactivo: {{min}} min",
+      "capacity": "Capacidad: {{capacity}}",
+      "active": "Activo",
+      "idle": "Inactivo",
+      "reconnecting": "Reconectando",
+      "link_down": "Enlace caído",
+      "terminals": "Terminales",
+      "sftp": "SFTP",
+      "forwards": "Reenvíos",
+      "summary": "Total: {{total}} conexiones • Referencias: {{refs}}",
+      "live": "EN VIVO"
+    }
+  }
+}

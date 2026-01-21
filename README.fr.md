@@ -1,0 +1,319 @@
+<p align="center">
+  <img src="src-tauri/icons/icon.ico" alt="OxideTerm" width="128" height="128">
+</p>
+
+<h1 align="center">⚡ OxideTerm</h1>
+
+<p align="center">
+  <strong>Moteur de Terminal Universel en Rust</strong>
+  <br>
+  <em>Évolué d'un connecteur distant vers une solution terminal multiplateforme</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
+  <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
+  <img src="https://img.shields.io/badge/tauri-2.0-purple" alt="Tauri">
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.fr.md">Français</a>
+</p>
+
+---
+
+## 📖 Évolution Fondamentale
+
+OxideTerm v1.1.0 représente une refonte architecturale complète. Nous ne sommes plus seulement un client SSH, mais un **moteur de terminal** avec près de **50 000 lignes** de code Rust + TypeScript méticuleusement conçu.
+
+### ⚙️ Percée Backend : Terminal Local & Modèle de Concurrence
+Nous avons introduit un support de terminal local basé sur `portable-pty`, résolvant complètement les défis de concurrence dans le runtime async de Rust :
+- **Encapsulation Thread-Safe** : Envelopper `MasterPty` non-`Sync` avec `std::sync::Mutex` et implémenter manuellement le trait `unsafe impl Sync` pour construire un `PtyHandle` thread-safe.
+- **Threads I/O Dédiés** : Allocation de handles de lecture/écriture indépendants (`Arc<Mutex<Box<dyn Read + Send>>>`) pour chaque session PTY garantit que les I/O bloquantes n'affectent jamais la boucle d'événements principale de Tokio.
+- **Cohérence Multiplateforme** : Unification des différences sous-jacentes entre macOS/Linux (PTY) et Windows (ConPTY), exposant une interface de streaming standardisée.
+
+### 🧩 Architecture Noyau : Feature Gating
+Pour supporter les futures constructions mobiles (iOS/Android ne supportent pas le PTY natif), nous avons refactoré le système de build :
+- **Build Modulaire** : La fonctionnalité PTY est encapsulée dans la feature `local-terminal`.
+- **Compilation à la Demande** : Utilisez `cargo build --no-default-features` pour supprimer complètement les dépendances `portable-pty`, générant un noyau léger contenant seulement les fonctionnalités SSH/SFTP (ouvrant la voie au portage mobile).
+
+### ⚛️ Évolution Frontend : Architecture Dual Store
+Face aux besoins de gestion d'état drastiquement différents entre sessions locales et distantes, le frontend adopte un modèle **Dual Store** :
+- **AppStore** : Se concentre sur les connexions SSH distantes, les arbres de sessions, les règles de redirection de ports et autres états réseau complexes.
+- **LocalTerminalStore** : Dédié à la gestion du cycle de vie des instances PTY locales, la surveillance des processus Shell et les pipelines I/O indépendants.
+- **Couche de Vue Unifiée** : Malgré différentes sources d'état, la logique de rendu est unifiée via le composant `TerminalView` au niveau UI.
+
+---
+
+## 🏗️ Architecture Système
+
+v1.1.0 emploie une architecture de flux de données hybride qui route intelligemment le trafic selon le type de session :
+
+```mermaid
+flowchart TB
+    subgraph Frontend ["Couche Frontend (React 19)"]
+        UI[Interface Utilisateur]
+        
+        subgraph Stores ["Gestion d'État Dual Store"]
+            RemoteStore["AppStore (Zustand)<br/>Sessions Distantes"]
+            LocalStore["LocalTerminalStore (Zustand)<br/>PTYs Locaux"]
+        end
+        
+        Terminal["xterm.js + WebGL"]
+        
+        UI --> RemoteStore
+        UI --> LocalStore
+        RemoteStore --> Terminal
+        LocalStore --> Terminal
+    end
+
+    subgraph Backend ["Couche Backend (Rust / Tauri 2.0)"]
+        Router["Routeur de Commandes IPC"]
+        
+        subgraph Features ["Feature Gates"]
+            LocalFeat["Feature: local-terminal"]
+        end
+
+        subgraph RemoteEngine ["Moteur Distant (SSH)"]
+            WS["Pont WebSocket"]
+            SSH["Client russh (Rust Pur)"]
+            Pool["Pool de Connexions"]
+        end
+
+        subgraph LocalEngine ["Moteur Local (PTY)"]
+            PtyMgr["Gestionnaire PTY"]
+            PtyHandle["PtyHandle Thread-Safe<br/>(Wrapper Arc+Mutex)"]
+            NativePTY["portable-pty (Natif/ConPTY)"]
+        end
+    end
+
+    %% Flux de Données
+    LocalStore <-->|Tauri IPC Binaire| PtyMgr
+    PtyMgr --> PtyHandle --> NativePTY
+    
+    RemoteStore <-->|Tauri IPC Contrôle| Router
+    Terminal <-->|WebSocket Flux Binaire| WS
+    WS <--> SSH <--> Pool
+    
+    LocalFeat -.-> LocalEngine
+    
+    style Frontend fill:#e1f5ff,stroke:#01579b
+    style Backend fill:#fff3e0,stroke:#e65100
+    style LocalEngine fill:#e8f5e9,stroke:#2e7d32
+    style RemoteEngine fill:#fce4ec,stroke:#c2185b
+```
+
+---
+
+## 🔥 Capacités Fondamentales Différenciées
+
+OxideTerm ne fait aucun compromis dans le polissage des détails sous-jacents, offrant une expérience de qualité industrielle.
+
+### 🛡️ Pool de Connexions Intelligent
+Nous avons construit un `SshConnectionRegistry` basé sur le comptage de références implémentant un véritable SSH Multiplexing :
+- **Réutilisation de Connexion** : Plusieurs fenêtres de terminal, tâches de transfert SFTP et règles de redirection de ports partagent une seule connexion SSH physique—poignée de main une seule fois.
+- **Isolation des Ressources** : Chaque connexion physique a sa propre machine d'état et son ordonnanceur de tâches, fonctionnant indépendamment.
+- **Cycle de Vie Intelligent** : Gère automatiquement le timeout d'inactivité (30 min) et le keep-alive (intervalle de 15s). Pendant les fluctuations réseau, entre automatiquement en mode verrouillage d'entrée et tente une reconnexion transparente, maximisant la préservation du contexte.
+
+### 📡 ProxyJump Conscient de la Topologie
+- **Sauts en Chaîne Illimitée** : Supporte une cascade de profondeur arbitraire comme `Client -> Saut A -> Saut B -> Cible`.
+- **Graphe de Routage Intelligent** : Parse automatiquement SSH Config, construit la topologie de connexion et calcule les chemins optimaux.
+- **Réutilisation de Nœuds Logiques** : Les nœuds de saut peuvent eux-mêmes fonctionner comme des sessions indépendantes et être réutilisés par les connexions en aval, réduisant drastiquement la surcharge de poignée de main redondante.
+
+### 🪟 Optimisation Profonde Windows
+- **Intégration ConPTY Native** : Abandonnant le WinPTY obsolète, invoquant directement l'API Windows Pseudo Console (ConPTY) pour un support parfait de TrueColor et des séquences d'échappement ANSI.
+- **Détection Intelligente de Shell** : Moteur de scan intégré détectant automatiquement **PowerShell 7 (pwsh)**, **Git Bash**, **WSL2** et CMD traditionnel via le Registre et PATH.
+- **Expérience Native** : Adaptations spéciales pour le gestionnaire de fenêtres Windows, avec Rust gérant directement les événements de fenêtre—vitesse de réponse dépassant largement les applications Electron.
+
+### 🔐 Chiffrement de Niveau Militaire
+- **Format de Fichier .oxide** :
+  - **ChaCha20-Poly1305 AEAD** : Chiffrement authentifié empêchant les attaques de falsification et de replay.
+  - **Argon2id KDF** : Fonction de dérivation de clé (coût mémoire 256MB, 4 itérations) résistant au brute-force GPU.
+  - **Somme de Contrôle SHA-256** : Vérification d'intégrité double détectant toute corruption de données.
+  - **Design Git-Friendly** : Métadonnées stockées en clair, supportant le déchiffrement hors ligne.
+
+### 📊 Tampon de Défilement Backend
+- **Persistance Haute Capacité** : **100 000 lignes** par défaut de sortie terminal, sérialisable sur disque (format MessagePack).
+- **Recherche Haute Performance** : `spawn_blocking` isole les tâches de recherche regex, évitant de bloquer le runtime Tokio.
+- **Efficacité Mémoire** : Design de tampon circulaire évacuant automatiquement les données les plus anciennes, gardant l'utilisation mémoire contrôlée.
+
+### 🔀 Redirection de Ports Complète
+- **Redirection Locale (-L)** : Mapper les services distants vers les ports locaux (ex : débogage de base de données).
+- **Redirection Distante (-R)** : Exposer les services locaux aux réseaux distants (ex : pénétration intranet).
+- **Proxy Dynamique (-D)** : Implémentation complète du protocole SOCKS5 supportant IPv4/IPv6/résolution de domaine, associée aux canaux `direct-tcpip` pour un proxy transparent.
+- **Surveillance de Santé** : Stats en temps réel sur les connexions, le débit et les sessions actives.
+
+### 🤖 Assistant Terminal AI Inline
+- **API Compatible OpenAI** : Supporte OpenAI, Ollama, DeepSeek, OneAPI et tous les endpoints compatibles.
+- **Capture de Contexte** : Capture automatiquement le tampon visible ou le texte sélectionné comme contexte AI.
+- **Réponse en Streaming** : Affichage en temps réel du contenu généré via Server-Sent Events (SSE).
+- **Priorité à la Vie Privée** : Clés API stockées dans le trousseau système (macOS Keychain / Windows Credential Manager), jamais routées via des tiers.
+
+---
+
+## 🛠️ Stack Technique (v1.1.0)
+
+| Couche | Technologie Clé | Description |
+|--------|----------------|-------------|
+| **Core** | **Tauri 2.0** | Framework d'application multiplateforme nouvelle génération |
+| **Runtime** | **Tokio** | Runtime Rust async complet, associé à `parking_lot` pour l'optimisation de verrouillage |
+| **Noyau Local** | **portable-pty 0.8** | Abstraction PTY multiplateforme implémentant le modèle de threading `Sync` + `Send` |
+| **Noyau Distant** | **russh 0.49** | Implémentation SSH en Rust pur, sans dépendances C, sécurisé en mémoire |
+| **SFTP** | **russh-sftp 2.0** | Protocole de Transfert de Fichiers SSH |
+| **WebSocket** | **tokio-tungstenite 0.24** | Implémentation WebSocket async |
+| **Frontend** | **React 19** | Développement UI type-safe avec TypeScript 5.3 |
+| **État** | **Zustand** | Design d'architecture Dual Store, séparation des préoccupations |
+| **Rendu** | **xterm.js 5 + WebGL** | Rendu accéléré GPU, sortie haute fréquence 60fps+ |
+| **Protocole** | **WebSocket / IPC** | Distant via WS direct, local via canal IPC Tauri efficace |
+| **Chiffrement** | **ChaCha20-Poly1305 + Argon2** | Chiffrement authentifié AEAD + dérivation de clé à dureté mémoire |
+| **Persistance** | **redb 2.1** | Base de données embarquée pour le stockage de configuration |
+| **Sérialisation** | **MessagePack (rmp-serde)** | Sérialisation binaire efficace |
+
+---
+
+## ✨ Points Forts des Fonctionnalités
+
+### 🚀 Expérience Terminal Hybride
+- **Shell Local à Latence Nulle** : Interaction IPC directe avec les processus Shell locaux, latence quasi nulle.
+- **SSH Distant Haute Performance** : Transmission de flux binaire basée sur WebSocket, contournant la surcharge HTTP traditionnelle.
+- **Conscience Environnementale Intelligente** : Détecte automatiquement les shells installés comme `zsh`, `bash`, `fish`, `powershell`.
+- **Héritage Environnemental Complet** : Hérite de PATH utilisateur, HOME et autres variables d'environnement, correspondant à l'expérience du terminal système.
+
+### 🔐 Méthodes d'Authentification Diverses
+- **Auth par Mot de Passe** : Stockage sécurisé dans le trousseau système.
+- **Auth par Clé** : Supporte RSA / Ed25519 / ECDSA.
+- **Détection de Clé par Défaut** : Scanne automatiquement `~/.ssh/id_*`.
+- **Auth par Certificat** : Certificats OpenSSH (expérimental).
+- **2FA/MFA** : Authentification interactive Keyboard-Interactive (expérimental).
+- **Known Hosts** : Vérification et gestion des clés d'hôte.
+
+### 📦 Gestion de Fichiers Avancée
+- **Protocole SFTP v3** : Gestionnaire de fichiers double panneau complet.
+- **Transferts par Glisser-Déposer** : Supporte les opérations par lot multi-fichiers et dossiers.
+- **Aperçu Intelligent** :
+  - 🎨 Images (JPEG/PNG/GIF/WebP)
+  - 🎬 Vidéos (MP4/WebM)
+  - 💻 Coloration syntaxique de code (100+ langages)
+  - 📄 Documents PDF
+  - 🔍 Visualiseur Hex (fichiers binaires)
+- **Suivi de Progression** : Vitesse de transfert en temps réel, barres de progression, ETA.
+
+### 🌐 Optimisation Réseau
+- **Architecture Dual-Plane** : Séparation du plan de données (direct WebSocket) et du plan de contrôle (IPC Tauri).
+- **Protocole Binaire Personnalisé** : `[Type:1][Longueur:4][Charge:n]`, pas de surcharge de sérialisation JSON.
+- **Contrôle de Contre-Pression** : Empêche le débordement mémoire.
+- **Reconnexion Auto** : Réessai avec recul exponentiel, jusqu'à 5 tentatives.
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Exigences
+- **Rust** : 1.75+ (requis)
+- **Node.js** : 18+
+- **Outils de Build** : 
+  - macOS : XCode Command Line Tools
+  - Windows : Visual Studio C++ Build Tools
+  - Linux : build-essential
+
+### Build de Développement
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/AnalyseDeCircuit/OxideTerm.git
+cd OxideTerm
+
+# Installer les dépendances
+npm install
+
+# Démarrer l'environnement de dev complet (avec support PTY local)
+npm run tauri dev
+
+# Construire la version production
+npm run tauri build
+
+# Construire le noyau optimisé mobile (supprimer PTY)
+cd src-tauri
+cargo build --no-default-features --release
+```
+
+### Exigences Système
+- **Mémoire** : Recommandé 4GB+ disponible
+- **Stockage** : Au moins 500MB d'espace disponible
+- **Réseau** : Support de connexion WebSocket
+
+---
+
+## 🗺️ Feuille de Route
+
+### ✅ Complété (v1.1.0)
+- [x] Support de terminal local (PTY)
+- [x] Pool de connexions SSH & multiplexage
+- [x] Mécanisme de reconnexion auto
+- [x] ProxyJump bastion illimité
+- [x] Redirection de ports (local/distant/dynamique)
+- [x] Gestion de fichiers SFTP & aperçu
+- [x] Export chiffré .oxide
+- [x] Tampon de défilement backend
+- [x] Assistant terminal AI
+- [x] Auth Keyboard-Interactive (expérimental)
+
+### 🚧 En Cours
+- [ ] Palette de commandes (`⌘K`)
+- [ ] Recherche & filtrage de sessions
+
+### 📋 Planifié
+- [ ] Transfert SSH Agent (en attente de l'implémentation russh upstream)
+- [ ] Fractionnement de terminal
+- [ ] Enregistrement & lecture de sessions
+- [ ] Transfert X11
+- [ ] Adaptation mobile (iOS/Android)
+
+---
+
+## 🔒 Considérations de Sécurité
+
+### Stockage des Mots de Passe
+- **Fichiers de Config Locaux** : Configurations de connexion sauvegardées dans `~/.oxideterm/connections.json` (Windows : `%APPDATA%\OxideTerm`)
+- **Stockage Séparé des Mots de Passe** : Les fichiers de config stockent uniquement les IDs de référence du trousseau (comme `oxideterm-{uuid}`), les mots de passe réels stockés dans le trousseau système (macOS Keychain / Windows Credential Manager / Linux libsecret)
+- **Double Protection** : Même si les fichiers de config fuient, les attaquants ne peuvent pas accéder aux vrais mots de passe
+
+### Clés d'Hôte SSH
+- Vérification d'empreinte d'hôte lors de la première connexion
+- Stocké dans `~/.ssh/known_hosts`
+
+### Sécurité Mémoire
+- Utilise le crate `zeroize` pour effacer en toute sécurité les données sensibles
+- Le compilateur Rust garantit la sécurité mémoire, éliminant les débordements de tampon
+
+---
+
+## 📝 Licence
+
+Ce projet est sous licence **PolyForm Noncommercial 1.0.0**.
+
+- ✅ **Usage Personnel/Non-Lucratif** : Complètement gratuit.
+- 🚫 **Usage Commercial** : Nécessite une licence commerciale.
+- ⚖️ **Défense de Brevet** : Inclut une clause de rétorsion de brevet (Clause Nucléaire) pour protéger l'écosystème open-source.
+
+Texte complet de la licence : https://polyformproject.org/licenses/noncommercial/1.0.0/
+
+---
+
+## 🙏 Remerciements
+
+Remerciements spéciaux à ces projets open-source :
+
+- [russh](https://github.com/warp-tech/russh) - Implémentation SSH en Rust pur
+- [portable-pty](https://github.com/wez/wezterm/tree/main/pty) - Abstraction PTY multiplateforme
+- [Tauri](https://tauri.app/) - Framework d'application multiplateforme
+- [xterm.js](https://xtermjs.org/) - Émulateur de terminal Web
+- [Radix UI](https://www.radix-ui.com/) - Composants UI accessibles
+
+---
+
+<p align="center">
+  <sub>Construit avec ❤️ en utilisant Rust et Tauri | 50 000+ Lignes de Code</sub>
+</p>

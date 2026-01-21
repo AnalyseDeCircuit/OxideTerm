@@ -1,0 +1,33 @@
+{
+  "sidebar": {
+    "actions": {
+      "expand": "Expandir barra lateral",
+      "collapse": "Recolher barra lateral",
+      "new_local_terminal": "Novo terminal local",
+      "open_pylance_guide": "Abrir guia do Pylance"
+    },
+    "panels": {
+      "sessions": "Sessões ativas",
+      "saved": "Conexões salvas",
+      "saved_title": "Conexões salvas",
+      "sftp": "SFTP",
+      "sftp_sessions": "Sessões SFTP",
+      "forwards": "Encaminhamento de portas",
+      "forwards_title": "Encaminhamento de portas",
+      "connection_pool": "Pool de conexões",
+      "connection_monitor": "Monitor de conexão",
+      "connection_matrix": "Matriz de conexões",
+      "ai_assistant": "Assistente IA (em breve)",
+      "settings": "Configurações",
+      "no_saved_connections": "Nenhuma conexão salva",
+      "no_active_sessions": "Nenhuma sessão ativa",
+      "no_connected_sessions": "Nenhuma sessão conectada",
+      "import_tooltip": "Importar de arquivo .oxide",
+      "export_tooltip": "Exportar para arquivo .oxide"
+    },
+    "tooltips": {
+      "settings": "Configurações",
+      "ai_hint": "Assistente IA (em breve) - Use Ctrl/Cmd+I no terminal"
+    }
+  }
+}

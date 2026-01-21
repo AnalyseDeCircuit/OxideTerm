@@ -1,0 +1,42 @@
+{
+  "common": {
+    "confirm": {
+      "disconnect_node": "Are you sure you want to disconnect \"{{name}}\" and all of its child nodes?",
+      "remove_node": "Are you sure you want to remove the node \"{{name}}\" and all of its child nodes?",
+      "delete_batch": "Are you sure you want to delete {{count}} connection(s)?"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "delete": "Delete"
+    },
+    "errors": {
+      "delete_failed": "Failed to delete some connections: {{message}}"
+    }
+  },
+  "layout": {
+    "empty": {
+      "title": "OxideTerm",
+      "no_sessions": "No active sessions",
+      "new_connection": "New Connection"
+    },
+    "connection_monitor": {
+      "title": "Connection Monitor"
+    },
+    "loading": "Loading..."
+  },
+  "tabbar": {
+    "offline": "Offline",
+    "cancel_reconnect": "Cancel reconnect",
+    "reconnect": "Reconnect",
+    "close_tab": "Close tab"
+  },
+  "tabs": {
+    "settings": "Settings",
+    "connection_monitor": "Connection Monitor",
+    "connection_pool": "Connection Pool",
+    "connection_matrix": "Connection Matrix",
+    "sftp_prefix": "SFTP",
+    "forwards_prefix": "Forwards"
+  }
+}

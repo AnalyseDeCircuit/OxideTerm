@@ -1,0 +1,69 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Source code
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Rust
+*.rs text eol=lf
+*.toml text eol=lf
+
+# Config files
+*.config.js text eol=lf
+*.config.ts text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Windows batch files
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Lock files - treat as binary to avoid merge conflicts
+pnpm-lock.yaml binary
+Cargo.lock binary
+
+# Linguist overrides for GitHub language statistics
+*.html linguist-detectable=false
+*.htm linguist-detectable=false
+*.css linguist-detectable=false
+docs/* linguist-documentation
+
+# Exclude fonts from language statistics (Linguist may misdetect TTF as HTML)
+*.ttf linguist-vendored
+*.otf linguist-vendored
+*.woff linguist-vendored
+*.woff2 linguist-vendored
+public/fonts/* linguist-vendored
+
+# Exclude lock files from language statistics
+pnpm-lock.yaml linguist-generated
+Cargo.lock linguist-generated
+
+# Exclude generated files
+src-tauri/gen/* linguist-generated

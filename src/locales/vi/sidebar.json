@@ -1,0 +1,33 @@
+{
+  "sidebar": {
+    "actions": {
+      "expand": "Mở rộng thanh bên",
+      "collapse": "Thu gọn thanh bên",
+      "new_local_terminal": "Terminal cục bộ mới",
+      "open_pylance_guide": "Mở hướng dẫn Pylance"
+    },
+    "panels": {
+      "sessions": "Phiên hoạt động",
+      "saved": "Kết nối đã lưu",
+      "saved_title": "Kết nối đã lưu",
+      "sftp": "SFTP",
+      "sftp_sessions": "Phiên SFTP",
+      "forwards": "Chuyển tiếp cổng",
+      "forwards_title": "Chuyển tiếp cổng",
+      "connection_pool": "Nhóm kết nối",
+      "connection_monitor": "Giám sát kết nối",
+      "connection_matrix": "Ma trận kết nối",
+      "ai_assistant": "Trợ lý AI (Sắp ra mắt)",
+      "settings": "Cài đặt",
+      "no_saved_connections": "Không có kết nối đã lưu",
+      "no_active_sessions": "Không có phiên hoạt động",
+      "no_connected_sessions": "Không có phiên đã kết nối",
+      "import_tooltip": "Nhập từ file .oxide",
+      "export_tooltip": "Xuất sang file .oxide"
+    },
+    "tooltips": {
+      "settings": "Cài đặt",
+      "ai_hint": "Trợ lý AI (Sắp ra mắt) - Sử dụng Ctrl/Cmd+I trong terminal"
+    }
+  }
+}

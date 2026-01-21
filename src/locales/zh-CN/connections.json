@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "连接中...",
+      "active": "活动",
+      "idle": "空闲",
+      "disconnecting": "断开中...",
+      "disconnected": "已断开",
+      "error": "错误: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "连接丢失 - 正在重连...",
+      "connection_closed": "连接已关闭"
+    },
+    "toast": {
+      "close_terminal_failed": "关闭旧终端失败",
+      "proxy_chain_established": "代理链连接已建立",
+      "proxy_chain_desc": "链深度 {{depth}}，拓扑已同步"
+    },
+    "time": {
+      "just_now": "刚刚",
+      "mins_ago": "{{count}} 分钟前",
+      "hrs_ago": "{{count}} 小时前"
+    },
+    "panel": {
+      "title": "连接池",
+      "description": "管理活动的 SSH 连接和保活设置",
+      "refresh": "刷新",
+      "no_connections": "无活动 SSH 连接",
+      "no_connections_hint": "新连接将出现在这里",
+      "terminals": "{{count}} 个终端",
+      "sftp": "{{count}} 个 SFTP",
+      "forwards": "{{count}} 个转发",
+      "created": "创建: {{time}}",
+      "idle_hint": "空闲 - {{keepAlive}}",
+      "keep_alive_enabled": "保持连接",
+      "disconnect_in": "30分钟后断开"
+    },
+    "keep_alive": {
+      "enable_tooltip": "启用保持连接（永不断开）",
+      "disable_tooltip": "禁用保持连接（空闲30分钟后断开）",
+      "legend_enabled": "保持连接: 永不自动断开",
+      "legend_disabled": "标准: 空闲30分钟后自动断开"
+    },
+    "monitor": {
+      "title": "连接池",
+      "loading": "加载统计中...",
+      "idle_timeout": "空闲: {{min}}分钟",
+      "capacity": "容量: {{capacity}}",
+      "active": "活动",
+      "idle": "空闲",
+      "reconnecting": "重连中",
+      "link_down": "链路断开",
+      "terminals": "终端",
+      "sftp": "SFTP",
+      "forwards": "转发",
+      "summary": "总计: {{total}} 个连接 • 引用: {{refs}}",
+      "live": "实时"
+    }
+  }
+}

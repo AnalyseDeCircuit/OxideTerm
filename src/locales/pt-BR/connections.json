@@ -1,0 +1,61 @@
+{
+  "connections": {
+    "state": {
+      "connecting": "Conectando...",
+      "active": "Ativo",
+      "idle": "Inativo",
+      "disconnecting": "Desconectando...",
+      "disconnected": "Desconectado",
+      "error": "Erro: {{error}}"
+    },
+    "events": {
+      "connection_lost_reconnecting": "Conexão perdida - Reconectando...",
+      "connection_closed": "Conexão fechada"
+    },
+    "toast": {
+      "close_terminal_failed": "Falha ao fechar terminal antigo",
+      "proxy_chain_established": "Conexão da cadeia proxy estabelecida",
+      "proxy_chain_desc": "Profundidade da cadeia {{depth}}. Topologia sincronizada."
+    },
+    "time": {
+      "just_now": "Agora mesmo",
+      "mins_ago": "{{count}} min atrás",
+      "hrs_ago": "{{count}} h atrás"
+    },
+    "panel": {
+      "title": "Pool de conexões",
+      "description": "Gerenciar conexões SSH ativas e configurações de keep-alive",
+      "refresh": "Atualizar",
+      "no_connections": "Nenhuma conexão SSH ativa",
+      "no_connections_hint": "Novas conexões aparecerão aqui",
+      "terminals": "{{count}} terminais",
+      "sftp": "{{count}} SFTP",
+      "forwards": "{{count}} encaminhamentos",
+      "created": "Criada: {{time}}",
+      "idle_hint": "Inativo - {{keepAlive}}",
+      "keep_alive_enabled": "Keep-alive",
+      "disconnect_in": "Desconectar em 30 min"
+    },
+    "keep_alive": {
+      "enable_tooltip": "Habilitar keep-alive (nunca desconectar)",
+      "disable_tooltip": "Desabilitar keep-alive (desconectar após 30 min inativo)",
+      "legend_enabled": "Keep-alive: sem desconexão automática",
+      "legend_disabled": "Padrão: desconexão automática após 30 min inativo"
+    },
+    "monitor": {
+      "title": "Pool de conexões",
+      "loading": "Carregando estatísticas...",
+      "idle_timeout": "Inativo: {{min}} min",
+      "capacity": "Capacidade: {{capacity}}",
+      "active": "Ativo",
+      "idle": "Inativo",
+      "reconnecting": "Reconectando",
+      "link_down": "Link caído",
+      "terminals": "Terminais",
+      "sftp": "SFTP",
+      "forwards": "Encaminhamentos",
+      "summary": "Total: {{total}} conexões • Referências: {{refs}}",
+      "live": "AO VIVO"
+    }
+  }
+}

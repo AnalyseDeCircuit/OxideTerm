@@ -1,0 +1,71 @@
+{
+  "forwards": {
+    "quick": {
+      "title": "クイック転送",
+      "jupyter": "Jupyter (8888)",
+      "tensorboard": "TensorBoard (6006)",
+      "vscode": "VS Code (8080)"
+    },
+    "table": {
+      "title": "アクティブな転送",
+      "type": "タイプ",
+      "local_address": "ローカルアドレス",
+      "remote_address": "リモートアドレス",
+      "status": "ステータス",
+      "actions": "アクション",
+      "no_forwards": "アクティブなポート転送がありません"
+    },
+    "type": {
+      "local": "ローカル",
+      "remote": "リモート",
+      "dynamic": "ダイナミック"
+    },
+    "status": {
+      "active": "アクティブ",
+      "stopped": "停止",
+      "failed": "失敗"
+    },
+    "actions": {
+      "new_forward": "新規転送",
+      "stop": "転送を停止",
+      "restart": "転送を再起動",
+      "edit": "転送を編集",
+      "delete": "転送を削除"
+    },
+    "form": {
+      "new_title": "新規転送ルール",
+      "edit_title": "転送ルールを編集",
+      "cancel": "キャンセル",
+      "type": "タイプ",
+      "create_forward": "転送を作成",
+      "creating": "作成中...",
+      "save_changes": "変更を保存",
+      "saving": "保存中...",
+      "type_local": "ローカル (L)",
+      "type_remote": "リモート (R)",
+      "type_dynamic": "ダイナミック (SOCKS5)",
+      "local_client": "ローカル（クライアント）",
+      "remote_server": "リモート（サーバー）",
+      "bind_address": "バインドアドレス",
+      "target_address": "ターゲットアドレス",
+      "socks5_mode": "SOCKS5プロキシモード",
+      "host_placeholder": "ホスト",
+      "port_placeholder": "ポート",
+      "skip_check": "ポート利用可能チェックをスキップ（上級者向け）",
+      "checking_port": "ポートの利用可能性を確認中...",
+      "port_required": "ポートは必須です",
+      "desc": "例: ローカル=127.0.0.1:8080, リモート=localhost:3000 → localhost:8080経由でremote:3000にアクセス"
+    },
+    "toast": {
+      "jupyter_created": "Jupyter転送が作成されました",
+      "jupyter_desc": "localhost:8888 → remote:8888",
+      "tensorboard_created": "TensorBoard転送が作成されました",
+      "tensorboard_desc": "localhost:6006 → remote:6006",
+      "vscode_created": "VS Code Server転送が作成されました",
+      "vscode_desc": "localhost:8080 → remote:8080",
+      "create_failed": "転送の作成に失敗しました",
+      "forward_updated": "転送が正常に更新されました",
+      "update_failed": "転送の更新に失敗しました"
+    }
+  }
+}
