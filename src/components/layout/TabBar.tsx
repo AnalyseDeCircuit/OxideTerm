@@ -5,6 +5,13 @@ import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { cn } from '../../lib/utils';
+import { Tab, PaneNode } from '../../types';
+
+/** Count leaf panes in a pane tree */
+function countPanes(node: PaneNode): number {
+  if (node.type === 'leaf') return 1;
+  return node.children.reduce((sum, child) => sum + countPanes(child), 0);
+}
 
 const TabIcon = ({ type }: { type: string }) => {
   const iconClass = "h-3.5 w-3.5 opacity-70";
@@ -32,7 +39,7 @@ const TabIcon = ({ type }: { type: string }) => {
 
 // Get dynamic tab title (non-hook version for use in render)
 const getTabTitle = (
-  tab: { type: string; title: string; sessionId?: string },
+  tab: Tab,
   sessions: Map<string, { name: string }>,
   t: (key: string) => string
 ): string => {
@@ -48,7 +55,29 @@ const getTabTitle = (
       return t('sidebar.panels.connection_matrix');
   }
   
-  // For session-based tabs, use session name with translated prefix
+  // Calculate pane count for terminal tabs with split panes
+  const paneCount = tab.rootPane ? countPanes(tab.rootPane) : 1;
+  const paneCountSuffix = paneCount > 1 ? ` (${paneCount})` : '';
+  
+  // For terminal tabs (may have rootPane instead of sessionId after split)
+  if (tab.type === 'terminal' || tab.type === 'local_terminal') {
+    // Get session name from sessionId if exists
+    if (tab.sessionId) {
+      const session = sessions.get(tab.sessionId);
+      const sessionName = session?.name || tab.title;
+      
+      if (tab.type === 'terminal') {
+        return sessionName + paneCountSuffix;
+      } else {
+        return tab.title + paneCountSuffix;
+      }
+    }
+    
+    // For split panes (sessionId cleared, use tab.title)
+    return tab.title + paneCountSuffix;
+  }
+  
+  // For session-based tabs (SFTP, Forwards)
   if (tab.sessionId) {
     const session = sessions.get(tab.sessionId);
     const sessionName = session?.name || tab.title;
@@ -58,10 +87,6 @@ const getTabTitle = (
         return `${t('sidebar.panels.sftp')}: ${sessionName}`;
       case 'forwards':
         return `${t('sidebar.panels.forwards')}: ${sessionName}`;
-      case 'terminal':
-        return sessionName;
-      case 'local_terminal':
-        return tab.title; // Shell name, no translation needed
     }
   }
   

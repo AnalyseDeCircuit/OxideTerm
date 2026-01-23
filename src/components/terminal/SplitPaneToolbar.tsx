@@ -61,7 +61,7 @@ export const SplitPaneToolbar: React.FC<SplitPaneToolbarProps> = ({
   return (
     <div
       className={cn(
-        'absolute top-2 right-2 z-20',
+        'absolute top-2 left-2 z-20',
         'flex items-center gap-1',
         'bg-zinc-900/80 backdrop-blur-sm rounded-md',
         'border border-zinc-700/50',
