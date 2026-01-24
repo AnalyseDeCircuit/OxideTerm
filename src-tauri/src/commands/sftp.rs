@@ -570,3 +570,55 @@ pub struct IncompleteTransferInfo {
     can_resume: bool,
 }
 
+/// Result of a successful file write operation
+#[derive(serde::Serialize)]
+pub struct WriteResult {
+    /// The new modification time of the file (Unix timestamp)
+    pub mtime: Option<u64>,
+    /// The new size of the file in bytes
+    pub size: Option<u64>,
+}
+
+/// Write text content to a remote file
+///
+/// This command is designed for the IDE mode editor.
+/// It writes UTF-8 text content directly to a remote file via SFTP.
+///
+/// # Arguments
+/// * `session_id` - The SSH session ID
+/// * `path` - The remote file path to write to
+/// * `content` - The UTF-8 text content to write
+///
+/// # Returns
+/// * `WriteResult` containing the new mtime (for sync confirmation) and file size
+#[tauri::command]
+pub async fn sftp_write_content(
+    session_id: String,
+    path: String,
+    content: String,
+    sftp_registry: State<'_, Arc<SftpRegistry>>,
+) -> Result<WriteResult, SftpError> {
+    info!("Writing content to {} for session {}", path, session_id);
+
+    let sftp = sftp_registry
+        .get(&session_id)
+        .ok_or_else(|| SftpError::NotInitialized(session_id.clone()))?;
+
+    let sftp = sftp.lock().await;
+
+    // Write the content to the file
+    sftp.write_content(&path, content.as_bytes()).await?;
+
+    // Get the new file metadata to confirm the write
+    let file_info = sftp.stat(&path).await?;
+
+    info!(
+        "Successfully wrote {} bytes to {}, modified: {}",
+        file_info.size, path, file_info.modified
+    );
+
+    Ok(WriteResult {
+        mtime: if file_info.modified > 0 { Some(file_info.modified as u64) } else { None },
+        size: Some(file_info.size),
+    })
+}

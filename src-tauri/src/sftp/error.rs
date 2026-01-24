@@ -52,6 +52,9 @@ pub enum SftpError {
 
     #[error("Resume not supported for: {0}")]
     ResumeNotSupported(String),
+
+    #[error("Write error: {0}")]
+    WriteError(String),
 }
 
 impl serde::Serialize for SftpError {

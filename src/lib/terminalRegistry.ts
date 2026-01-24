@@ -220,7 +220,7 @@ export function gatherAllPaneContexts(tabId: string, maxCharsPerPane?: number): 
     if (entry.tabId !== tabId) continue;
     
     try {
-      let buffer = entry.getBuffer();
+      let buffer = entry.getter();
       if (buffer && maxCharsPerPane && buffer.length > maxCharsPerPane) {
         // Keep the most recent content (tail)
         buffer = buffer.slice(-maxCharsPerPane);

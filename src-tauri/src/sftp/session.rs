@@ -11,6 +11,7 @@ use parking_lot::RwLock;
 use russh_sftp::client::error::Error as SftpErrorInner;
 use russh_sftp::client::SftpSession as RusshSftpSession;
 use russh_sftp::protocol::OpenFlags;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -260,6 +261,49 @@ impl SftpSession {
             is_symlink: file_type == FileType::Symlink,
             symlink_target,
         })
+    }
+
+    /// Write content to a remote file
+    ///
+    /// This is designed for the IDE mode editor - writes UTF-8 text content
+    /// directly to a remote file. The file is created if it doesn't exist,
+    /// or truncated and overwritten if it does.
+    ///
+    /// # Arguments
+    /// * `path` - The remote file path to write to
+    /// * `content` - The byte content to write (typically UTF-8 text)
+    pub async fn write_content(&self, path: &str, content: &[u8]) -> Result<(), SftpError> {
+        let canonical_path = self.resolve_path(path).await?;
+        debug!(
+            "Writing {} bytes to file: {}",
+            content.len(),
+            canonical_path
+        );
+
+        // Open file for writing (create if not exists, truncate if exists)
+        let mut file = self
+            .sftp
+            .open_with_flags(
+                &canonical_path,
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+            )
+            .await
+            .map_err(|e| self.map_sftp_error(e, &canonical_path))?;
+
+        // Write the content
+        file.write_all(content)
+            .await
+            .map_err(|e| SftpError::WriteError(format!("Failed to write content: {}", e)))?;
+
+        // Flush and sync to ensure data is written
+        file.flush()
+            .await
+            .map_err(|e| SftpError::WriteError(format!("Failed to flush file: {}", e)))?;
+
+        // File is closed when dropped
+
+        info!("Successfully wrote {} bytes to {}", content.len(), canonical_path);
+        Ok(())
     }
 
     /// Preview file content
