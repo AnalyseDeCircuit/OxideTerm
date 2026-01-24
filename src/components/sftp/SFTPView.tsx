@@ -33,6 +33,7 @@ import { TransferQueue } from './TransferQueue';
 import { TransferConflictDialog, ConflictInfo, ConflictResolution } from './TransferConflictDialog';
 import { PathBreadcrumb } from './PathBreadcrumb';
 import { FileDiffDialog } from './FileDiffDialog';
+import { RemoteFileEditor } from '../editor/RemoteFileEditor';
 import { api } from '../../lib/api';
 import { FileInfo } from '../../types';
 import { listen } from '@tauri-apps/api/event';
@@ -629,6 +630,13 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   const [diffDialog, setDiffDialog] = useState<{
     localFile: { path: string; content: string };
     remoteFile: { path: string; content: string };
+  } | null>(null);
+
+  // IDE Mode: Remote file editor state
+  const [editorFile, setEditorFile] = useState<{
+    path: string;
+    content: string;
+    language: string | null;
   } | null>(null);
 
   // Drag and Drop state
@@ -1785,6 +1793,26 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                     {previewFile?.path}
                 </div>
                 <div className="flex gap-2">
+                    {/* Edit button - only for text files */}
+                    {previewFile?.type === 'text' && (
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={() => {
+                          if (previewFile) {
+                            setEditorFile({
+                              path: previewFile.path,
+                              content: previewFile.data,
+                              language: previewFile.language || null,
+                            });
+                            setPreviewFile(null);
+                          }
+                        }}
+                        title={t('editor.edit_mode')}
+                      >
+                        <Edit3 className="h-3 w-3 mr-2" /> {t('editor.edit_mode')}
+                      </Button>
+                    )}
                     {/* Compare button - only for text files */}
                     {previewFile?.type === 'text' && localFiles.some(f => f.name === previewFile.name && f.file_type === 'File') && (
                       <Button 
@@ -1891,6 +1919,22 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
         localFile={diffDialog?.localFile || null}
         remoteFile={diffDialog?.remoteFile || null}
       />
+
+      {/* IDE Mode: Remote File Editor */}
+      {editorFile && (
+        <RemoteFileEditor
+          open={!!editorFile}
+          onClose={() => setEditorFile(null)}
+          sessionId={sessionId}
+          filePath={editorFile.path}
+          initialContent={editorFile.content}
+          language={editorFile.language}
+          onSaved={() => {
+            // Refresh remote file list to update mtime
+            api.sftpListDir(sessionId, remotePath).then(setRemoteFiles);
+          }}
+        />
+      )}
     </div>
   );
 };
