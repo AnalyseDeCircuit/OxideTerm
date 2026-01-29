@@ -9,6 +9,8 @@ import {
   Loader2,
   GitBranch,
   Folder,
+  FolderUp,
+  FolderOpen,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
@@ -22,6 +24,13 @@ import {
   GIT_STATUS_COLORS, 
   GIT_STATUS_LABELS 
 } from './hooks/useGitStatus';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Git 状态 Context（避免在每个节点中调用 hook）
@@ -215,11 +224,20 @@ function TreeNode({ file, depth, sftpSessionId, parentPath }: TreeNodeProps) {
 export function IdeTree() {
   const { t } = useTranslation();
   const project = useIdeProject();
-  const { sftpSessionId, expandedPaths } = useIdeStore();
+  const { sftpSessionId, expandedPaths, changeRootPath, tabs } = useIdeStore();
   const { status: gitStatus, getFileStatus, refresh: refreshGit, isLoading: gitLoading } = useGitStatus();
   const [rootFiles, setRootFiles] = useState<FileInfo[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isChangingRoot, setIsChangingRoot] = useState(false);
+  
+  // 获取父目录路径
+  const parentPath = project?.rootPath 
+    ? project.rootPath.split('/').slice(0, -1).join('/') || '/'
+    : null;
+  
+  // 检查是否有未保存的文件
+  const hasDirtyFiles = tabs.some(t => t.isDirty);
   
   // 加载根目录
   const loadRoot = useCallback(async () => {
@@ -252,6 +270,34 @@ export function IdeTree() {
     refreshGit();
   }, [loadRoot, refreshGit]);
   
+  // 切换到父目录
+  const handleGoUp = useCallback(async () => {
+    if (!parentPath || isChangingRoot || hasDirtyFiles) return;
+    
+    setIsChangingRoot(true);
+    try {
+      await changeRootPath(parentPath);
+    } catch (e) {
+      console.error('Failed to change root:', e);
+    } finally {
+      setIsChangingRoot(false);
+    }
+  }, [parentPath, isChangingRoot, hasDirtyFiles, changeRootPath]);
+  
+  // 切换到子目录
+  const handleOpenAsRoot = useCallback(async (path: string) => {
+    if (isChangingRoot || hasDirtyFiles) return;
+    
+    setIsChangingRoot(true);
+    try {
+      await changeRootPath(path);
+    } catch (e) {
+      console.error('Failed to change root:', e);
+    } finally {
+      setIsChangingRoot(false);
+    }
+  }, [isChangingRoot, hasDirtyFiles, changeRootPath]);
+  
   // Git 状态上下文值
   const gitStatusContextValue: GitStatusContextValue | null = project ? {
     getFileStatus,
@@ -271,33 +317,79 @@ export function IdeTree() {
       <div className="h-full flex flex-col bg-theme-bg/50">
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-theme-border/50">
-          <div className="flex items-center gap-2 min-w-0">
-            <Folder className="w-4 h-4 text-theme-accent flex-shrink-0" />
-            <span className="text-xs font-medium text-theme-text truncate">
-              {project.name}
-            </span>
-            {/* Git 分支信息 */}
-            {project.isGitRepo && gitStatus && (
-              <span className="flex items-center gap-1 text-[10px] text-theme-text-muted truncate ml-1">
-                <GitBranch className="w-3 h-3" />
-                {gitStatus.branch}
-                {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-                  <span className="opacity-60">
-                    {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
-                    {gitStatus.behind > 0 && `↓${gitStatus.behind}`}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 min-w-0 hover:bg-theme-bg-hover/50 rounded px-1 py-0.5 transition-colors">
+                <Folder className="w-4 h-4 text-theme-accent flex-shrink-0" />
+                <span className="text-xs font-medium text-theme-text truncate">
+                  {project.name}
+                </span>
+                {/* Git 分支信息 */}
+                {project.isGitRepo && gitStatus && (
+                  <span className="flex items-center gap-1 text-[10px] text-theme-text-muted truncate ml-1">
+                    <GitBranch className="w-3 h-3" />
+                    {gitStatus.branch}
+                    {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+                      <span className="opacity-60">
+                        {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
+                        {gitStatus.behind > 0 && `↓${gitStatus.behind}`}
+                      </span>
+                    )}
                   </span>
                 )}
-              </span>
-            )}
-          </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {/* 当前路径显示 */}
+              <div className="px-2 py-1.5 text-xs text-theme-text-muted truncate">
+                {project.rootPath}
+              </div>
+              <DropdownMenuSeparator />
+              {/* 上级目录 */}
+              <DropdownMenuItem 
+                onClick={handleGoUp}
+                disabled={!parentPath || parentPath === project.rootPath || hasDirtyFiles || isChangingRoot}
+                className="gap-2"
+              >
+                <FolderUp className="w-4 h-4" />
+                <span>{t('ide.go_to_parent')}</span>
+                {hasDirtyFiles && (
+                  <span className="text-[10px] text-yellow-500 ml-auto">{t('ide.unsaved')}</span>
+                )}
+              </DropdownMenuItem>
+              {/* 子目录列表 */}
+              {rootFiles && rootFiles.filter(f => isDirectory(f)).length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <div className="px-2 py-1 text-[10px] text-theme-text-muted">
+                    {t('ide.open_subfolder')}
+                  </div>
+                  {rootFiles
+                    .filter(f => isDirectory(f))
+                    .slice(0, 10) // 限制显示数量
+                    .map(dir => (
+                      <DropdownMenuItem
+                        key={dir.name}
+                        onClick={() => handleOpenAsRoot(`${project.rootPath}/${dir.name}`)}
+                        disabled={hasDirtyFiles || isChangingRoot}
+                        className="gap-2"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                        <span className="truncate">{dir.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            disabled={isLoading || gitLoading}
+            disabled={isLoading || gitLoading || isChangingRoot}
             className="h-6 w-6 p-0 hover:bg-theme-bg-hover/50"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-theme-text-muted', (isLoading || gitLoading) && 'animate-spin')} />
+            <RefreshCw className={cn('w-3.5 h-3.5 text-theme-text-muted', (isLoading || gitLoading || isChangingRoot) && 'animate-spin')} />
           </Button>
         </div>
         

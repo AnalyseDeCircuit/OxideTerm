@@ -61,6 +61,7 @@ interface IdeActions {
   // 项目操作
   openProject: (connectionId: string, sftpSessionId: string, rootPath: string) => Promise<void>;
   closeProject: () => void;
+  changeRootPath: (newRootPath: string) => Promise<void>;
   
   // 文件操作
   openFile: (path: string) => Promise<void>;
@@ -173,6 +174,36 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             activeTabId: null,
             expandedPaths: new Set(),
             conflictState: null,
+          });
+        },
+
+        changeRootPath: async (newRootPath: string) => {
+          const { connectionId, sftpSessionId, tabs } = get();
+          
+          if (!connectionId || !sftpSessionId) {
+            throw new Error('No active session');
+          }
+          
+          // 检查是否有未保存的文件
+          const hasDirty = tabs.some(t => t.isDirty);
+          if (hasDirty) {
+            throw new Error('Please save all files before changing root directory');
+          }
+          
+          // 调用后端获取新项目信息
+          const projectInfo = await api.ideOpenProject(sftpSessionId, newRootPath);
+          
+          // 更新状态，关闭所有标签
+          set({
+            project: {
+              rootPath: projectInfo.rootPath,
+              name: projectInfo.name,
+              isGitRepo: projectInfo.isGitRepo,
+              gitBranch: projectInfo.gitBranch ?? undefined,
+            },
+            tabs: [],
+            activeTabId: null,
+            expandedPaths: new Set([projectInfo.rootPath]),
           });
         },
 
