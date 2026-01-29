@@ -1,5 +1,5 @@
 // src/components/ide/IdeWorkspace.tsx
-import { useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
@@ -7,6 +7,7 @@ import { IdeTree } from './IdeTree';
 import { IdeEditorArea } from './IdeEditorArea';
 import { IdeTerminal } from './IdeTerminal';
 import { IdeStatusBar } from './IdeStatusBar';
+import { IdeSearchPanel } from './IdeSearchPanel';
 
 interface IdeWorkspaceProps {
   connectionId: string;
@@ -27,6 +28,14 @@ export function IdeWorkspace({ connectionId, sftpSessionId, rootPath }: IdeWorks
     toggleTerminal,
   } = useIdeStore();
   
+  // 搜索面板状态
+  const [searchOpen, setSearchOpen] = useState(false);
+  
+  // 切换搜索面板
+  const toggleSearch = useCallback(() => {
+    setSearchOpen(prev => !prev);
+  }, []);
+  
   // 初始化项目
   useEffect(() => {
     if (!project || project.rootPath !== rootPath) {
@@ -42,11 +51,17 @@ export function IdeWorkspace({ connectionId, sftpSessionId, rootPath }: IdeWorks
         e.preventDefault();
         toggleTerminal();
       }
+      
+      // Cmd/Ctrl+Shift+F 切换搜索面板
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        toggleSearch();
+      }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleTerminal]);
+  }, [toggleTerminal, toggleSearch]);
   
   // 加载中状态
   if (!project) {
@@ -62,6 +77,9 @@ export function IdeWorkspace({ connectionId, sftpSessionId, rootPath }: IdeWorks
     <div className="flex flex-col h-full bg-zinc-900">
       {/* 主工作区 */}
       <div className="flex flex-1 overflow-hidden">
+        {/* 搜索面板（最左侧，可选） */}
+        <IdeSearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} />
+        
         {/* 文件树（左侧） */}
         <div 
           className="flex-shrink-0 border-r border-zinc-800 overflow-hidden"

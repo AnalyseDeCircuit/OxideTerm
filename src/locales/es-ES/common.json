@@ -90,6 +90,8 @@
     "retry": "Reintentar",
     "open_terminal": "Abrir terminal",
     "terminal_reconnect": "Reconectar terminal",
-    "terminal_shortcut": "Alternar terminal (Ctrl+`)"
+    "terminal_shortcut": "Alternar terminal (Ctrl+`)",
+    "search_results_count": "{{count}} resultados en {{files}} archivos",
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F para buscar"
   }
 }

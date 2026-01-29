@@ -90,6 +90,8 @@
     "retry": "Riprova",
     "open_terminal": "Apri terminale",
     "terminal_reconnect": "Riconnetti terminale",
-    "terminal_shortcut": "Attiva/disattiva terminale (Ctrl+`)"
+    "terminal_shortcut": "Attiva/disattiva terminale (Ctrl+`)",
+    "search_results_count": "{{count}} risultati in {{files}} file",
+    "search_shortcut_hint": "Cmd/Ctrl+Maiusc+F per cercare"
   }
 }

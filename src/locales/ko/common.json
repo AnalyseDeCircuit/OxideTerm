@@ -90,6 +90,8 @@
     "retry": "재시도",
     "open_terminal": "터미널 열기",
     "terminal_reconnect": "터미널 재연결",
-    "terminal_shortcut": "터미널 토글 (Ctrl+`)"
+    "terminal_shortcut": "터미널 토글 (Ctrl+`)",
+    "search_results_count": "{{files}}개 파일에서 {{count}}개 결과",
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F로 검색"
   }
 }

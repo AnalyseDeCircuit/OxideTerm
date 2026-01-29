@@ -1,0 +1,380 @@
+// src/components/ide/IdeSearchPanel.tsx
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { 
+  Search, 
+  X, 
+  Loader2, 
+  File, 
+  ChevronRight,
+  AlertCircle,
+} from 'lucide-react';
+import { useIdeStore, useIdeProject } from '../../store/ideStore';
+import { cn } from '../../lib/utils';
+import { Input } from '../ui/input';
+
+/**
+ * 单个匹配结果
+ */
+interface SearchMatch {
+  /** 文件路径（相对于项目根目录） */
+  path: string;
+  /** 行号（1-based） */
+  line: number;
+  /** 列号（0-based） */
+  column: number;
+  /** 匹配行的预览内容 */
+  preview: string;
+  /** 匹配开始位置（在 preview 中） */
+  matchStart: number;
+  /** 匹配结束位置（在 preview 中） */
+  matchEnd: number;
+}
+
+/**
+ * 按文件分组的搜索结果
+ */
+interface SearchResultGroup {
+  /** 文件路径 */
+  path: string;
+  /** 该文件中的所有匹配 */
+  matches: SearchMatch[];
+}
+
+interface IdeSearchPanelProps {
+  /** 面板是否打开 */
+  open: boolean;
+  /** 关闭回调 */
+  onClose: () => void;
+}
+
+/**
+ * IDE 搜索面板
+ * 
+ * 提供项目内文件内容搜索功能。
+ * 
+ * 注意：当前实现使用 mock 数据，完整实现需要后端支持 SSH exec 功能
+ * 来执行 grep 命令搜索文件内容。
+ * 
+ * @example
+ * ```tsx
+ * <IdeSearchPanel open={isSearchOpen} onClose={() => setSearchOpen(false)} />
+ * ```
+ */
+export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
+  const { t } = useTranslation();
+  const project = useIdeProject();
+  const { sftpSessionId, openFile } = useIdeStore();
+  
+  // 搜索状态
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResultGroup[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  
+  // Refs
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // 面板打开时聚焦输入框
+  useEffect(() => {
+    if (open) {
+      // 延迟聚焦以确保动画完成
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
+  
+  // 清理防抖定时器
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+  
+  /**
+   * 执行搜索
+   * 
+   * TODO: 实际实现需要后端支持
+   * 应该调用类似 api.ideSearchInProject() 的 API
+   */
+  const doSearch = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim() || !sftpSessionId || !project) {
+      setResults([]);
+      return;
+    }
+    
+    setIsSearching(true);
+    setError(null);
+    
+    try {
+      // ═══════════════════════════════════════════════════════════════════
+      // TODO: 实际实现 - 需要后端支持
+      // ═══════════════════════════════════════════════════════════════════
+      // 
+      // 完整实现需要：
+      // 1. 后端添加 ide_search_in_project API
+      // 2. 执行: grep -rn -I --include='*.{rs,ts,...}' 'query' 'project_path'
+      // 3. 解析输出并返回结果
+      //
+      // 示例代码（需要后端支持）:
+      // const response = await api.ideSearchInProject(
+      //   sftpSessionId,
+      //   project.rootPath,
+      //   searchQuery,
+      //   100 // 最大结果数
+      // );
+      // 
+      // // 将结果按文件分组
+      // const grouped = groupByPath(response.matches);
+      // setResults(grouped);
+      // setExpandedPaths(new Set(grouped.map(g => g.path)));
+      // ═══════════════════════════════════════════════════════════════════
+      
+      // Mock 实现：模拟搜索延迟，返回空结果
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 暂时返回空结果
+      // 当后端支持后，这里会返回实际的搜索结果
+      setResults([]);
+      
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setError(errorMessage);
+      console.error('[IdeSearchPanel] Search failed:', e);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [sftpSessionId, project]);
+  
+  /**
+   * 处理输入变化（带防抖）
+   */
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    
+    // 清除之前的防抖定时器
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    // 设置新的防抖定时器
+    debounceRef.current = setTimeout(() => {
+      doSearch(value);
+    }, 300);
+  }, [doSearch]);
+  
+  /**
+   * 处理键盘事件
+   */
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    } else if (e.key === 'Enter') {
+      // 立即执行搜索
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      doSearch(query);
+    }
+  }, [onClose, doSearch, query]);
+  
+  /**
+   * 跳转到搜索结果
+   */
+  const handleMatchClick = useCallback((match: SearchMatch) => {
+    if (!project) return;
+    
+    // 构建完整路径
+    const fullPath = `${project.rootPath}/${match.path}`;
+    
+    openFile(fullPath).then(() => {
+      // TODO: 跳转到指定行
+      // 需要通过 ideStore 传递目标行号，然后在 IdeEditor 中处理
+      // 目前仅打开文件
+      console.log(`[IdeSearchPanel] Open file at line ${match.line}`);
+    }).catch(console.error);
+  }, [project, openFile]);
+  
+  /**
+   * 切换文件展开/折叠
+   */
+  const togglePath = useCallback((path: string) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+  
+  /**
+   * 清除搜索
+   */
+  const handleClear = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setError(null);
+    inputRef.current?.focus();
+  }, []);
+  
+  // 计算总匹配数
+  const totalMatches = useMemo(() => {
+    return results.reduce((sum, group) => sum + group.matches.length, 0);
+  }, [results]);
+  
+  if (!open) return null;
+  
+  return (
+    <div className="w-80 h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-orange-500" />
+          <span className="text-sm font-medium">{t('ide.search')}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-1 hover:bg-zinc-800 rounded transition-colors"
+          title={t('ide.cancel')}
+        >
+          <X className="w-4 h-4 text-zinc-500" />
+        </button>
+      </div>
+      
+      {/* 搜索输入 */}
+      <div className="p-2 border-b border-zinc-800">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={t('ide.search_placeholder')}
+            className="pl-8 pr-8 bg-zinc-800 border-zinc-700 text-sm"
+          />
+          {/* 加载/清除按钮 */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+            {isSearching ? (
+              <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />
+            ) : query && (
+              <button
+                onClick={handleClear}
+                className="p-0.5 hover:bg-zinc-700 rounded transition-colors"
+              >
+                <X className="w-3 h-3 text-zinc-500" />
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* 结果统计 */}
+        {query && !isSearching && results.length > 0 && (
+          <div className="mt-2 text-xs text-zinc-500">
+            {t('ide.search_results_count', { 
+              count: totalMatches, 
+              files: results.length 
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* 搜索结果 */}
+      <div className="flex-1 overflow-auto">
+        {/* 错误状态 */}
+        {error && (
+          <div className="flex items-center gap-2 p-4 text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+        
+        {/* 空状态：未输入 */}
+        {!query && !error && (
+          <div className="p-4 text-zinc-500 text-sm text-center">
+            {t('ide.search_hint')}
+          </div>
+        )}
+        
+        {/* 空状态：无结果 */}
+        {query && results.length === 0 && !isSearching && !error && (
+          <div className="p-4 text-zinc-500 text-sm text-center">
+            {t('ide.no_results')}
+          </div>
+        )}
+        
+        {/* 搜索结果列表 */}
+        {results.map(group => (
+          <div key={group.path} className="border-b border-zinc-800/50">
+            {/* 文件标题 */}
+            <div
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 cursor-pointer",
+                "hover:bg-zinc-800/50 transition-colors"
+              )}
+              onClick={() => togglePath(group.path)}
+            >
+              <ChevronRight 
+                className={cn(
+                  'w-3 h-3 text-zinc-500 transition-transform flex-shrink-0',
+                  expandedPaths.has(group.path) && 'rotate-90'
+                )}
+              />
+              <File className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <span className="text-sm truncate flex-1 text-zinc-300">
+                {group.path.split('/').pop()}
+              </span>
+              <span className="text-xs text-zinc-600">
+                {group.matches.length}
+              </span>
+            </div>
+            
+            {/* 文件中的匹配项 */}
+            {expandedPaths.has(group.path) && (
+              <div className="bg-zinc-900/50">
+                {group.matches.map((match, idx) => (
+                  <div
+                    key={`${match.line}-${idx}`}
+                    className={cn(
+                      "flex items-start gap-2 px-3 py-1 cursor-pointer",
+                      "hover:bg-zinc-800/30 transition-colors text-sm"
+                    )}
+                    onClick={() => handleMatchClick(match)}
+                  >
+                    {/* 行号 */}
+                    <span className="text-zinc-600 w-8 text-right flex-shrink-0 font-mono text-xs pt-0.5">
+                      {match.line}
+                    </span>
+                    {/* 预览内容（高亮匹配部分） */}
+                    <span className="truncate text-zinc-400 text-xs">
+                      {match.preview.substring(0, match.matchStart)}
+                      <span className="text-yellow-500 font-medium bg-yellow-500/10">
+                        {match.preview.substring(match.matchStart, match.matchEnd)}
+                      </span>
+                      {match.preview.substring(match.matchEnd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      {/* 底部提示 */}
+      <div className="px-3 py-2 border-t border-zinc-800 text-[10px] text-zinc-600">
+        {t('ide.search_shortcut_hint')}
+      </div>
+    </div>
+  );
+}
