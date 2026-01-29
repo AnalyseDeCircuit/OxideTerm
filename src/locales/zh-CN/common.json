@@ -93,6 +93,9 @@
     "terminal_reconnect": "重新连接终端",
     "terminal_shortcut": "切换终端 (Ctrl+`)",
     "search_results_count": "在 {{files}} 个文件中找到 {{count}} 个结果",
-    "search_shortcut_hint": "Cmd/Ctrl+Shift+F 切换搜索"
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F 切换搜索",
+    "go_to_parent": "返回上级目录",
+    "open_subfolder": "打开为根目录",
+    "unsaved": "未保存"
   }
 }
