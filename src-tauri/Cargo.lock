@@ -3047,6 +3047,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "strip-ansi-escapes",
+ "subtle",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

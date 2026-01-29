@@ -51,9 +51,23 @@ fn generate_token() -> String {
 
 /// Validate token with expiration check
 /// Returns true if token matches and has not expired
+/// Uses constant-time comparison to prevent timing attacks
 fn validate_token(received: &str, expected: &str) -> bool {
-    // First check exact match
-    if received.trim() != expected {
+    use subtle::ConstantTimeEq;
+    
+    let received_trimmed = received.trim();
+    
+    // Constant-time comparison to prevent timing attacks
+    // Note: We still need to check length first, but this doesn't leak token content
+    if received_trimmed.len() != expected.len() {
+        return false;
+    }
+    
+    let token_matches = bool::from(
+        received_trimmed.as_bytes().ct_eq(expected.as_bytes())
+    );
+    
+    if !token_matches {
         return false;
     }
 

@@ -41,11 +41,11 @@ pub fn encrypt_oxide_file(
     password: &str,
     metadata: OxideMetadata,
 ) -> Result<OxideFile, OxideFileError> {
-    // 1. Generate random salt and nonce
+    // 1. Generate random salt and nonce using cryptographically secure RNG
     let mut salt = [0u8; SALT_LEN];
     let mut nonce = [0u8; NONCE_LEN];
-    rand::thread_rng().fill_bytes(&mut salt);
-    rand::thread_rng().fill_bytes(&mut nonce);
+    rand::rngs::OsRng.fill_bytes(&mut salt);
+    rand::rngs::OsRng.fill_bytes(&mut nonce);
 
     // 2. Derive encryption key from password
     let key = derive_key(password, &salt)?;
