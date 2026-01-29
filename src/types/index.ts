@@ -90,6 +90,12 @@ export interface SshConnectRequest {
   passphrase?: string;
   name?: string;
   reuseConnection?: boolean;
+  /** Trust host key mode for TOFU (Trust On First Use)
+   * - undefined: use default behavior (requires preflight check)
+   * - true: trust and save to known_hosts
+   * - false: trust for this session only (don't save)
+   */
+  trustHostKey?: boolean;
 }
 
 /**
@@ -99,6 +105,43 @@ export interface SshConnectResponse {
   connectionId: string;
   reused: boolean;
   connection: SshConnectionInfo;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SSH Host Key Preflight (TOFU - Trust On First Use)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * SSH preflight request - check host key before connecting
+ */
+export interface SshPreflightRequest {
+  host: string;
+  port: number;
+}
+
+/**
+ * Host key status from preflight check
+ */
+export type HostKeyStatus =
+  | { status: 'verified' }
+  | { status: 'unknown'; fingerprint: string; keyType: string }
+  | { status: 'changed'; expectedFingerprint: string; actualFingerprint: string; keyType: string }
+  | { status: 'error'; message: string };
+
+/**
+ * SSH preflight response
+ */
+export type SshPreflightResponse = HostKeyStatus;
+
+/**
+ * Accept host key request - trust after user confirmation
+ */
+export interface AcceptHostKeyRequest {
+  host: string;
+  port: number;
+  fingerprint: string;
+  /** true = save to known_hosts, false = trust for session only */
+  persist: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

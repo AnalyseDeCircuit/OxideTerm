@@ -736,6 +736,7 @@ impl SshConnectionRegistry {
             rows: config.rows,
             proxy_chain: None,
             strict_host_key_checking: false,
+            trust_host_key: None, // Connection pool uses known_hosts, no TOFU here
         };
 
         // 建立 SSH 连接
@@ -2003,6 +2004,7 @@ impl SshConnectionRegistry {
             rows: config.rows,
             proxy_chain: None,
             strict_host_key_checking: false,
+            trust_host_key: None, // Reconnect uses known_hosts, no TOFU needed
         };
 
         // 尝试建立新连接

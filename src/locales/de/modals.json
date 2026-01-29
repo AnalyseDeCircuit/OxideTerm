@@ -153,6 +153,24 @@
       "reconnect": "Erneut verbinden",
       "connecting": "Verbindung wird hergestellt..."
     },
+    "host_key": {
+      "title_unknown": "Unbekannter Host-Schlüssel",
+      "title_changed": "⚠️ Host-Schlüssel geändert!",
+      "title_error": "Verbindungsfehler",
+      "unknown_message": "Dies ist die erste Verbindung zu diesem Host. Bitte überprüfen Sie den Fingerabdruck unten, bevor Sie fortfahren.",
+      "changed_warning": "Warnung: Der Host-Schlüssel unterscheidet sich vom zuvor gespeicherten! Dies könnte bedeuten: 1) Der Server wurde neu installiert oder der Schlüssel geändert; 2) Sie könnten Opfer eines Man-in-the-Middle-Angriffs (MITM) sein. Bitte überprüfen Sie dies mit Ihrem Serveradministrator.",
+      "key_type_label": "Schlüsseltyp",
+      "fingerprint_label": "SHA256-Fingerabdruck",
+      "expected_fingerprint": "Gespeicherter Fingerabdruck",
+      "actual_fingerprint": "Aktueller Fingerabdruck",
+      "confirm_prompt": "Wenn Sie bestätigen, dass die Schlüsseländerung legitim ist, geben Sie \"{{host}}\" ein:",
+      "actions": {
+        "cancel": "Abbrechen",
+        "trust_once": "Einmal vertrauen",
+        "trust_save": "Vertrauen und speichern",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Als Vorlagenverbindung speichern",
       "connection_path": "Verbindungspfad",

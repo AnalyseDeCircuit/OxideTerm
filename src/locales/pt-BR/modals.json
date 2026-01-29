@@ -153,6 +153,24 @@
       "reconnect": "Reconectar",
       "connecting": "Conectando..."
     },
+    "host_key": {
+      "title_unknown": "Chave de host desconhecida",
+      "title_changed": "⚠️ Chave de host alterada!",
+      "title_error": "Erro de conexão",
+      "unknown_message": "Esta é a primeira conexão com este host. Por favor, verifique a impressão digital abaixo antes de continuar.",
+      "changed_warning": "Aviso: A chave do host é diferente da salva anteriormente! Isso pode significar: 1) O servidor foi reinstalado ou mudou sua chave; 2) Você pode estar sob um ataque man-in-the-middle (MITM). Verifique com seu administrador antes de continuar.",
+      "key_type_label": "Tipo de chave",
+      "fingerprint_label": "Impressão digital SHA256",
+      "expected_fingerprint": "Impressão digital salva",
+      "actual_fingerprint": "Impressão digital atual",
+      "confirm_prompt": "Se você confirmar que a mudança de chave é legítima, digite \"{{host}}\" para continuar:",
+      "actions": {
+        "cancel": "Cancelar",
+        "trust_once": "Confiar uma vez",
+        "trust_save": "Confiar e salvar",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Salvar como conexão predefinida",
       "connection_path": "Caminho da conexão",

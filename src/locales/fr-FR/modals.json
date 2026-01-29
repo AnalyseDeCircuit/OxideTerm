@@ -153,6 +153,24 @@
       "reconnect": "Reconnecter",
       "connecting": "Connexion en cours..."
     },
+    "host_key": {
+      "title_unknown": "Clé d'hôte inconnue",
+      "title_changed": "⚠️ Clé d'hôte modifiée !",
+      "title_error": "Erreur de connexion",
+      "unknown_message": "C'est la première connexion à cet hôte. Veuillez vérifier l'empreinte ci-dessous avant de continuer.",
+      "changed_warning": "Attention : La clé de l'hôte diffère de celle enregistrée ! Cela pourrait signifier : 1) Le serveur a été réinstallé ou sa clé changée ; 2) Vous pourriez être victime d'une attaque de l'homme du milieu (MITM). Vérifiez avec votre administrateur avant de continuer.",
+      "key_type_label": "Type de clé",
+      "fingerprint_label": "Empreinte SHA256",
+      "expected_fingerprint": "Empreinte enregistrée",
+      "actual_fingerprint": "Empreinte actuelle",
+      "confirm_prompt": "Si vous confirmez que le changement de clé est légitime, tapez \"{{host}}\" pour continuer :",
+      "actions": {
+        "cancel": "Annuler",
+        "trust_once": "Faire confiance une fois",
+        "trust_save": "Faire confiance et enregistrer",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Enregistrer comme connexion prédéfinie",
       "connection_path": "Chemin de connexion",

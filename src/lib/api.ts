@@ -30,6 +30,10 @@ import {
   CreateTerminalResponse,
   ConnectionPoolConfig,
   ConnectionPoolStats,
+  // Host key preflight types (TOFU)
+  SshPreflightRequest,
+  SshPreflightResponse,
+  AcceptHostKeyRequest,
 } from '../types';
 
 // Toggle this for development without a backend
@@ -143,6 +147,43 @@ export const api = {
   sshSetKeepAlive: async (connectionId: string, keepAlive: boolean): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('ssh_set_keep_alive', { connectionId, keepAlive });
+  },
+
+  // ============ SSH Host Key Preflight (TOFU) ============
+
+  /**
+   * Preflight check for SSH host key (TOFU - Trust On First Use)
+   * 
+   * Call this before sshConnect to verify the host key status:
+   * - 'verified': Host key matches known_hosts, safe to connect
+   * - 'unknown': First time connecting, show confirmation dialog
+   * - 'changed': Host key changed! Possible MITM, show strong warning
+   * - 'error': Connection error during preflight
+   */
+  sshPreflight: async (request: SshPreflightRequest): Promise<SshPreflightResponse> => {
+    if (USE_MOCK) {
+      return { status: 'verified' };
+    }
+    return invoke('ssh_preflight', { request });
+  },
+
+  /**
+   * Accept a host key after user confirmation
+   * 
+   * @param request - Contains host, port, fingerprint, and persist flag
+   * @param request.persist - true = save to known_hosts, false = trust for session only
+   */
+  sshAcceptHostKey: async (request: AcceptHostKeyRequest): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ssh_accept_host_key', { request });
+  },
+
+  /**
+   * Clear host key cache (for testing or force re-verification)
+   */
+  sshClearHostKeyCache: async (): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ssh_clear_host_key_cache');
   },
 
   /**

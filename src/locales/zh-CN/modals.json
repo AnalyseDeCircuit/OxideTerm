@@ -153,6 +153,24 @@
       "reconnect": "重新连接",
       "connecting": "连接中..."
     },
+    "host_key": {
+      "title_unknown": "未知主机密钥",
+      "title_changed": "⚠️ 主机密钥已变更！",
+      "title_error": "连接错误",
+      "unknown_message": "这是首次连接此主机。请验证下方的指纹是否正确，确认后再继续连接。",
+      "changed_warning": "警告：此主机的密钥与之前保存的不同！这可能意味着：1) 服务器已重新安装或更换密钥；2) 您正遭受中间人攻击（MITM）。请与服务器管理员确认后再继续。",
+      "key_type_label": "密钥类型",
+      "fingerprint_label": "SHA256 指纹",
+      "expected_fingerprint": "已保存的指纹",
+      "actual_fingerprint": "当前指纹",
+      "confirm_prompt": "如确认密钥变更是合法的，请输入主机名 \"{{host}}\" 以继续：",
+      "actions": {
+        "cancel": "取消",
+        "trust_once": "仅本次信任",
+        "trust_save": "信任并保存",
+        "ok": "确定"
+      }
+    },
     "save_preset": {
       "title": "保存为预设连接",
       "connection_path": "连接路径",

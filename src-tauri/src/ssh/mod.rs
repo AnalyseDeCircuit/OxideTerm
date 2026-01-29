@@ -19,6 +19,7 @@ mod error;
 mod handle_owner;
 pub mod keyboard_interactive;
 pub mod known_hosts;
+pub mod preflight;
 mod proxy;
 mod session;
 
@@ -36,5 +37,6 @@ pub use keyboard_interactive::{
 };
 pub use handle_owner::{spawn_handle_owner_task, HandleCommand, HandleController};
 pub use known_hosts::{get_known_hosts, HostKeyVerification, KnownHostsStore};
+pub use preflight::{check_host_key, get_host_key_cache, accept_host_key, HostKeyCache, HostKeyStatus};
 pub use proxy::{connect_via_proxy, connect_via_single_hop, ProxyChain, ProxyConnection, ProxyHop};
 pub use session::{ExtendedSessionHandle, SessionCommand, SessionHandle, SshSession};
