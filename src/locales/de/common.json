@@ -90,6 +90,8 @@
     "retry": "Wiederholen",
     "open_terminal": "Terminal öffnen",
     "terminal_reconnect": "Terminal neu verbinden",
-    "terminal_shortcut": "Terminal umschalten (Strg+`)"
+    "terminal_shortcut": "Terminal umschalten (Strg+`)",
+    "search_results_count": "{{count}} Ergebnisse in {{files}} Dateien",
+    "search_shortcut_hint": "Cmd/Strg+Umschalt+F zum Suchen"
   }
 }

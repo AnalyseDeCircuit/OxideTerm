@@ -90,6 +90,8 @@
     "retry": "Thử lại",
     "open_terminal": "Mở terminal",
     "terminal_reconnect": "Kết nối lại terminal",
-    "terminal_shortcut": "Bật/Tắt terminal (Ctrl+`)"
+    "terminal_shortcut": "Bật/Tắt terminal (Ctrl+`)",
+    "search_results_count": "{{count}} kết quả trong {{files}} tập tin",
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F để tìm kiếm"
   }
 }

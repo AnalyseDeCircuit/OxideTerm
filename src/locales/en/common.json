@@ -91,6 +91,8 @@
     "retry": "Retry",
     "open_terminal": "Open Terminal",
     "terminal_reconnect": "Reconnect terminal",
-    "terminal_shortcut": "Toggle terminal (Ctrl+`)"
+    "terminal_shortcut": "Toggle terminal (Ctrl+`)",
+    "search_results_count": "{{count}} results in {{files}} files",
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F to toggle search"
   }
 }

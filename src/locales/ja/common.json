@@ -90,6 +90,8 @@
     "retry": "再試行",
     "open_terminal": "ターミナルを開く",
     "terminal_reconnect": "ターミナルを再接続",
-    "terminal_shortcut": "ターミナルの切り替え (Ctrl+`)"
+    "terminal_shortcut": "ターミナルの切り替え (Ctrl+`)",
+    "search_results_count": "{{files}} ファイルで {{count}} 件の結果",
+    "search_shortcut_hint": "Cmd/Ctrl+Shift+F で検索"
   }
 }

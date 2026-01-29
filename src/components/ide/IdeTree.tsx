@@ -1,5 +1,5 @@
 // src/components/ide/IdeTree.tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Folder, 
@@ -9,12 +9,33 @@ import {
   RefreshCw,
   AlertCircle,
   Loader2,
+  GitBranch,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
 import { cn } from '../../lib/utils';
 import { FileInfo } from '../../types';
 import { Button } from '../ui/button';
+import { 
+  useGitStatus, 
+  GitFileStatus, 
+  GIT_STATUS_COLORS, 
+  GIT_STATUS_LABELS 
+} from './hooks/useGitStatus';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Git 状态 Context（避免在每个节点中调用 hook）
+// ═══════════════════════════════════════════════════════════════════════════
+interface GitStatusContextValue {
+  getFileStatus: (relativePath: string) => GitFileStatus | undefined;
+  projectRootPath: string;
+}
+
+const GitStatusContext = createContext<GitStatusContextValue | null>(null);
+
+function useGitStatusContext() {
+  return useContext(GitStatusContext);
+}
 
 // 判断文件是否为目录
 function isDirectory(file: FileInfo): boolean {
@@ -71,6 +92,7 @@ interface TreeNodeProps {
 
 function TreeNode({ file, depth, sftpSessionId, parentPath }: TreeNodeProps) {
   const { expandedPaths, togglePath, openFile, tabs } = useIdeStore();
+  const gitStatusCtx = useGitStatusContext();
   const [children, setChildren] = useState<FileInfo[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +103,14 @@ function TreeNode({ file, depth, sftpSessionId, parentPath }: TreeNodeProps) {
     : `${parentPath}/${file.name}`;
   const isExpanded = expandedPaths.has(fullPath);
   const isOpen = tabs.some(t => t.path === fullPath);
+  
+  // 计算相对于项目根目录的路径（用于 Git 状态查询）
+  const relativePath = gitStatusCtx 
+    ? fullPath.startsWith(gitStatusCtx.projectRootPath)
+      ? fullPath.substring(gitStatusCtx.projectRootPath.length + 1) // 移除根路径和前导斜杠
+      : file.name
+    : '';
+  const gitStatus = gitStatusCtx?.getFileStatus(relativePath);
   
   // 加载子目录内容
   const loadChildren = useCallback(async () => {
@@ -163,12 +193,24 @@ function TreeNode({ file, depth, sftpSessionId, parentPath }: TreeNodeProps) {
         
         {/* 文件名 */}
         <span className={cn(
-          'truncate text-xs',
+          'truncate text-xs flex-1',
           isDir ? 'text-zinc-300' : 'text-zinc-400',
-          isOpen && 'text-orange-400 font-medium'
+          isOpen && 'text-orange-400 font-medium',
+          // Git 状态颜色（仅对未打开的文件生效）
+          !isOpen && gitStatus && GIT_STATUS_COLORS[gitStatus]
         )}>
           {file.name}
         </span>
+        
+        {/* Git 状态指示器 */}
+        {gitStatus && gitStatus !== 'ignored' && (
+          <span className={cn(
+            'text-[10px] mr-1 font-mono',
+            GIT_STATUS_COLORS[gitStatus]
+          )}>
+            {GIT_STATUS_LABELS[gitStatus]}
+          </span>
+        )}
       </div>
       
       {/* 子节点 */}
@@ -201,6 +243,7 @@ export function IdeTree() {
   const { t } = useTranslation();
   const project = useIdeProject();
   const { sftpSessionId, expandedPaths } = useIdeStore();
+  const { status: gitStatus, getFileStatus, refresh: refreshGit, isLoading: gitLoading } = useGitStatus();
   const [rootFiles, setRootFiles] = useState<FileInfo[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,11 +272,18 @@ export function IdeTree() {
     }
   }, [project, sftpSessionId, expandedPaths, loadRoot]);
   
-  // 刷新
+  // 刷新（同时刷新文件列表和 Git 状态）
   const handleRefresh = useCallback(() => {
     setRootFiles(null);
     loadRoot();
-  }, [loadRoot]);
+    refreshGit();
+  }, [loadRoot, refreshGit]);
+  
+  // Git 状态上下文值
+  const gitStatusContextValue: GitStatusContextValue | null = project ? {
+    getFileStatus,
+    projectRootPath: project.rootPath,
+  } : null;
   
   if (!project) {
     return (
@@ -244,60 +294,70 @@ export function IdeTree() {
   }
   
   return (
-    <div className="h-full flex flex-col bg-zinc-900/50">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
-        <div className="flex items-center gap-2 min-w-0">
-          <Folder className="w-4 h-4 text-orange-400 flex-shrink-0" />
-          <span className="text-xs font-medium text-zinc-300 truncate">
-            {project.name}
-          </span>
-          {project.isGitRepo && project.gitBranch && (
-            <span className="text-[10px] text-zinc-500 truncate ml-1">
-              ({project.gitBranch})
+    <GitStatusContext.Provider value={gitStatusContextValue}>
+      <div className="h-full flex flex-col bg-zinc-900/50">
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
+          <div className="flex items-center gap-2 min-w-0">
+            <Folder className="w-4 h-4 text-orange-400 flex-shrink-0" />
+            <span className="text-xs font-medium text-zinc-300 truncate">
+              {project.name}
             </span>
-          )}
+            {/* Git 分支信息 */}
+            {project.isGitRepo && gitStatus && (
+              <span className="flex items-center gap-1 text-[10px] text-zinc-500 truncate ml-1">
+                <GitBranch className="w-3 h-3" />
+                {gitStatus.branch}
+                {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+                  <span className="text-zinc-600">
+                    {gitStatus.ahead > 0 && `↑${gitStatus.ahead}`}
+                    {gitStatus.behind > 0 && `↓${gitStatus.behind}`}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading || gitLoading}
+            className="h-6 w-6 p-0 hover:bg-zinc-700/50"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5 text-zinc-400', (isLoading || gitLoading) && 'animate-spin')} />
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="h-6 w-6 p-0 hover:bg-zinc-700/50"
-        >
-          <RefreshCw className={cn('w-3.5 h-3.5 text-zinc-400', isLoading && 'animate-spin')} />
-        </Button>
+        
+        {/* 文件树 */}
+        <div className="flex-1 overflow-auto py-1">
+          {isLoading && rootFiles === null ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8 px-4">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <p className="text-xs text-red-400 text-center">{error}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                className="text-xs"
+              >
+                {t('ide.retry')}
+              </Button>
+            </div>
+          ) : rootFiles?.map(file => (
+            <TreeNode
+              key={file.name}
+              file={file}
+              depth={0}
+              sftpSessionId={sftpSessionId!}
+              parentPath={project.rootPath}
+            />
+          ))}
+        </div>
       </div>
-      
-      {/* 文件树 */}
-      <div className="flex-1 overflow-auto py-1">
-        {isLoading && rootFiles === null ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-8 px-4">
-            <AlertCircle className="w-5 h-5 text-red-400" />
-            <p className="text-xs text-red-400 text-center">{error}</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              className="text-xs"
-            >
-              {t('ide.retry')}
-            </Button>
-          </div>
-        ) : rootFiles?.map(file => (
-          <TreeNode
-            key={file.name}
-            file={file}
-            depth={0}
-            sftpSessionId={sftpSessionId!}
-            parentPath={project.rootPath}
-          />
-        ))}
-      </div>
-    </div>
+    </GitStatusContext.Provider>
   );
 }
