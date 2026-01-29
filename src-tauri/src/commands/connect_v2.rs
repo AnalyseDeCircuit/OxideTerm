@@ -222,8 +222,14 @@ fn build_session_config(request: &ConnectRequest, auth: AuthMethod) -> SessionCo
 ///
 /// `SshConfig` is the low-level network configuration used by `SshClient`.
 /// It includes timeout settings and host key checking options.
-impl From<&SessionConfig> for SshConfig {
-    fn from(config: &SessionConfig) -> Self {
+///
+/// # Errors
+/// Returns an error if the auth method is `KeyboardInteractive`, which must
+/// use the dedicated `ssh_connect_kbi` command instead.
+impl TryFrom<&SessionConfig> for SshConfig {
+    type Error = &'static str;
+    
+    fn try_from(config: &SessionConfig) -> Result<Self, Self::Error> {
         let ssh_auth = match &config.auth {
             AuthMethod::Password { password } => SshAuthMethod::Password {
                 password: password.clone(),
@@ -247,13 +253,12 @@ impl From<&SessionConfig> for SshConfig {
             AuthMethod::Agent => SshAuthMethod::Agent,
             AuthMethod::KeyboardInteractive => {
                 // KeyboardInteractive sessions must use the dedicated ssh_connect_kbi command.
-                // This conversion should never be called for KBI - the frontend must route
-                // KBI connections through the separate KBI flow.
-                panic!("KeyboardInteractive must use ssh_connect_kbi command, not connect_v2")
+                // Return error instead of panic for robustness.
+                return Err("KeyboardInteractive must use ssh_connect_kbi command, not connect_v2");
             }
         };
 
-        SshConfig {
+        Ok(SshConfig {
             host: config.host.clone(),
             port: config.port,
             username: config.username.clone(),
@@ -263,7 +268,7 @@ impl From<&SessionConfig> for SshConfig {
             rows: config.rows,
             proxy_chain: None,
             strict_host_key_checking: false, // Auto-accept unknown hosts for UX
-        }
+        })
     }
 }
 
@@ -496,7 +501,8 @@ async fn connect_direct(
 ) -> Result<(u16, String, HandleController, oneshot::Receiver<crate::bridge::DisconnectReason>), String>
 {
     // Convert SessionConfig to SshConfig
-    let ssh_config: SshConfig = config.into();
+    let ssh_config: SshConfig = config.try_into()
+        .map_err(|e: &str| e.to_string())?;
 
     // Connect with handshake timeout
     let client = SshClient::new(ssh_config);
