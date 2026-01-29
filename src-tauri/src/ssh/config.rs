@@ -39,6 +39,13 @@ pub struct SshConfig {
     /// - false: auto-accept unknown hosts, still reject changed keys
     #[serde(default)]
     pub strict_host_key_checking: bool,
+
+    /// Trust host key mode for TOFU (Trust On First Use)
+    /// - None: use strict_host_key_checking behavior
+    /// - Some(true): trust and save unknown keys to known_hosts
+    /// - Some(false): trust for this session only (don't save)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust_host_key: Option<bool>,
 }
 
 /// Configuration for a single proxy hop
@@ -146,6 +153,7 @@ impl Default for SshConfig {
             rows: 24,
             proxy_chain: None,
             strict_host_key_checking: false,
+            trust_host_key: None,
         }
     }
 }

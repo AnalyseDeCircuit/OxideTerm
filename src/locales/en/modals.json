@@ -153,6 +153,24 @@
       "reconnect": "Reconnect",
       "connecting": "Connecting..."
     },
+    "host_key": {
+      "title_unknown": "Unknown Host Key",
+      "title_changed": "⚠️ Host Key Changed!",
+      "title_error": "Connection Error",
+      "unknown_message": "This is the first time connecting to this host. Please verify the fingerprint below is correct before continuing.",
+      "changed_warning": "Warning: The host key differs from what was previously saved! This could mean: 1) The server was reinstalled or changed its key; 2) You may be under a man-in-the-middle attack (MITM). Please verify with your server administrator before continuing.",
+      "key_type_label": "Key Type",
+      "fingerprint_label": "SHA256 Fingerprint",
+      "expected_fingerprint": "Saved Fingerprint",
+      "actual_fingerprint": "Current Fingerprint",
+      "confirm_prompt": "If you confirm the key change is legitimate, type \"{{host}}\" to continue:",
+      "actions": {
+        "cancel": "Cancel",
+        "trust_once": "Trust Once",
+        "trust_save": "Trust and Save",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Save as Preset Connection",
       "connection_path": "Connection Path",

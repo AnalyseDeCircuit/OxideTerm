@@ -326,6 +326,10 @@ pub fn run() {
             commands::create_terminal,
             commands::close_terminal,
             commands::recreate_terminal_pty,
+            // SSH host key preflight (TOFU)
+            commands::ssh_preflight,
+            commands::ssh_accept_host_key,
+            commands::ssh_clear_host_key_cache,
             // Scroll buffer commands
             commands::get_scroll_buffer,
             commands::get_buffer_stats,
@@ -474,6 +478,10 @@ pub fn run() {
             commands::create_terminal,
             commands::close_terminal,
             commands::recreate_terminal_pty,
+            // SSH host key preflight (TOFU)
+            commands::ssh_preflight,
+            commands::ssh_accept_host_key,
+            commands::ssh_clear_host_key_cache,
             // Scroll buffer commands
             commands::get_scroll_buffer,
             commands::get_buffer_stats,

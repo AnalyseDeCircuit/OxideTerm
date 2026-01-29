@@ -153,6 +153,24 @@
       "reconnect": "Riconnetti",
       "connecting": "Connessione..."
     },
+    "host_key": {
+      "title_unknown": "Chiave host sconosciuta",
+      "title_changed": "⚠️ Chiave host cambiata!",
+      "title_error": "Errore di connessione",
+      "unknown_message": "Questa è la prima connessione a questo host. Verifica l'impronta digitale qui sotto prima di continuare.",
+      "changed_warning": "Attenzione: La chiave dell'host è diversa da quella salvata! Questo potrebbe significare: 1) Il server è stato reinstallato o ha cambiato la chiave; 2) Potresti essere vittima di un attacco man-in-the-middle (MITM). Verifica con l'amministratore prima di continuare.",
+      "key_type_label": "Tipo di chiave",
+      "fingerprint_label": "Impronta SHA256",
+      "expected_fingerprint": "Impronta salvata",
+      "actual_fingerprint": "Impronta attuale",
+      "confirm_prompt": "Se confermi che il cambio di chiave è legittimo, digita \"{{host}}\" per continuare:",
+      "actions": {
+        "cancel": "Annulla",
+        "trust_once": "Fidati una volta",
+        "trust_save": "Fidati e salva",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Salva come Connessione Preset",
       "connection_path": "Percorso Connessione",

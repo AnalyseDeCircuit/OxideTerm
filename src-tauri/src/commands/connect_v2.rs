@@ -268,6 +268,7 @@ impl TryFrom<&SessionConfig> for SshConfig {
             rows: config.rows,
             proxy_chain: None,
             strict_host_key_checking: false, // Auto-accept unknown hosts for UX
+            trust_host_key: None, // TODO: Integrate with TOFU flow
         })
     }
 }

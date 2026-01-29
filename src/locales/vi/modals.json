@@ -153,6 +153,24 @@
       "reconnect": "Kết nối lại",
       "connecting": "Đang kết nối..."
     },
+    "host_key": {
+      "title_unknown": "Khóa máy chủ không xác định",
+      "title_changed": "⚠️ Khóa máy chủ đã thay đổi!",
+      "title_error": "Lỗi kết nối",
+      "unknown_message": "Đây là lần đầu tiên kết nối đến máy chủ này. Vui lòng xác minh dấu vân tay bên dưới trước khi tiếp tục.",
+      "changed_warning": "Cảnh báo: Khóa máy chủ khác với khóa đã lưu trước đó! Điều này có thể có nghĩa là: 1) Máy chủ đã được cài đặt lại hoặc thay đổi khóa; 2) Bạn có thể đang bị tấn công trung gian (MITM). Vui lòng xác minh với quản trị viên trước khi tiếp tục.",
+      "key_type_label": "Loại khóa",
+      "fingerprint_label": "Dấu vân tay SHA256",
+      "expected_fingerprint": "Dấu vân tay đã lưu",
+      "actual_fingerprint": "Dấu vân tay hiện tại",
+      "confirm_prompt": "Nếu bạn xác nhận việc thay đổi khóa là hợp lệ, hãy nhập \"{{host}}\" để tiếp tục:",
+      "actions": {
+        "cancel": "Hủy",
+        "trust_once": "Tin tưởng lần này",
+        "trust_save": "Tin tưởng và lưu",
+        "ok": "OK"
+      }
+    },
     "save_preset": {
       "title": "Lưu làm kết nối mẫu",
       "connection_path": "Đường dẫn kết nối",

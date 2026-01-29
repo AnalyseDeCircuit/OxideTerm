@@ -47,10 +47,11 @@ impl SshClient {
         };
 
         // Create SSH client handler with host info for key verification
-        let handler = ClientHandler::new(
+        let handler = ClientHandler::with_trust(
             self.config.host.clone(),
             self.config.port,
             self.config.strict_host_key_checking,
+            self.config.trust_host_key,
         );
 
         // Connect with timeout
@@ -170,11 +171,20 @@ pub struct ClientHandler {
     /// - true: reject unknown/changed keys
     /// - false: auto-accept unknown keys (still reject changed)
     strict: bool,
+    /// Trust host key mode for TOFU
+    /// - None: use strict behavior
+    /// - Some(true): trust and save unknown keys
+    /// - Some(false): trust for session only (don't save)
+    trust_host_key: Option<bool>,
 }
 
 impl ClientHandler {
     pub fn new(host: String, port: u16, strict: bool) -> Self {
-        Self { host, port, strict }
+        Self { host, port, strict, trust_host_key: None }
+    }
+
+    pub fn with_trust(host: String, port: u16, strict: bool, trust_host_key: Option<bool>) -> Self {
+        Self { host, port, strict, trust_host_key }
     }
 }
 
@@ -195,6 +205,27 @@ impl client::Handler for ClientHandler {
                 Ok(true)
             }
             HostKeyVerification::Unknown { fingerprint } => {
+                // Check if user has pre-approved this key via TOFU flow
+                if let Some(trust) = self.trust_host_key {
+                    if trust {
+                        // Trust and save to known_hosts
+                        info!(
+                            "TOFU: Trusting and saving host key for {}:{} (fingerprint: {})",
+                            self.host, self.port, fingerprint
+                        );
+                        if let Err(e) = known_hosts.add_host(&self.host, self.port, server_public_key) {
+                            warn!("Failed to save host key: {}", e);
+                        }
+                    } else {
+                        // Trust for this session only (don't save)
+                        info!(
+                            "TOFU: Trusting host key for session only {}:{} (fingerprint: {})",
+                            self.host, self.port, fingerprint
+                        );
+                    }
+                    return Ok(true);
+                }
+
                 if self.strict {
                     // Strict mode: reject unknown hosts
                     warn!(
@@ -208,6 +239,7 @@ impl client::Handler for ClientHandler {
                     )))
                 } else {
                     // Non-strict mode: auto-accept and save unknown keys
+                    // NOTE: This is the legacy behavior, kept for backward compatibility
                     info!(
                         "New host {}:{}, auto-adding to known_hosts (fingerprint: {})",
                         self.host, self.port, fingerprint

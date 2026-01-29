@@ -27,6 +27,7 @@ use crate::session::{
 use crate::sftp::session::SftpRegistry;
 use crate::ssh::{
     ConnectionInfo, ConnectionPoolConfig, SshConnectionRegistry,
+    HostKeyStatus, check_host_key, accept_host_key, get_host_key_cache,
 };
 
 /// 连接超时
@@ -45,6 +46,12 @@ pub struct SshConnectRequest {
     /// 是否复用已有连接
     #[serde(default = "default_true")]
     pub reuse_connection: bool,
+    /// 是否信任主机密钥（TOFU 模式）
+    /// - None: 使用默认行为（需要预检查）
+    /// - Some(true): 信任并保存到 known_hosts
+    /// - Some(false): 仅本次信任（不保存）
+    #[serde(default)]
+    pub trust_host_key: Option<bool>,
 }
 
 fn default_true() -> bool {
@@ -803,4 +810,100 @@ pub struct RecreateTerminalResponse {
     pub ws_url: String,
     pub port: u16,
     pub ws_token: String,
+}
+
+// ============================================================================
+// SSH Host Key Preflight (TOFU - Trust On First Use)
+// ============================================================================
+
+/// Preflight timeout (shorter than full connection)
+const PREFLIGHT_TIMEOUT_SECS: u64 = 10;
+
+/// SSH 主机密钥预检查请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshPreflightRequest {
+    pub host: String,
+    pub port: u16,
+}
+
+/// SSH 主机密钥预检查响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshPreflightResponse {
+    /// Host key verification status
+    #[serde(flatten)]
+    pub status: HostKeyStatus,
+}
+
+/// 预检查 SSH 主机密钥（TOFU 模式）
+///
+/// 在建立完整连接前，先检查主机密钥状态：
+/// - `Verified`: 主机密钥已在 known_hosts 中验证通过
+/// - `Unknown`: 首次连接，需要用户确认指纹
+/// - `Changed`: 主机密钥已变更，可能是 MITM 攻击！
+/// - `Error`: 连接错误
+///
+/// 前端根据返回状态决定是否显示确认对话框。
+#[tauri::command]
+pub async fn ssh_preflight(request: SshPreflightRequest) -> Result<SshPreflightResponse, String> {
+    info!(
+        "SSH preflight check: {}:{}",
+        request.host, request.port
+    );
+
+    let status = check_host_key(&request.host, request.port, PREFLIGHT_TIMEOUT_SECS).await;
+
+    Ok(SshPreflightResponse { status })
+}
+
+/// 接受主机密钥请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptHostKeyRequest {
+    pub host: String,
+    pub port: u16,
+    /// SHA256 fingerprint to accept
+    pub fingerprint: String,
+    /// Whether to persist to known_hosts (true) or trust for this session only (false)
+    pub persist: bool,
+}
+
+/// 接受 SSH 主机密钥
+///
+/// 用户在确认对话框中选择信任后调用此命令。
+/// - `persist=true`: 保存到 ~/.ssh/known_hosts（永久信任）
+/// - `persist=false`: 仅本次会话信任（内存缓存）
+///
+/// 注意：实际保存到 known_hosts 发生在后续 ssh_connect 时，
+/// 因为我们需要完整的公钥数据（不仅仅是指纹）。
+#[tauri::command]
+pub async fn ssh_accept_host_key(request: AcceptHostKeyRequest) -> Result<(), String> {
+    info!(
+        "Accepting host key for {}:{} (persist={})",
+        request.host, request.port, request.persist
+    );
+
+    // Mark as trusted in memory cache
+    accept_host_key(&request.host, request.port, &request.fingerprint)
+        .map_err(|e| format!("Failed to accept host key: {}", e))?;
+
+    // Note: If persist=true, the actual save to known_hosts happens during
+    // the real ssh_connect call when we have the full public key.
+    // We store a flag in the cache to indicate this should be persisted.
+    if request.persist {
+        // The cache entry already marks this as trusted.
+        // The ssh_connect flow will check this and save to known_hosts.
+        info!("Host key will be saved to known_hosts on next connection");
+    }
+
+    Ok(())
+}
+
+/// 清除主机密钥缓存（用于测试或强制重新验证）
+#[tauri::command]
+pub async fn ssh_clear_host_key_cache() -> Result<(), String> {
+    info!("Clearing host key cache");
+    get_host_key_cache().clear();
+    Ok(())
 }

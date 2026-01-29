@@ -259,6 +259,7 @@ impl AutoReconnectService {
             rows: config.rows,
             proxy_chain: None,
             strict_host_key_checking: false,
+            trust_host_key: None, // Auto-reconnect uses known_hosts, no TOFU needed
         };
 
         // Connect

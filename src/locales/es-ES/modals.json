@@ -153,6 +153,24 @@
       "reconnect": "Reconectar",
       "connecting": "Conectando..."
     },
+    "host_key": {
+      "title_unknown": "Clave de host desconocida",
+      "title_changed": "⚠️ ¡Clave de host cambiada!",
+      "title_error": "Error de conexión",
+      "unknown_message": "Esta es la primera vez que se conecta a este host. Por favor, verifique la huella digital antes de continuar.",
+      "changed_warning": "Advertencia: ¡La clave del host difiere de la guardada anteriormente! Esto podría significar: 1) El servidor fue reinstalado o cambió su clave; 2) Puede estar bajo un ataque de intermediario (MITM). Verifique con su administrador antes de continuar.",
+      "key_type_label": "Tipo de clave",
+      "fingerprint_label": "Huella digital SHA256",
+      "expected_fingerprint": "Huella digital guardada",
+      "actual_fingerprint": "Huella digital actual",
+      "confirm_prompt": "Si confirma que el cambio de clave es legítimo, escriba \"{{host}}\" para continuar:",
+      "actions": {
+        "cancel": "Cancelar",
+        "trust_once": "Confiar una vez",
+        "trust_save": "Confiar y guardar",
+        "ok": "Aceptar"
+      }
+    },
     "save_preset": {
       "title": "Guardar como conexión preestablecida",
       "connection_path": "Ruta de conexión",
