@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "No project open",
     "open_folder": "Open Folder",
+    "select_folder": "Select Folder",
+    "select_folder_desc": "Select a remote folder to open",
+    "go": "Go",
+    "go_to_parent": "Go to parent directory",
+    "no_subfolders": "No subfolders",
+    "selected_path": "Selected path",
     "retry": "Retry",
     "unsaved_changes": "Unsaved Changes",
     "unsaved_changes_desc": "Do you want to save the changes to {{fileName}}?",

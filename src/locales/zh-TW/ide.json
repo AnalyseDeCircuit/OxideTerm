@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "沒有開啟的專案",
     "open_folder": "開啟資料夾",
+    "select_folder": "選擇資料夾",
+    "select_folder_desc": "選擇要開啟的遠端資料夾",
+    "go": "前往",
+    "go_to_parent": "返回上層目錄",
+    "no_subfolders": "沒有子資料夾",
+    "selected_path": "已選路徑",
     "retry": "重試",
     "unsaved_changes": "未儲存的變更",
     "unsaved_changes_desc": "是否儲存 {{fileName}} 的變更？",

@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "Không có dự án nào được mở",
     "open_folder": "Mở thư mục",
+    "select_folder": "Chọn thư mục",
+    "select_folder_desc": "Chọn một thư mục từ xa để mở",
+    "go": "Đi",
+    "go_to_parent": "Đi đến thư mục cha",
+    "no_subfolders": "Không có thư mục con",
+    "selected_path": "Đường dẫn đã chọn",
     "retry": "Thử lại",
     "unsaved_changes": "Thay đổi chưa lưu",
     "unsaved_changes_desc": "Bạn có muốn lưu các thay đổi trong {{fileName}} không?",

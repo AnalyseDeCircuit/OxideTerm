@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "Nessun progetto aperto",
     "open_folder": "Apri cartella",
+    "select_folder": "Seleziona cartella",
+    "select_folder_desc": "Seleziona una cartella remota da aprire",
+    "go": "Vai",
+    "go_to_parent": "Vai alla directory padre",
+    "no_subfolders": "Nessuna sottocartella",
+    "selected_path": "Percorso selezionato",
     "retry": "Riprova",
     "unsaved_changes": "Modifiche non salvate",
     "unsaved_changes_desc": "Vuoi salvare le modifiche a {{fileName}}?",
