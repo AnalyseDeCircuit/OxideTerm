@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "プロジェクトが開かれていません",
     "open_folder": "フォルダを開く",
+    "select_folder": "フォルダを選択",
+    "select_folder_desc": "開くリモートフォルダを選択してください",
+    "go": "移動",
+    "go_to_parent": "親ディレクトリへ移動",
+    "no_subfolders": "サブフォルダがありません",
+    "selected_path": "選択されたパス",
     "retry": "再試行",
     "unsaved_changes": "未保存の変更",
     "unsaved_changes_desc": "{{fileName}} への変更を保存しますか？",

@@ -2,6 +2,12 @@
   "ide": {
     "no_project": "Aucun projet ouvert",
     "open_folder": "Ouvrir le dossier",
+    "select_folder": "Sélectionner le dossier",
+    "select_folder_desc": "Sélectionnez un dossier distant à ouvrir",
+    "go": "Aller",
+    "go_to_parent": "Aller au répertoire parent",
+    "no_subfolders": "Aucun sous-dossier",
+    "selected_path": "Chemin sélectionné",
     "retry": "Réessayer",
     "unsaved_changes": "Modifications non enregistrées",
     "unsaved_changes_desc": "Voulez-vous enregistrer les modifications de {{fileName}} ?",
