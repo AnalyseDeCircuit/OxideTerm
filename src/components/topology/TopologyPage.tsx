@@ -50,7 +50,7 @@ export const TopologyPage: React.FC = () => {
         // The original dialog filtered for connected/connecting.
         // We will stick to that to avoid cluttering the matrix with offline nodes
         // unless the user wants to see everything.
-        
+
         const connectedNodes = rawNodes.filter(
             node => node.state.status === 'connected' || node.state.status === 'connecting'
         );
@@ -62,18 +62,18 @@ export const TopologyPage: React.FC = () => {
     return (
         <div className="h-full w-full bg-theme-bg overflow-hidden flex flex-col">
             <div className="p-6 border-b border-theme-border bg-theme-bg-panel/50">
-                <h1 className="text-2xl font-bold text-zinc-100 mb-2">{t('topology.page.title')}</h1>
-                <p className="text-zinc-500 text-sm">{t('topology.page.description')}</p>
+                <h1 className="text-2xl font-bold text-theme-text mb-2">{t('topology.page.title')}</h1>
+                <p className="text-theme-text-muted text-sm">{t('topology.page.description')}</p>
             </div>
             <div ref={containerRef} className="flex-1 overflow-hidden relative">
                 {tree.length > 0 ? (
-                    <TopologyViewEnhanced 
-                        nodes={tree} 
+                    <TopologyViewEnhanced
+                        nodes={tree}
                         width={dimensions.width}
                         height={dimensions.height}
                     />
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+                    <div className="flex flex-col items-center justify-center h-full text-theme-text-muted">
                         <div className="text-lg">{t('topology.page.no_connections')}</div>
                         <p className="text-sm mt-2 opacity-70">{t('topology.page.connect_hint')}</p>
                     </div>

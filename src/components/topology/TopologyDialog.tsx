@@ -39,7 +39,7 @@ export const TopologyDialog: React.FC = () => {
   // Track container size when open
   useEffect(() => {
     if (!open) return;
-    
+
     const container = containerRef.current;
     if (!container) return;
 
@@ -73,7 +73,7 @@ export const TopologyDialog: React.FC = () => {
     <>
       {/* 触发按钮 */}
       <Button
-        variant="ghost" 
+        variant="ghost"
         size="icon"
         onClick={handleOpen}
         title={t('topology.button_title')}
@@ -84,22 +84,22 @@ export const TopologyDialog: React.FC = () => {
 
       {/* 对话框 */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-5xl w-full p-0 bg-transparent border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
-          <DialogHeader className="p-4 bg-[#0c0d0f] border-b border-zinc-800">
-            <DialogTitle className="flex items-center justify-between text-zinc-100">
+        <DialogContent className="max-w-5xl w-full p-0 bg-transparent border border-theme-border rounded-xl overflow-hidden shadow-2xl">
+          <DialogHeader className="p-4 bg-theme-bg-panel border-b border-theme-border">
+            <DialogTitle className="flex items-center justify-between text-theme-text">
               <div className="flex items-center gap-2">
-                <Network className="h-5 w-5 text-green-500" />
+                <Network className="h-5 w-5 text-theme-accent" />
                 <span>{t('topology.title')}</span>
               </div>
               <div className="flex items-center gap-4">
                 {tree.length > 0 && (
-                  <span className="text-xs font-mono text-zinc-500 tracking-wider">
+                  <span className="text-xs font-mono text-theme-text-muted tracking-wider">
                     {t('topology.system_status')} ({getTreeStats(tree, t)})
                   </span>
                 )}
-                <button 
+                <button
                   onClick={() => setOpen(false)}
-                  className="rounded-full p-1 hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors"
+                  className="rounded-full p-1 hover:bg-theme-bg text-theme-text-muted hover:text-theme-text transition-colors"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -108,32 +108,32 @@ export const TopologyDialog: React.FC = () => {
           </DialogHeader>
 
           {/* 拓扑图容器 - Main Canvas */}
-          <div ref={containerRef} className="relative bg-[#0c0d0f] min-h-[500px] flex flex-col">
-            
+          <div ref={containerRef} className="relative bg-theme-bg min-h-[500px] flex flex-col">
+
             {/* Legend Overlay */}
-            <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 p-3 rounded-lg bg-black/40 backdrop-blur-sm border border-white/5">
-                <div className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1 font-bold">{t('topology.legend_title')}</div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]" />
-                  <span className="text-xs text-zinc-300">{t('topology.status_active')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#eab308] shadow-[0_0_8px_#eab308]" />
-                  <span className="text-xs text-zinc-300">{t('topology.status_connecting')}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#71717a]" />
-                  <span className="text-xs text-zinc-500">{t('topology.status_idle')}</span>
-                </div>
+            <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 p-3 rounded-lg bg-theme-bg-panel/40 backdrop-blur-sm border border-theme-border/50">
+              <div className="text-[10px] uppercase tracking-widest text-theme-text-muted mb-1 font-bold">{t('topology.legend_title')}</div>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]" />
+                <span className="text-xs text-theme-text">{t('topology.status_active')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#eab308] shadow-[0_0_8px_#eab308]" />
+                <span className="text-xs text-theme-text">{t('topology.status_connecting')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-theme-text-muted/50" />
+                <span className="text-xs text-theme-text-muted">{t('topology.status_idle')}</span>
+              </div>
             </div>
 
             {/* View Component - Enhanced with force layout, zoom/pan, and menus */}
-            <TopologyViewEnhanced 
-              nodes={tree} 
+            <TopologyViewEnhanced
+              nodes={tree}
               width={dimensions.width}
               height={dimensions.height}
             />
-          
+
           </div>
         </DialogContent>
       </Dialog>

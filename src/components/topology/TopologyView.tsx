@@ -36,7 +36,7 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'connected': return THEME.colors.active;
     case 'connecting': return THEME.colors.connecting;
-    case 'disconnected': 
+    case 'disconnected':
     case 'closed': return THEME.colors.disconnected;
     case 'error': return THEME.colors.error;
     default: return THEME.colors.idle;
@@ -50,21 +50,21 @@ const getStatusColor = (status: string) => {
 /**
  * Render a Connection Line with Gradient and Animation
  */
-const ConnectionLine = ({ 
-  start, 
-  end, 
-  startColor, 
-  endColor, 
-  isActive 
-}: { 
-  start: { x: number, y: number }, 
+const ConnectionLine = ({
+  start,
+  end,
+  startColor,
+  endColor,
+  isActive
+}: {
+  start: { x: number, y: number },
   end: { x: number, y: number },
   startColor: string,
   endColor: string,
   isActive: boolean
 }) => {
   const gradientId = `grad-${start.x}-${start.y}-${end.x}-${end.y}`;
-  
+
   // Calculate Cubic Bezier Control Points
   const deltaY = end.y - start.y;
   const cp1 = { x: start.x, y: start.y + deltaY * 0.5 };
@@ -101,17 +101,17 @@ const ConnectionLine = ({
         strokeLinecap="round"
         strokeOpacity={isActive ? 1 : 0.4}
         className={cn(
-            "transition-all duration-500",
-             isActive && "animate-pulse-subtle" // Custom animation class defined in styles or handled below
+          "transition-all duration-500",
+          isActive && "animate-pulse-subtle" // Custom animation class defined in styles or handled below
         )}
       />
 
-       {/* Flow Animation Particle */}
-       {isActive && (
-         <circle r="2" fill="white">
-           <animateMotion dur="2s" repeatCount="indefinite" path={pathData} />
-         </circle>
-       )}
+      {/* Flow Animation Particle */}
+      {isActive && (
+        <circle r="2" fill="white">
+          <animateMotion dur="2s" repeatCount="indefinite" path={pathData} />
+        </circle>
+      )}
     </g>
   );
 };
@@ -120,42 +120,42 @@ const ConnectionLine = ({
 /**
  * Render Node using ForeignObject for HTML/Tailwind styling
  */
-const NodeCard = ({ 
-  node, 
-  isHovered, 
+const NodeCard = ({
+  node,
+  isHovered,
   isDimmed,
-  onMouseEnter, 
-  onMouseLeave 
-}: { 
-  node: LayoutNode, 
-  isHovered: boolean, 
+  onMouseEnter,
+  onMouseLeave
+}: {
+  node: LayoutNode,
+  isHovered: boolean,
   isDimmed: boolean,
   onMouseEnter: () => void,
-  onMouseLeave: () => void 
+  onMouseLeave: () => void
 }) => {
   const statusColor = getStatusColor(node.status);
   const halfWidth = node.width / 2;
   const halfHeight = node.height / 2;
-  
+
   // Interactive States
   const isDown = node.status === 'disconnected' || node.status === 'failed';
   const isConnecting = node.status === 'connecting' || node.status === 'pending';
 
   return (
-    <foreignObject 
-      x={node.x - halfWidth} 
-      y={node.y - halfHeight} 
-      width={node.width} 
+    <foreignObject
+      x={node.x - halfWidth}
+      y={node.y - halfHeight}
+      width={node.width}
       height={node.height}
       style={{ overflow: 'visible' }} // Allow glow to spill out
     >
-      <div 
+      <div
         className={cn(
           "w-full h-full rounded-lg transition-all duration-300 ease-out select-none",
           // Glassmorphism Base
-          "bg-white/5 backdrop-blur-md border border-white/10",
+          "bg-theme-bg-panel/20 backdrop-blur-md border border-theme-border/50",
           // Hover State
-          isHovered && "border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.1)] scale-105",
+          isHovered && "border-theme-accent/50 shadow-[0_0_15px_color-mix(in srgb, var(--theme-accent) 15%, transparent)] scale-105",
           // Dimmed State (when another node is hovered and this one isn't related)
           isDimmed && "opacity-30 blur-[1px]",
           // LinkDown State
@@ -167,31 +167,31 @@ const NodeCard = ({
         onMouseLeave={onMouseLeave}
       >
         <div className="flex flex-col justify-center items-center h-full w-full relative group">
-          
+
           {/* Status Indicator (Neon Glow) */}
           <div className="flex items-center gap-2 mb-0.5">
-            <div 
-               className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", isDown && "animate-ping")}
-               style={{ 
-                 backgroundColor: statusColor,
-                 boxShadow: `0 0 8px ${statusColor}` // Neon glow
-               }} 
+            <div
+              className={cn("w-1.5 h-1.5 rounded-full shadow-[0_0_8px]", isDown && "animate-ping")}
+              style={{
+                backgroundColor: statusColor,
+                boxShadow: `0 0 8px ${statusColor}` // Neon glow
+              }}
             />
-            
+
             {/* Node Name */}
-            <span className="text-white text-[12px] font-semibold tracking-wide truncate max-w-[100px] drop-shadow-md">
+            <span className="text-theme-text text-[12px] font-semibold tracking-wide truncate max-w-[100px] drop-shadow-md">
               {node.name}
             </span>
           </div>
 
           {/* IP Address */}
-          <span className="text-[10px] font-mono text-zinc-400 opacity-60">
-             {node.host}
+          <span className="text-[10px] font-mono text-theme-text-muted opacity-60">
+            {node.host}
           </span>
-          
+
           {/* Error Pulse Border (if needed) */}
           {isDown && (
-             <div className="absolute inset-0 rounded-lg border border-red-500/20 animate-pulse pointer-events-none" />
+            <div className="absolute inset-0 rounded-lg border border-red-500/20 animate-pulse pointer-events-none" />
           )}
         </div>
       </div>
@@ -210,10 +210,10 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
 
   if (nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[400px] text-zinc-500">
+      <div className="flex items-center justify-center h-[400px] text-theme-text-muted">
         <div className="text-center">
-             <div className="text-4xl mb-4 opacity-20">❄️</div>
-             <p className="text-sm font-mono tracking-widest uppercase">{t('topology.view.no_matrix')}</p>
+          <div className="text-4xl mb-4 opacity-20">❄️</div>
+          <p className="text-sm font-mono tracking-widest uppercase">{t('topology.view.no_matrix')}</p>
         </div>
       </div>
     );
@@ -235,10 +235,10 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
   let maxX = 0;
   let maxY = 0;
   allNodes.forEach(node => {
-     maxX = Math.max(maxX, node.x + node.width / 2);
-     maxY = Math.max(maxY, node.y + node.height / 2);
+    maxX = Math.max(maxX, node.x + node.width / 2);
+    maxY = Math.max(maxY, node.y + node.height / 2);
   });
-  
+
   const width = Math.max(800, maxX + 100);
   const height = Math.max(500, maxY + 100);
 
@@ -249,9 +249,9 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
   //     if (nodeId === hoveredNodeId) return true;
   //     return false;
   // };
-  
+
   return (
-    <div className="w-full h-full overflow-auto bg-[#0c0d0f] rounded-lg shadow-inner relative">
+    <div className="w-full h-full overflow-auto bg-theme-bg rounded-lg shadow-inner relative">
       <svg
         width={width}
         height={height}
@@ -259,17 +259,16 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
         className="block"
       >
         <defs>
-            {/* 1. Background Gradient */}
-            <radialGradient id="cyber-bg" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                <stop offset="0%" stopColor="#1e2024" />
-                <stop offset="90%" stopColor="#0c0d0f" />
-                <stop offset="100%" stopColor="#0c0d0f" />
-            </radialGradient>
+          {/* 1. Background Gradient */}
+          <radialGradient id="cyber-bg" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" stopColor="var(--theme-bg-panel)" />
+            <stop offset="100%" stopColor="var(--theme-bg)" />
+          </radialGradient>
 
-            {/* 2. Dot Pattern Grid */}
-            <pattern id="cyber-grid" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
-                 <circle cx="1" cy="1" r="1" fill="rgba(255, 255, 255, 0.03)" />
-            </pattern>
+          {/* 2. Dot Pattern Grid */}
+          <pattern id="cyber-grid" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="1" fill="var(--theme-text-muted)" opacity="0.1" />
+          </pattern>
         </defs>
 
         {/* Background Components */}
@@ -278,45 +277,45 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ nodes }) => {
 
         {/* Connections Layer */}
         {allNodes.map(node => {
-             if (!node.children || node.children.length === 0) return null;
-             return node.children.map(child => {
-                 const isHoveredInteraction = hoveredNodeId === node.id || hoveredNodeId === child.id;
-                 const isActive = node.status === 'connected' && child.status === 'connected';
-                 
-                 // Fade out inactive connections if something is hovered
-                 const isDimmed = hoveredNodeId !== null && !isHoveredInteraction;
+          if (!node.children || node.children.length === 0) return null;
+          return node.children.map(child => {
+            const isHoveredInteraction = hoveredNodeId === node.id || hoveredNodeId === child.id;
+            const isActive = node.status === 'connected' && child.status === 'connected';
 
-                 return (
-                     <g key={`${node.id}-${child.id}`} style={{ opacity: isDimmed ? 0.1 : 1, transition: 'opacity 0.3s' }}>
-                         <ConnectionLine 
-                            start={{ x: node.x, y: node.y + node.height/2 }}
-                            end={{ x: child.x, y: child.y - child.height/2 }}
-                            startColor={getStatusColor(node.status)}
-                            endColor={getStatusColor(child.status)}
-                            isActive={isActive}
-                         />
-                     </g>
-                 );
-             });
+            // Fade out inactive connections if something is hovered
+            const isDimmed = hoveredNodeId !== null && !isHoveredInteraction;
+
+            return (
+              <g key={`${node.id}-${child.id}`} style={{ opacity: isDimmed ? 0.1 : 1, transition: 'opacity 0.3s' }}>
+                <ConnectionLine
+                  start={{ x: node.x, y: node.y + node.height / 2 }}
+                  end={{ x: child.x, y: child.y - child.height / 2 }}
+                  startColor={getStatusColor(node.status)}
+                  endColor={getStatusColor(child.status)}
+                  isActive={isActive}
+                />
+              </g>
+            );
+          });
         })}
 
         {/* Nodes Layer */}
         {allNodes.map(node => {
-            const isHovered = hoveredNodeId === node.id;
-            
-            // Simplified dim logic: If any node hovered, dim all others except self
-            const simplisticDim = hoveredNodeId !== null && hoveredNodeId !== node.id;
+          const isHovered = hoveredNodeId === node.id;
 
-            return (
-              <NodeCard
-                key={node.id}
-                node={node}
-                isHovered={isHovered}
-                isDimmed={simplisticDim}
-                onMouseEnter={() => setHoveredNodeId(node.id)}
-                onMouseLeave={() => setHoveredNodeId(null)}
-              />
-            );
+          // Simplified dim logic: If any node hovered, dim all others except self
+          const simplisticDim = hoveredNodeId !== null && hoveredNodeId !== node.id;
+
+          return (
+            <NodeCard
+              key={node.id}
+              node={node}
+              isHovered={isHovered}
+              isDimmed={simplisticDim}
+              onMouseEnter={() => setHoveredNodeId(node.id)}
+              onMouseLeave={() => setHoveredNodeId(null)}
+            />
+          );
         })}
 
       </svg>
