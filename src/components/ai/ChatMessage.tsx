@@ -118,36 +118,39 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   };
 
   return (
-    <div className="my-6 rounded-md overflow-hidden bg-[var(--theme-bg-darker,#09090b)] border border-theme-border/40 shadow-sm">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-theme-bg-panel/40 border-b border-theme-border/20">
-        <span className="text-[9px] text-theme-text-muted font-mono uppercase tracking-[0.2em] opacity-70">
+    <div className="my-4 rounded-sm overflow-hidden bg-[var(--theme-bg-darker,#09090b)] border border-theme-border/20">
+      <div className="flex items-center justify-between px-3 py-1 bg-theme-bg-panel/20 border-b border-theme-border/10">
+        <span className="text-[10px] text-theme-text-muted font-mono uppercase tracking-wider opacity-60">
           {language || 'shell'}
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-3">
           {canInsert && (
             <button
               onClick={handleInsert}
-              className="p-1 px-2 rounded-md hover:bg-theme-accent/20 text-theme-accent transition-all flex items-center gap-1"
+              className="group/btn flex items-center gap-1.5 py-0.5 text-theme-text-muted hover:text-theme-accent transition-colors"
               title={t('ai.message.insert_to_terminal')}
             >
               <Terminal className="w-3 h-3" />
-              <span className="text-[9px] font-bold tracking-tighter">RUN</span>
+              <span className="text-[10px] font-bold tracking-tight">RUN</span>
             </button>
           )}
           <button
             onClick={handleCopy}
-            className="p-1 px-1.5 rounded-md hover:bg-theme-text/5 text-theme-text-muted hover:text-theme-text transition-all"
+            className="group/btn flex items-center gap-1.5 py-0.5 text-theme-text-muted hover:text-theme-text transition-colors"
             title={t('ai.message.copy_code')}
           >
             {copied ? (
-              <Check className="w-3.5 h-3.5 text-green-500" />
+              <Check className="w-3 h-3 text-green-500" />
             ) : (
-              <Copy className="w-3.5 h-3.5" />
+              <>
+                <Copy className="w-3 h-3" />
+                <span className="text-[10px] font-bold tracking-tight">COPY</span>
+              </>
             )}
           </button>
         </div>
       </div>
-      <pre className="p-4 overflow-x-auto text-[13px] leading-[1.7] font-mono">
+      <pre className="p-3 overflow-x-auto text-[13px] leading-relaxed font-mono">
         <code className="text-theme-text block">{code}</code>
       </pre>
     </div>
@@ -164,43 +167,40 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
   );
 
   return (
-    <div
-      className={`group flex gap-5 px-5 py-8 transition-colors ${isUser ? 'bg-theme-bg' : 'bg-transparent'
-        }`}
-    >
-      {/* Avatar - More subtle and integrated */}
-      <div className="flex-shrink-0 pt-1">
+    <div className="flex flex-col gap-2 px-4 py-6 border-b border-theme-border/5 last:border-0">
+      {/* Header - Avatar and Name on one line */}
+      <div className="flex items-center gap-2.5">
         <div
-          className={`w-7 h-7 rounded-md flex items-center justify-center border transition-all ${isUser
-            ? 'bg-theme-bg/50 border-theme-border text-theme-text-muted'
-            : 'bg-theme-accent/5 border-theme-accent/20 text-theme-accent'
+          className={`w-6 h-6 rounded-sm flex items-center justify-center border transition-all ${isUser
+            ? 'bg-theme-bg border-theme-border/60 text-theme-text-muted shadow-sm'
+            : 'bg-theme-accent/5 border-theme-accent/30 text-theme-accent'
             }`}
         >
           {isUser ? (
-            <User className="w-3.5 h-3.5" />
+            <User className="w-3 h-3 opacity-60" />
           ) : (
             <Bot className="w-3.5 h-3.5" />
           )}
         </div>
+        <span className={`text-[12px] font-bold tracking-tight ${isUser ? 'text-theme-text-muted' : 'text-theme-text'}`}>
+          {isUser ? t('ai.message.you') : 'Copilot'}
+        </span>
+        {message.context && !isUser && (
+          <span className="text-[10px] text-theme-text-muted font-medium opacity-40">
+            (used context)
+          </span>
+        )}
+        <span className="text-[10px] text-theme-text-muted font-medium opacity-20 ml-auto font-mono">
+          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-3 mb-2.5">
-          <span className={`text-[11px] font-bold tracking-[0.05em] uppercase ${isUser ? 'text-theme-text opacity-40' : 'text-theme-accent opacity-80'}`}>
-            {isUser ? t('ai.message.you') : t('ai.message.assistant')}
-          </span>
-          {message.context && !isUser && (
-            <span className="text-[9px] text-theme-text-muted px-1.5 py-0.5 rounded bg-theme-accent/10 border border-theme-accent/10 font-medium">
-              CONTEXT ATTACHED
-            </span>
-          )}
-        </div>
-
-        <div className="text-[14px] text-theme-text leading-[1.8] font-normal prose prose-invert prose-p:my-2 prose-headings:mb-3 prose-headings:mt-6">
+      {/* Content - Indented to create a gutter layout */}
+      <div className="pl-[34.5px] pr-2">
+        <div className="text-[13.5px] text-theme-text/90 leading-relaxed font-normal selection:bg-theme-accent/30">
           {renderedContent}
           {message.isStreaming && (
-            <span className="inline-block w-1 h-4 ml-1.5 bg-theme-accent animate-pulse align-middle" />
+            <span className="inline-block w-1.5 h-4 ml-1.5 bg-theme-accent/60 animate-pulse align-middle" />
           )}
         </div>
       </div>
