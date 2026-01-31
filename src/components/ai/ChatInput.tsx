@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Send, StopCircle, Terminal, Layers } from 'lucide-react';
+import { StopCircle, Terminal, Layers, Sparkles } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { api } from '../../lib/api';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -116,91 +116,101 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
   );
 
   return (
-    <div className="bg-theme-bg-panel/30 border-t border-theme-border p-4">
-      {/* Context toggle */}
-      {hasActiveTerminal && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIncludeContext(!includeContext)}
-            disabled={fetchingContext}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${includeContext
-              ? 'bg-theme-accent text-theme-bg shadow-sm'
-              : 'bg-theme-bg text-theme-text-muted hover:text-theme-text border border-theme-border/50'
-              } ${fetchingContext ? 'opacity-50 cursor-wait' : ''}`}
-            title={t('ai.input.include_context')}
-          >
-            <Terminal className="w-3 h-3" />
-            <span>{fetchingContext ? t('ai.input.fetching_context') : t('ai.input.include_context')}</span>
-          </button>
+    <div className="bg-theme-bg border-t border-theme-border/50 p-4">
+      {/* Context Toggles - Copilot Style Minimalist Chips */}
+      {(hasActiveTerminal || hasSplitPanes) && (
+        <div className="flex items-center gap-2 mb-3">
+          {hasActiveTerminal && (
+            <button
+              type="button"
+              onClick={() => setIncludeContext(!includeContext)}
+              disabled={fetchingContext}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[10px] font-bold tracking-tight uppercase transition-all border ${includeContext
+                ? 'bg-theme-accent/10 border-theme-accent/40 text-theme-accent'
+                : 'bg-theme-bg-panel/20 text-theme-text-muted border-theme-border/30 hover:border-theme-border/60'
+                } ${fetchingContext ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              <Terminal className="w-3 h-3" />
+              <span>{fetchingContext ? 'CTX...' : 'CONTEXT'}</span>
+            </button>
+          )}
 
-          {/* Cross-Pane Vision: Include all split panes */}
           {hasSplitPanes && includeContext && (
             <button
               type="button"
               onClick={() => setIncludeAllPanes(!includeAllPanes)}
               disabled={fetchingContext}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${includeAllPanes
-                ? 'bg-blue-500 text-white shadow-sm'
-                : 'bg-theme-bg text-theme-text-muted hover:text-theme-text border border-theme-border/50'
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[10px] font-bold tracking-tight uppercase transition-all border ${includeAllPanes
+                ? 'bg-blue-500/10 border-blue-500/40 text-blue-500'
+                : 'bg-theme-bg-panel/20 text-theme-text-muted border-theme-border/30 hover:border-theme-border/60'
                 } ${fetchingContext ? 'opacity-50 cursor-wait' : ''}`}
-              title={t('ai.input.include_all_panes')}
             >
               <Layers className="w-3 h-3" />
-              <span>{t('ai.input.include_all_panes')}</span>
+              <span>PANES</span>
             </button>
           )}
         </div>
       )}
 
-      {/* Input area */}
-      <div className="flex items-end gap-2 bg-theme-bg border border-theme-border rounded-xl focus-within:border-theme-accent/50 focus-within:ring-2 focus-within:ring-theme-accent/10 transition-all p-2 pr-2">
-        <div className="flex-1 relative">
+      {/* Input area - Strictly Flat and Integrated */}
+      <div className="flex flex-col bg-theme-bg-panel/20 border border-theme-border/60 rounded-sm focus-within:border-theme-accent/50 transition-all">
+        <div className="flex-1 min-w-0">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? t('ai.input.placeholder_disabled') : t('ai.input.placeholder')}
+            placeholder={disabled ? t('ai.input.placeholder_disabled') : 'Ask Copilot...'}
             disabled={disabled || isLoading}
             rows={1}
-            className="w-full resize-none bg-transparent border-none rounded-none px-2 py-1.5 text-sm text-theme-text placeholder-theme-text-muted/40 focus:outline-none focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full resize-none bg-transparent border-none rounded-none px-3 py-2 text-[13px] text-theme-text placeholder-theme-text-muted/40 focus:outline-none focus:ring-0 disabled:opacity-50 leading-relaxed min-h-[40px]"
           />
         </div>
 
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={onStop}
-            className="flex-shrink-0 mb-0.5 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-sm transition-all active:scale-95"
-            title={t('ai.input.stop_generation')}
-          >
-            <StopCircle className="w-4 h-4" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!input.trim() || disabled}
-            className="flex-shrink-0 mb-0.5 p-2 rounded-lg bg-theme-accent hover:opacity-90 text-theme-bg shadow-sm transition-all disabled:opacity-30 disabled:grayscale disabled:scale-100 active:scale-95"
-            title={t('ai.input.send')}
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+        <div className="flex items-center justify-between px-2 py-1.5 bg-theme-bg-panel/10 border-t border-theme-border/10">
+          <div className="flex items-center gap-3 text-[9px] font-bold tracking-tight text-theme-text-muted opacity-40 uppercase">
+            {isLoading ? (
+              <div className="flex items-center gap-1.5 text-theme-accent animate-pulse">
+                <Sparkles className="w-3 h-3" />
+                <span>COPILOT IS THINKING...</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1 py-0.5 rounded-sm border border-theme-border/30 bg-theme-bg/50">ENTER</span>
+                  <span>SEND</span>
+                </div>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <span className="px-1 py-0.5 rounded-sm border border-theme-border/30 bg-theme-bg/50">SHIFT+ENTER</span>
+                  <span>NEW LINE</span>
+                </div>
+              </>
+            )}
+          </div>
 
-      {/* Hint */}
-      <div className="mt-3 flex items-center justify-between text-[10px] text-theme-text-muted opacity-50 px-1">
-        <div className="flex items-center gap-3">
-          <span>
-            <kbd className="font-sans px-1 py-0.5 bg-theme-bg border border-theme-border rounded text-[9px]">Enter</kbd>
-            {' '}{t('ai.input.send_hint', 'to send')}
-          </span>
-          <span>
-            <kbd className="font-sans px-1 py-0.5 bg-theme-bg border border-theme-border rounded text-[9px]">Shift+Enter</kbd>
-            {' '}{t('ai.input.newline_hint', 'new line')}
-          </span>
+          <div className="flex items-center gap-2">
+            {isLoading ? (
+              <button
+                type="button"
+                onClick={onStop}
+                className="p-1 px-2 rounded-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all flex items-center gap-1"
+                title={t('ai.input.stop_generation')}
+              >
+                <StopCircle className="w-3 h-3" />
+                <span className="text-[10px] font-bold">STOP</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!input.trim() || disabled}
+                className="p-1 px-3 rounded-sm bg-theme-accent text-theme-bg hover:opacity-90 transition-all disabled:opacity-20 disabled:grayscale font-bold text-[10px]"
+                title={t('ai.input.send')}
+              >
+                SEND
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
