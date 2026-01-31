@@ -15,9 +15,9 @@ import * as d3Zoom from 'd3-zoom';
 import * as d3Selection from 'd3-selection';
 import { ExternalLink, Terminal, FolderOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { 
-  type TopologyNode, 
-  type ForceLayoutNode, 
+import {
+  type TopologyNode,
+  type ForceLayoutNode,
   forceLayoutCache,
 } from '../../lib/topologyUtils';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
@@ -45,7 +45,7 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'connected': return THEME.colors.connected;
     case 'connecting': return THEME.colors.connecting;
-    case 'disconnected': 
+    case 'disconnected':
     case 'closed': return THEME.colors.disconnected;
     case 'failed': return THEME.colors.failed;
     default: return THEME.colors.pending;
@@ -84,7 +84,7 @@ const ConnectionLine: React.FC<{
   const gradientId = `grad-${source.id}-${target.id}`;
   const sourceColor = getStatusColor(source.status);
   const targetColor = getStatusColor(target.status);
-  
+
   // Cubic Bezier curve
   const deltaY = target.y - source.y;
   const cp1 = { x: source.x, y: source.y + deltaY * 0.4 };
@@ -94,10 +94,10 @@ const ConnectionLine: React.FC<{
   return (
     <g className="transition-opacity duration-300">
       <defs>
-        <linearGradient 
-          id={gradientId} 
-          gradientUnits="userSpaceOnUse" 
-          x1={source.x} y1={source.y} 
+        <linearGradient
+          id={gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1={source.x} y1={source.y}
           x2={target.x} y2={target.y}
         >
           <stop offset="0%" stopColor={sourceColor} />
@@ -155,11 +155,11 @@ const NodeCard: React.FC<{
 }> = ({ node, isHovered, isDimmed, onMouseEnter, onMouseLeave, onDoubleClick }) => {
   const prevStatusRef = useRef(node.status);
   const [showSuccessFlash, setShowSuccessFlash] = useState(false);
-  
+
   const statusColor = getStatusColor(node.status);
   const halfWidth = THEME.node.width / 2;
   const halfHeight = THEME.node.height / 2;
-  
+
   const isDown = node.status === 'disconnected' || node.status === 'failed';
   const isConnecting = node.status === 'connecting';
   const isConnected = node.status === 'connected';
@@ -168,39 +168,39 @@ const NodeCard: React.FC<{
   useEffect(() => {
     const wasConnecting = prevStatusRef.current === 'connecting';
     const nowConnected = node.status === 'connected';
-    
+
     if (wasConnecting && nowConnected) {
       setShowSuccessFlash(true);
       const timer = setTimeout(() => setShowSuccessFlash(false), 800);
       return () => clearTimeout(timer);
     }
-    
+
     prevStatusRef.current = node.status;
   }, [node.status]);
 
   return (
     <motion.g
       initial={{ scale: 0, opacity: 0 }}
-      animate={{ 
-        scale: isDimmed ? 0.9 : 1, 
-        opacity: isDimmed ? 0.3 : 1 
+      animate={{
+        scale: isDimmed ? 0.9 : 1,
+        opacity: isDimmed ? 0.3 : 1
       }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
     >
-      <foreignObject 
-        x={node.x - halfWidth} 
-        y={node.y - halfHeight} 
-        width={THEME.node.width} 
+      <foreignObject
+        x={node.x - halfWidth}
+        y={node.y - halfHeight}
+        width={THEME.node.width}
         height={THEME.node.height}
         style={{ overflow: 'visible' }}
       >
-        <motion.div 
+        <motion.div
           className={cn(
             "w-full h-full rounded-lg transition-all duration-200 ease-out select-none cursor-pointer",
             // Glassmorphism Base
-            "bg-white/5 backdrop-blur-md border border-white/10",
+            "bg-theme-bg-panel/20 backdrop-blur-md border border-theme-border/50",
             // Hover State
-            isHovered && "border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.15)] scale-105",
+            isHovered && "border-theme-accent/50 shadow-[0_0_20px_color-mix(in srgb, var(--theme-accent) 15%, transparent)] scale-105",
             // LinkDown State
             isDown && "grayscale-[0.6] border-red-500/40",
           )}
@@ -213,8 +213,8 @@ const NodeCard: React.FC<{
           } : isConnected ? {
             boxShadow: `0 0 15px ${statusColor}30`,
           } : {}}
-          transition={isConnecting ? { 
-            repeat: Infinity, 
+          transition={isConnecting ? {
+            repeat: Infinity,
             duration: 1.5,
             ease: 'easeInOut',
           } : {}}
@@ -223,10 +223,10 @@ const NodeCard: React.FC<{
           onDoubleClick={onDoubleClick}
         >
           <div className="flex flex-col justify-center items-center h-full w-full relative">
-            
+
             {/* Status Indicator */}
             <div className="flex items-center gap-2 mb-0.5">
-              <motion.div 
+              <motion.div
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: statusColor }}
                 animate={isDown ? {
@@ -235,26 +235,26 @@ const NodeCard: React.FC<{
                 } : isConnecting ? {
                   scale: [1, 1.4, 1],
                 } : {}}
-                transition={isDown || isConnecting ? { 
-                  repeat: Infinity, 
+                transition={isDown || isConnecting ? {
+                  repeat: Infinity,
                   duration: isDown ? 0.8 : 1.2,
                 } : {}}
               />
-              
+
               {/* Node Name */}
-              <span className="text-white text-[11px] font-semibold tracking-wide truncate max-w-[100px]">
+              <span className="text-theme-text text-[11px] font-semibold tracking-wide truncate max-w-[100px]">
                 {node.name}
               </span>
             </div>
 
             {/* Host */}
-            <span className="text-[9px] font-mono text-zinc-400 opacity-70 truncate max-w-[120px]">
+            <span className="text-[9px] font-mono text-theme-text-muted opacity-70 truncate max-w-[120px]">
               {node.host}
             </span>
-            
+
             {/* Error shake animation */}
             {isDown && (
-              <motion.div 
+              <motion.div
                 className="absolute inset-0 rounded-lg border border-red-500/30 pointer-events-none"
                 animate={{ x: [0, -2, 2, -2, 0] }}
                 transition={{ repeat: Infinity, duration: 0.5, repeatDelay: 2 }}
@@ -264,10 +264,10 @@ const NodeCard: React.FC<{
             {/* Success flash animation */}
             <AnimatePresence>
               {showSuccessFlash && (
-                <motion.div 
+                <motion.div
                   className="absolute inset-0 rounded-lg pointer-events-none"
                   initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ 
+                  animate={{
                     opacity: [0, 1, 0],
                     scale: [0.8, 1.1, 1],
                   }}
@@ -323,22 +323,22 @@ const NodeActionMenu: React.FC<{
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: -10 }}
       transition={{ duration: 0.15 }}
-      className="fixed z-50 bg-zinc-900/95 backdrop-blur-lg border border-zinc-700 rounded-lg shadow-2xl overflow-hidden min-w-[180px]"
+      className="fixed z-50 bg-theme-bg-panel/95 backdrop-blur-lg border border-theme-border rounded-lg shadow-2xl overflow-hidden min-w-[180px]"
       style={{ left: x, top: y }}
     >
       {/* Header */}
-      <div className="px-3 py-2 border-b border-zinc-700/50 bg-zinc-800/50">
-        <div className="text-xs font-semibold text-zinc-200 truncate">{node.name}</div>
-        <div className="text-[10px] text-zinc-500 font-mono">{node.host}</div>
+      <div className="px-3 py-2 border-b border-theme-border/50 bg-theme-bg/50">
+        <div className="text-xs font-semibold text-theme-text truncate">{node.name}</div>
+        <div className="text-[10px] text-theme-text-muted font-mono">{node.host}</div>
       </div>
 
       {/* Actions */}
       <div className="py-1">
         <button
           onClick={onNavigateToSession}
-          className="w-full px-3 py-2 flex items-center gap-2 text-sm text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+          className="w-full px-3 py-2 flex items-center gap-2 text-sm text-theme-text-muted hover:text-theme-text hover:bg-theme-accent/10 transition-colors"
         >
-          <ExternalLink className="w-4 h-4 text-blue-400" />
+          <ExternalLink className="w-4 h-4 text-theme-accent" />
           <span>{t('topology.menu.navigate_session')}</span>
         </button>
 
@@ -346,17 +346,17 @@ const NodeActionMenu: React.FC<{
           <>
             <button
               onClick={onCreateTerminal}
-              className="w-full px-3 py-2 flex items-center gap-2 text-sm text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-2 text-sm text-theme-text-muted hover:text-theme-text hover:bg-theme-accent/10 transition-colors"
             >
-              <Terminal className="w-4 h-4 text-green-400" />
+              <Terminal className="w-4 h-4 text-green-500" />
               <span>{t('topology.menu.new_terminal')}</span>
             </button>
 
             <button
               onClick={onOpenSftp}
-              className="w-full px-3 py-2 flex items-center gap-2 text-sm text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-2 text-sm text-theme-text-muted hover:text-theme-text hover:bg-theme-accent/10 transition-colors"
             >
-              <FolderOpen className="w-4 h-4 text-yellow-400" />
+              <FolderOpen className="w-4 h-4 text-yellow-500" />
               <span>{t('topology.menu.open_sftp')}</span>
             </button>
           </>
@@ -364,8 +364,8 @@ const NodeActionMenu: React.FC<{
       </div>
 
       {/* Close hint */}
-      <div className="px-3 py-1.5 border-t border-zinc-700/50 bg-zinc-800/30">
-        <div className="text-[10px] text-zinc-500 text-center">{t('topology.menu.close_hint')}</div>
+      <div className="px-3 py-1.5 border-t border-theme-border/50 bg-theme-bg/30">
+        <div className="text-[10px] text-theme-text-muted text-center">{t('topology.menu.close_hint')}</div>
       </div>
     </motion.div>
   );
@@ -375,7 +375,7 @@ const NodeActionMenu: React.FC<{
 // Main Component
 // ------------------------------------------------------------------
 
-export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({ 
+export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
   nodes: treeNodes,
   width: containerWidth = 800,
   height: containerHeight = 600,
@@ -383,7 +383,7 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
-  
+
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [menu, setMenu] = useState<NodeMenuState>({ isOpen: false, nodeId: null, x: 0, y: 0 });
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
@@ -435,7 +435,7 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
   const handleNodeDoubleClick = useCallback((node: ForceLayoutNode, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Calculate menu position (account for zoom transform)
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -468,7 +468,7 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
     try {
       const { createTerminalForNode } = useSessionTreeStore.getState();
       const terminalId = await createTerminalForNode(menu.nodeId);
-      
+
       // Create terminal tab (sessionId is second argument)
       createTab('terminal', terminalId);
     } catch (e) {
@@ -486,7 +486,7 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
     try {
       const { openSftpForNode } = useSessionTreeStore.getState();
       const sftpId = await openSftpForNode(menu.nodeId);
-      
+
       // Create SFTP tab (sessionId is second argument)
       createTab('sftp', sftpId);
     } catch (e) {
@@ -514,18 +514,18 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
   }
 
   return (
-    <div className="w-full h-full overflow-hidden bg-[#0c0d0f] rounded-lg relative">
+    <div className="w-full h-full overflow-hidden bg-theme-bg rounded-lg relative">
       {/* Zoom controls */}
       <div className="absolute top-4 right-4 z-10 flex gap-2">
-        <div className="px-2 py-1 bg-zinc-800/80 rounded text-xs text-zinc-400 font-mono">
+        <div className="px-2 py-1 bg-theme-bg-panel/80 border border-theme-border rounded text-xs text-theme-text-muted font-mono shadow-sm">
           {Math.round(transform.k * 100)}%
         </div>
       </div>
 
       {/* Instructions */}
-    <div className="absolute bottom-4 left-4 z-10 text-[10px] text-zinc-600 font-mono">
-      {t('topology.controls.instructions')}
-    </div>
+      <div className="absolute bottom-4 left-4 z-10 text-[10px] text-theme-text-muted font-mono opacity-60">
+        {t('topology.controls.instructions')}
+      </div>
 
       <svg
         ref={svgRef}
@@ -537,13 +537,13 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
         <defs>
           {/* Background Gradient */}
           <radialGradient id="cyber-bg-enhanced" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#1a1b1e" />
-            <stop offset="100%" stopColor="#0c0d0f" />
+            <stop offset="0%" stopColor="var(--theme-bg-panel)" />
+            <stop offset="100%" stopColor="var(--theme-bg)" />
           </radialGradient>
 
           {/* Grid Pattern */}
           <pattern id="cyber-grid-enhanced" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.5" fill="rgba(255, 255, 255, 0.03)" />
+            <circle cx="1" cy="1" r="0.5" fill="var(--theme-text-muted)" opacity="0.1" />
           </pattern>
         </defs>
 
@@ -554,18 +554,18 @@ export const TopologyViewEnhanced: React.FC<TopologyViewEnhancedProps> = ({
         {/* Zoomable group */}
         <g ref={gRef}>
           {/* Connection Lines */}
-          {nodes.map(node => 
+          {nodes.map(node =>
             node.children.map(child => {
               const childNode = nodeMap.get(child.id);
               if (!childNode) return null;
-              
+
               const isHoveredConnection = hoveredNodeId === node.id || hoveredNodeId === child.id;
               const isActive = node.status === 'connected' && childNode.status === 'connected';
               const shouldDim = hoveredNodeId !== null && !isHoveredConnection;
 
               return (
-                <g 
-                  key={`${node.id}-${child.id}`} 
+                <g
+                  key={`${node.id}-${child.id}`}
                   style={{ opacity: shouldDim ? 0.15 : 1, transition: 'opacity 0.3s' }}
                 >
                   <ConnectionLine
