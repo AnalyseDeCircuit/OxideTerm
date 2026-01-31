@@ -67,3 +67,22 @@ Cargo.lock linguist-generated
 
 # Exclude generated files
 src-tauri/gen/* linguist-generated
+
+# --- 强制 Rust 主权修正案 ---
+
+# 1. 把所有翻译 JSON 标记为文档（这是大头，必须杀掉）
+src/locales/**/*.json linguist-documentation
+
+# 2. 把 UI 组件库标记为 "Vendored" (第三方或辅助资源)
+# 如果你觉得 UI 不代表核心技术，把 components 目录统计关掉
+src/components/ui/** linguist-vendored
+
+# 3. 排除脚本工具（比如你今晚写的 check-i18n.cjs）
+scripts/** linguist-documentation
+
+# 4. 如果你想更极端一点，把所有 TS/TSX 标记为文档（慎用，除非你只想显示 Rust）
+# *.tsx linguist-documentation
+# *.ts linguist-documentation
+
+# 5. 确保 Rust 核心目录始终被检测
+src-tauri/src/**/*.rs linguist-detectable=true
