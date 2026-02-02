@@ -44,6 +44,7 @@
     "fileTooLarge": "文件太大，无法预览",
     "fileSize": "文件大小",
     "quickLookHint": "按空格键预览 • Escape 关闭",
+    "quickLookHintNav": "←→ 导航 • i 显示信息 • 空格关闭",
     "zoomIn": "放大",
     "zoomOut": "缩小",
     "rotate": "旋转",
@@ -79,6 +80,15 @@
     "name": "名称",
     "size": "大小",
     "compressed": "压缩后",
-    "modified": "修改时间"
+    "modified": "修改时间",
+    "created": "创建时间",
+    "permissions": "权限",
+    "mimeType": "MIME 类型",
+    "symlink": "符号链接",
+    "previousFile": "上一个文件",
+    "nextFile": "下一个文件",
+    "toggleInfo": "切换信息面板",
+    "readonly": "只读",
+    "readwrite": "可读写"
   }
 }

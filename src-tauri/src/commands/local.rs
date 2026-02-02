@@ -300,3 +300,155 @@ pub fn local_get_drives() -> Vec<String> {
         vec!["/".to_string()]
     }
 }
+
+/// File metadata response
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMetadata {
+    /// File size in bytes
+    pub size: u64,
+    /// Last modified time (Unix timestamp in seconds)
+    pub modified: Option<u64>,
+    /// Created time (Unix timestamp in seconds) - may not be available on all platforms
+    pub created: Option<u64>,
+    /// Last accessed time (Unix timestamp in seconds)
+    pub accessed: Option<u64>,
+    /// Unix permissions mode (e.g., 0o755)
+    #[cfg(unix)]
+    pub mode: u32,
+    /// Is readonly
+    pub readonly: bool,
+    /// Is directory
+    pub is_dir: bool,
+    /// Is symlink
+    pub is_symlink: bool,
+    /// MIME type (guessed from extension)
+    pub mime_type: Option<String>,
+}
+
+/// Get detailed file metadata
+/// 
+/// Returns comprehensive file information including size, timestamps, and permissions.
+/// This is called only when entering preview mode, not during directory listing.
+#[tauri::command]
+pub async fn local_get_file_metadata(path: String) -> Result<FileMetadata, String> {
+    use std::fs;
+    use std::time::UNIX_EPOCH;
+    
+    let path = std::path::Path::new(&path);
+    let metadata = fs::metadata(path)
+        .map_err(|e| format!("Failed to get metadata: {}", e))?;
+    
+    let symlink_metadata = fs::symlink_metadata(path).ok();
+    let is_symlink = symlink_metadata.map(|m| m.file_type().is_symlink()).unwrap_or(false);
+    
+    // Get timestamps
+    let modified = metadata.modified().ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    
+    let created = metadata.created().ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    
+    let accessed = metadata.accessed().ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    
+    // Guess MIME type from extension
+    let mime_type = path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| guess_mime_type(ext));
+    
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode();
+        
+        Ok(FileMetadata {
+            size: metadata.len(),
+            modified,
+            created,
+            accessed,
+            mode,
+            readonly: metadata.permissions().readonly(),
+            is_dir: metadata.is_dir(),
+            is_symlink,
+            mime_type,
+        })
+    }
+    
+    #[cfg(not(unix))]
+    {
+        Ok(FileMetadata {
+            size: metadata.len(),
+            modified,
+            created,
+            accessed,
+            readonly: metadata.permissions().readonly(),
+            is_dir: metadata.is_dir(),
+            is_symlink,
+            mime_type,
+        })
+    }
+}
+
+/// Guess MIME type from file extension
+fn guess_mime_type(ext: &str) -> String {
+    match ext.to_lowercase().as_str() {
+        // Images
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "bmp" => "image/bmp",
+        // Videos
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "mov" => "video/quicktime",
+        // Audio
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "flac" => "audio/flac",
+        "m4a" => "audio/mp4",
+        // Documents
+        "pdf" => "application/pdf",
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls" => "application/vnd.ms-excel",
+        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "ppt" => "application/vnd.ms-powerpoint",
+        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        // Archives
+        "zip" => "application/zip",
+        "tar" => "application/x-tar",
+        "gz" => "application/gzip",
+        "7z" => "application/x-7z-compressed",
+        "rar" => "application/vnd.rar",
+        // Code/Text
+        "js" => "text/javascript",
+        "ts" => "text/typescript",
+        "json" => "application/json",
+        "xml" => "application/xml",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "md" => "text/markdown",
+        "txt" => "text/plain",
+        "py" => "text/x-python",
+        "rs" => "text/x-rust",
+        "go" => "text/x-go",
+        "java" => "text/x-java",
+        "c" | "h" => "text/x-c",
+        "cpp" | "hpp" | "cc" => "text/x-c++",
+        "sh" | "bash" => "text/x-shellscript",
+        "yaml" | "yml" => "text/yaml",
+        "toml" => "text/x-toml",
+        _ => "application/octet-stream",
+    }.to_string()
+}
+

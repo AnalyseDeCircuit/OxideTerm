@@ -79,6 +79,16 @@
     "name": "名稱",
     "size": "大小",
     "compressed": "壓縮後",
-    "modified": "修改時間"
+    "modified": "修改時間",
+    "quickLookHintNav": "←→ 導航 • i 顯示資訊 • 空格關閉",
+    "created": "建立時間",
+    "permissions": "權限",
+    "mimeType": "MIME 類型",
+    "symlink": "符號連結",
+    "previousFile": "上一個檔案",
+    "nextFile": "下一個檔案",
+    "toggleInfo": "切換資訊面板",
+    "readonly": "唯讀",
+    "readwrite": "可讀寫"
   }
 }

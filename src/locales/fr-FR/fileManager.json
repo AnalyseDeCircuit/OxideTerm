@@ -79,6 +79,16 @@
     "name": "Nom",
     "size": "Taille",
     "compressed": "Compressé",
-    "modified": "Modifié"
+    "modified": "Modifié",
+    "quickLookHintNav": "←→ Naviguer • i Info • Espace fermer",
+    "created": "Créé",
+    "permissions": "Permissions",
+    "mimeType": "Type MIME",
+    "symlink": "Lien symbolique",
+    "previousFile": "Fichier précédent",
+    "nextFile": "Fichier suivant",
+    "toggleInfo": "Basculer le panneau d'info",
+    "readonly": "Lecture seule",
+    "readwrite": "Lecture/Écriture"
   }
 }

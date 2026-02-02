@@ -300,6 +300,7 @@ pub fn run() {
             commands::local_get_terminal_info,
             commands::local_cleanup_dead_sessions,
             commands::local_get_drives,
+            commands::local_get_file_metadata,
             // Session commands (v2 with registry)
             commands::connect_v2,
             commands::disconnect_v2,

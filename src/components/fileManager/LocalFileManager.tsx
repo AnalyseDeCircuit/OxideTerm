@@ -25,12 +25,11 @@ import {
   DialogFooter
 } from '../ui/dialog';
 import { cn } from '../../lib/utils';
-import type { FileInfo, FilePreview, PreviewType } from './types';
+import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo } from './types';
 
 // Preview imports
 import { readFile, stat } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
-import type { ArchiveInfo } from './types';
 
 // File extension categorization
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'cfg', 'env']);
@@ -150,12 +149,23 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
   
   // Preview state (for Quick Look)
   const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number>(-1);
+  
+  // Compute previewable files (non-directories) from displayFiles
+  const previewableFiles = React.useMemo(() => 
+    localFiles.displayFiles.filter(f => f.file_type !== 'Directory'),
+    [localFiles.displayFiles]
+  );
   
   // Handle preview (Quick Look) - Enhanced version
   const handlePreview = useCallback(async (file: FileInfo) => {
     try {
       // Normalize path to avoid double slashes and other issues
       const filePath = normalizePath(file.path);
+      
+      // Find the index in previewable files
+      const idx = previewableFiles.findIndex(f => f.path === file.path);
+      setPreviewIndex(idx);
       
       // Get extension properly (handles dotfiles)
       const ext = getFileExtension(file.name);
@@ -242,6 +252,15 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         }
       }
       
+      // Fetch detailed file metadata (stat call only during preview for performance)
+      let metadata: FileMetadata | undefined;
+      try {
+        metadata = await invoke<FileMetadata>('local_get_file_metadata', { path: filePath });
+      } catch (metadataErr) {
+        console.warn('Failed to fetch file metadata:', metadataErr);
+        // Non-fatal, continue without metadata
+      }
+      
       setPreviewFile({
         name: file.name,
         path: filePath,
@@ -252,13 +271,21 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         fileSize,
         reason: previewType === 'unsupported' ? t('fileManager.binaryFile') : undefined,
         archiveInfo,
+        metadata,
       });
     } catch (err) {
       // Provide more detailed error info
       console.error('Preview error:', err, 'for file:', file.path);
       toastError(t('fileManager.previewError'), `${file.name}: ${String(err)}`);
     }
-  }, [toastError, t]);
+  }, [toastError, t, previewableFiles]);
+  
+  // Handle navigation in Quick Look (navigate to another file in the list)
+  const handlePreviewNavigate = useCallback((file: FileInfo, newIndex: number) => {
+    // The file parameter provides the target file directly
+    handlePreview(file);
+    setPreviewIndex(newIndex);
+  }, [handlePreview]);
   
   // Handle keyboard shortcuts (global)
   useEffect(() => {
@@ -678,8 +705,14 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
       {/* Quick Look Preview */}
       <QuickLook
         preview={previewFile}
-        onClose={() => setPreviewFile(null)}
+        onClose={() => {
+          setPreviewFile(null);
+          setPreviewIndex(-1);
+        }}
         onOpenExternal={handleOpenExternal}
+        fileList={previewableFiles}
+        currentIndex={previewIndex}
+        onNavigate={handlePreviewNavigate}
       />
       
       {/* Drives Dialog */}

@@ -79,6 +79,16 @@
     "name": "Tên",
     "size": "Kích thước",
     "compressed": "Nén",
-    "modified": "Đã sửa đổi"
+    "modified": "Đã sửa đổi",
+    "quickLookHintNav": "←→ Điều hướng • i Thông tin • Space đóng",
+    "created": "Đã tạo",
+    "permissions": "Quyền",
+    "mimeType": "Loại MIME",
+    "symlink": "Liên kết tượng trưng",
+    "previousFile": "Tệp trước",
+    "nextFile": "Tệp tiếp theo",
+    "toggleInfo": "Bật/tắt bảng thông tin",
+    "readonly": "Chỉ đọc",
+    "readwrite": "Đọc/Ghi"
   }
 }

@@ -100,6 +100,19 @@ export interface ArchiveInfo {
   compressedSize: number;
 }
 
+// File metadata from Rust backend
+export interface FileMetadata {
+  size: number;
+  modified?: number;  // Unix timestamp in seconds
+  created?: number;   // Unix timestamp in seconds (may not be available)
+  accessed?: number;  // Unix timestamp in seconds
+  mode?: number;      // Unix permissions mode (e.g., 0o755)
+  readonly: boolean;
+  isDir: boolean;
+  isSymlink: boolean;
+  mimeType?: string;
+}
+
 export interface FilePreview {
   name: string;
   path: string;
@@ -109,6 +122,8 @@ export interface FilePreview {
   language?: string | null;
   encoding?: string;
   size?: number;
+  // Metadata (loaded on preview)
+  metadata?: FileMetadata;
   // Hex specific
   hexOffset?: number;
   hexTotalSize?: number;
