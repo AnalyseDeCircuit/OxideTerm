@@ -30,7 +30,6 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { useToast } from '../../hooks/useToast';
 import { AiChatPanel } from '../ai/AiChatPanel';
-import { LocalFileManager } from '../fileManager';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';

@@ -31,6 +31,7 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { formatUnixPermissions, formatFileSize, formatTimestamp, formatRelativeTime } from './utils';
 import { CodeHighlight } from './CodeHighlight';
+import { OfficePreview } from './OfficePreview';
 import type { FilePreview, PreviewType, ArchiveEntry, FileInfo } from './types';
 
 // Format file size
@@ -51,6 +52,7 @@ const getPreviewIcon = (type: PreviewType) => {
     case 'markdown':
       return <FileCode className="h-4 w-4" />;
     case 'text':
+    case 'office':
       return <FileText className="h-4 w-4" />;
     case 'archive':
       return <Archive className="h-4 w-4" />;
@@ -376,6 +378,16 @@ export const QuickLook: React.FC<QuickLookProps> = ({
               src={preview.data}
               className="w-full h-[70vh]"
               title={preview.name}
+            />
+          )}
+
+          {/* Office Document Preview */}
+          {preview.type === 'office' && (
+            <OfficePreview
+              data={preview.data}
+              mimeType={preview.mimeType || 'application/octet-stream'}
+              filename={preview.name}
+              className="h-[70vh]"
             />
           )}
 
