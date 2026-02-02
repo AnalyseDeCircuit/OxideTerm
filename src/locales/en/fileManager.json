@@ -44,6 +44,7 @@
     "fileTooLarge": "File is too large to preview",
     "fileSize": "File size",
     "quickLookHint": "Press Space to preview • Escape to close",
+    "quickLookHintNav": "←→ Navigate • i Info • Space close",
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out",
     "rotate": "Rotate",
@@ -79,6 +80,15 @@
     "name": "Name",
     "size": "Size",
     "compressed": "Compressed",
-    "modified": "Modified"
+    "modified": "Modified",
+    "created": "Created",
+    "permissions": "Permissions",
+    "mimeType": "MIME Type",
+    "symlink": "Symbolic Link",
+    "previousFile": "Previous File",
+    "nextFile": "Next File",
+    "toggleInfo": "Toggle Info Panel",
+    "readonly": "Read-only",
+    "readwrite": "Read/Write"
   }
 }
