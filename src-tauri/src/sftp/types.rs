@@ -78,6 +78,11 @@ pub enum PreviewContent {
         /// Original MIME type if converted from Office document
         original_mime: Option<String>,
     },
+    /// Base64-encoded Office document for frontend rendering
+    Office {
+        data: String,
+        mime_type: String,
+    },
     /// Hex dump for binary files (incremental loading)
     Hex {
         /// Hex dump string

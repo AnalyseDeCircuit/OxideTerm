@@ -503,6 +503,7 @@ export type PreviewContent =
   | { Video: { data: string; mime_type: string } }
   | { Audio: { data: string; mime_type: string } }
   | { Pdf: { data: string; original_mime: string | null } }
+  | { Office: { data: string; mime_type: string } }
   | { Hex: { data: string; total_size: number; offset: number; chunk_size: number; has_more: boolean } }
   | { TooLarge: { size: number; max_size: number; recommend_download: boolean } }
   | { Unsupported: { mime_type: string; reason: string } };

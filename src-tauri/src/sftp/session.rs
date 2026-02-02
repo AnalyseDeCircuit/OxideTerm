@@ -616,50 +616,20 @@ impl SftpSession {
         })
     }
 
-    /// Preview Office documents (convert to PDF via LibreOffice)
+    /// Preview Office documents (return raw data for frontend rendering)
     async fn preview_office(&self, path: &str, size: u64) -> Result<PreviewContent, SftpError> {
-        // Check size limit
-        if size > constants::MAX_OFFICE_CONVERT_SIZE {
+        // Check size limit (increase to 50MB for frontend rendering)
+        const MAX_OFFICE_SIZE: u64 = 50 * 1024 * 1024;
+        if size > MAX_OFFICE_SIZE {
             return Ok(PreviewContent::TooLarge {
                 size,
-                max_size: constants::MAX_OFFICE_CONVERT_SIZE,
+                max_size: MAX_OFFICE_SIZE,
                 recommend_download: true,
             });
         }
 
-        // Check if LibreOffice is available
-        let soffice_path = Self::find_libreoffice_async().await;
-        if soffice_path.is_none() {
-            let extension = Path::new(path)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown");
-            let mime_type = mime_guess::from_path(path)
-                .first_or_octet_stream()
-                .to_string();
-            return Ok(PreviewContent::Unsupported {
-                mime_type,
-                reason: format!(
-                    "LibreOffice not installed. Cannot preview {} files. Please download the file to view it.",
-                    extension.to_uppercase()
-                ),
-            });
-        }
-
-        // Download to temp file
-        let temp_dir = std::env::temp_dir().join("oxideterm_preview");
-        tokio::fs::create_dir_all(&temp_dir)
-            .await
-            .map_err(SftpError::IoError)?;
-
-        let filename = Path::new(path)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("document");
-        let temp_input = temp_dir.join(filename);
-
-        // Get original MIME type before conversion
-        let original_mime = mime_guess::from_path(path)
+        // Get MIME type
+        let mime_type = mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string();
 
@@ -669,53 +639,13 @@ impl SftpSession {
             .read(path)
             .await
             .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
-        tokio::fs::write(&temp_input, &content)
-            .await
-            .map_err(SftpError::IoError)?;
 
-        // Convert to PDF
-        let soffice = soffice_path.unwrap();
-        let output = tokio::process::Command::new(&soffice)
-            .args([
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                temp_dir.to_str().unwrap(),
-                temp_input.to_str().unwrap(),
-            ])
-            .output()
-            .await
-            .map_err(SftpError::IoError)?;
+        // Encode to base64 for frontend
+        let data = base64::engine::general_purpose::STANDARD.encode(&content);
 
-        // Clean up input file
-        let _ = tokio::fs::remove_file(&temp_input).await;
-
-        if !output.status.success() {
-            return Ok(PreviewContent::Unsupported {
-                mime_type: original_mime,
-                reason: format!(
-                    "LibreOffice conversion failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ),
-            });
-        }
-
-        // Read the converted PDF
-        let pdf_name = Path::new(filename).with_extension("pdf");
-        let pdf_path = temp_dir.join(&pdf_name);
-
-        let pdf_content = tokio::fs::read(&pdf_path)
-            .await
-            .map_err(SftpError::IoError)?;
-
-        // Clean up PDF file
-        let _ = tokio::fs::remove_file(&pdf_path).await;
-
-        let data = base64::engine::general_purpose::STANDARD.encode(&pdf_content);
-        Ok(PreviewContent::Pdf {
+        Ok(PreviewContent::Office {
             data,
-            original_mime: Some(original_mime),
+            mime_type,
         })
     }
 
@@ -773,46 +703,6 @@ impl SftpSession {
             chunk_size: bytes_read as u64,
             has_more,
         })
-    }
-
-    /// Find LibreOffice executable (async - runs blocking checks in spawn_blocking)
-    async fn find_libreoffice_async() -> Option<String> {
-        tokio::task::spawn_blocking(Self::find_libreoffice_sync)
-            .await
-            .ok()
-            .flatten()
-    }
-
-    /// Find LibreOffice executable (sync version)
-    fn find_libreoffice_sync() -> Option<String> {
-        // Check common paths
-        let paths = [
-            "/usr/bin/soffice",
-            "/usr/bin/libreoffice",
-            "/usr/local/bin/soffice",
-            "/usr/local/bin/libreoffice",
-            // macOS
-            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-            // Windows (would need adjustment for actual Windows paths)
-        ];
-
-        for path in &paths {
-            if std::path::Path::new(path).exists() {
-                return Some(path.to_string());
-            }
-        }
-
-        // Try which command as fallback
-        if let Ok(output) = std::process::Command::new("which").arg("soffice").output() {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Some(path);
-                }
-            }
-        }
-
-        None
     }
 
 

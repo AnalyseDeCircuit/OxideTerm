@@ -42,7 +42,21 @@ const CODE_EXTENSIONS = new Set([
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp']);
 const PDF_EXTENSIONS = new Set(['pdf']);
-const ARCHIVE_EXTENSIONS = new Set(['zip', 'jar', 'war', 'ear', 'apk', 'xpi', 'crx', 'odt', 'ods', 'docx', 'xlsx', 'pptx', 'epub']);
+const OFFICE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp']);
+const ARCHIVE_EXTENSIONS = new Set(['zip', 'jar', 'war', 'ear', 'apk', 'xpi', 'crx', 'epub']);
+
+// Office MIME type mapping
+const OFFICE_MIME_TYPES: Record<string, string> = {
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'doc': 'application/msword',
+  'xls': 'application/vnd.ms-excel',
+  'ppt': 'application/vnd.ms-powerpoint',
+  'odt': 'application/vnd.oasis.opendocument.text',
+  'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  'odp': 'application/vnd.oasis.opendocument.presentation',
+};
 
 // Shell config files (dotfiles without extension) that should be treated as text/code
 const SHELL_CONFIG_FILES = new Set([
@@ -177,6 +191,7 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
       // Determine preview type
       let previewType: PreviewType;
       let data = '';
+      let mimeType: string | undefined;
       let language: string | undefined;
       let archiveInfo: ArchiveInfo | undefined;
       
@@ -184,7 +199,7 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         previewType = 'image';
         // Read image and convert to data URL safely
         const content = await readFile(filePath);
-        const mimeType = ext === 'svg' ? 'image/svg+xml' : 
+        mimeType = ext === 'svg' ? 'image/svg+xml' :
                         ext === 'png' ? 'image/png' :
                         ext === 'gif' ? 'image/gif' :
                         ext === 'webp' ? 'image/webp' :
@@ -196,8 +211,15 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         previewType = 'pdf';
         // Read PDF and convert to base64 data URL
         const content = await readFile(filePath);
+        mimeType = 'application/pdf';
         const base64 = uint8ArrayToBase64(content);
-        data = `data:application/pdf;base64,${base64}`;
+        data = `data:${mimeType};base64,${base64}`;
+      } else if (OFFICE_EXTENSIONS.has(ext)) {
+        previewType = 'office';
+        // Read Office file and convert to base64
+        const content = await readFile(filePath);
+        mimeType = OFFICE_MIME_TYPES[ext] || 'application/octet-stream';
+        data = uint8ArrayToBase64(content);
       } else if (ARCHIVE_EXTENSIONS.has(ext)) {
         // Archive preview - list contents
         previewType = 'archive';
@@ -266,6 +288,7 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         path: filePath,
         type: previewType,
         data,
+        mimeType,
         language,
         size: fileSize,
         fileSize,

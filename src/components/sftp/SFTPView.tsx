@@ -35,6 +35,7 @@ import { PathBreadcrumb } from './PathBreadcrumb';
 import { FileDiffDialog } from './FileDiffDialog';
 import { RemoteFileEditor } from '../editor/RemoteFileEditor';
 import { CodeHighlight } from '../fileManager/CodeHighlight';
+import { OfficePreview } from '../fileManager/OfficePreview';
 import { api } from '../../lib/api';
 import { FileInfo } from '../../types';
 import { listen } from '@tauri-apps/api/event';
@@ -590,7 +591,7 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
   const [previewFile, setPreviewFile] = useState<{
     name: string;
     path: string;
-    type: 'text' | 'image' | 'video' | 'audio' | 'pdf' | 'hex' | 'too-large' | 'unsupported';
+    type: 'text' | 'image' | 'video' | 'audio' | 'pdf' | 'office' | 'hex' | 'too-large' | 'unsupported';
     data: string;
     mimeType?: string;
     language?: string | null;
@@ -1467,7 +1468,18 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
               });
               return;
           }
-          
+
+          if ('Office' in content) {
+              setPreviewFile({
+                  name: file.name,
+                  path: fullPath,
+                  type: 'office',
+                  data: content.Office.data,
+                  mimeType: content.Office.mime_type,
+              });
+              return;
+          }
+
           if ('Hex' in content) {
               setPreviewFile({
                   name: file.name,
@@ -1661,6 +1673,13 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                                 ({formatFileSize(previewFile.hexTotalSize)})
                             </span>
                         )}
+                        {previewFile?.type === 'office' && (
+                            <span className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">
+                                {previewFile.name.endsWith('.docx') || previewFile.name.endsWith('.doc') ? 'Word' :
+                                 previewFile.name.endsWith('.xlsx') || previewFile.name.endsWith('.xls') ? 'Excel' :
+                                 previewFile.name.endsWith('.pptx') || previewFile.name.endsWith('.ppt') ? 'PowerPoint' : 'Office'}
+                            </span>
+                        )}
                         {previewFile?.language && (
                             <span className="text-xs px-1.5 py-0.5 bg-theme-accent/20 text-theme-accent rounded">
                                 {previewFile.language}
@@ -1738,7 +1757,17 @@ export const SFTPView = ({ sessionId }: { sessionId: string }) => {
                         title={previewFile.name}
                     />
                 )}
-                
+
+                {/* Office Document Preview */}
+                {!previewLoading && previewFile?.type === 'office' && (
+                    <OfficePreview
+                        data={previewFile.data}
+                        mimeType={previewFile.mimeType || 'application/octet-stream'}
+                        filename={previewFile.name}
+                        className="h-full"
+                    />
+                )}
+
                 {/* Hex Preview */}
                 {!previewLoading && previewFile?.type === 'hex' && (
                     <div className="p-4">

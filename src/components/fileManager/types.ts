@@ -68,17 +68,18 @@ export interface ContextMenuState {
 }
 
 // File preview types
-export type PreviewType = 
-  | 'text' 
+export type PreviewType =
+  | 'text'
   | 'code'
   | 'markdown'
-  | 'image' 
-  | 'video' 
-  | 'audio' 
-  | 'pdf' 
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'office'
   | 'archive'
-  | 'hex' 
-  | 'too-large' 
+  | 'hex'
+  | 'too-large'
   | 'unsupported';
 
 // Archive entry info
