@@ -815,13 +815,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       return lines.join('\n');
     };
     
+    // Selection getter for AI sidebar context
+    const getSelectionContent = (): string => {
+      return terminalRef.current?.getSelection() || '';
+    };
+    
     // Register with paneId as key, not sessionId
     registerTerminalBuffer(
       effectivePaneId,
       effectiveTabId,
       sessionId,
       'terminal', // SSH terminal type
-      getBufferContent
+      getBufferContent,
+      getSelectionContent  // Include selection getter
     );
     
     // Font loading detection - ensure fonts are loaded before connecting

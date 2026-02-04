@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../lib/api';
 import { useSettingsStore } from './settingsStore';
+import { gatherSidebarContext, type SidebarContext } from '../lib/sidebarContextProvider';
 import type { AiChatMessage, AiConversation } from '../types';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -246,13 +247,32 @@ export const useAiChatStore = create<AiChatStore>()(
           return;
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // Automatic Context Injection (Sidebar Deep Awareness)
+        // ════════════════════════════════════════════════════════════════════
+        
+        // Gather environment snapshot: OS, connection details, buffer, selection
+        let sidebarContext: SidebarContext | null = null;
+        try {
+          sidebarContext = gatherSidebarContext({
+            maxBufferLines: aiSettings.contextVisibleLines || 50,
+            maxBufferChars: aiSettings.contextMaxChars || 8000,
+            maxSelectionChars: 2000,
+          });
+        } catch (e) {
+          console.warn('[AiChatStore] Failed to gather sidebar context:', e);
+        }
+        
+        // Merge provided context with auto-gathered context
+        const effectiveContext = context || sidebarContext?.contextBlock || '';
+
         // Add user message
         const userMessage: AiChatMessage = {
           id: generateId(),
           role: 'user',
           content,
           timestamp: Date.now(),
-          context,
+          context: effectiveContext || undefined,
         };
         _addMessage(convId, userMessage);
 
@@ -278,17 +298,27 @@ export const useAiChatStore = create<AiChatStore>()(
         // Prepare messages for API
         const apiMessages: ChatCompletionMessage[] = [];
 
-        // System prompt
+        // ════════════════════════════════════════════════════════════════════
+        // Enhanced System Prompt with Environment Awareness
+        // ════════════════════════════════════════════════════════════════════
+        
+        let systemPrompt = `You are a helpful terminal assistant. You help users with shell commands, scripts, and terminal operations. Be concise and direct. When providing commands, format them clearly. You can use markdown for formatting.`;
+        
+        // Add environment context if available
+        if (sidebarContext?.systemPromptSegment) {
+          systemPrompt += `\n\n${sidebarContext.systemPromptSegment}`;
+        }
+        
         apiMessages.push({
           role: 'system',
-          content: `You are a helpful terminal assistant. You help users with shell commands, scripts, and terminal operations. Be concise and direct. When providing commands, format them clearly. You can use markdown for formatting.`,
+          content: systemPrompt,
         });
 
-        // Add context if provided
-        if (context) {
+        // Add terminal context if available
+        if (effectiveContext) {
           apiMessages.push({
             role: 'system',
-            content: `Current terminal context:\n\`\`\`\n${context}\n\`\`\``,
+            content: `Current terminal context:\n\`\`\`\n${effectiveContext}\n\`\`\``,
           });
         }
 
