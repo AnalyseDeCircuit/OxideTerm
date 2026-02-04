@@ -14,6 +14,7 @@ use crate::sftp::{
     session::{SftpRegistry, SftpSession},
     types::*,
 };
+use crate::ssh::SshConnectionRegistry;
 
 /// Initialize SFTP for a session
 #[tauri::command]
@@ -21,6 +22,7 @@ pub async fn sftp_init(
     session_id: String,
     session_registry: State<'_, Arc<SessionRegistry>>,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
 ) -> Result<String, SftpError> {
     info!("Initializing SFTP for session {}", session_id);
 
@@ -31,6 +33,11 @@ pub async fn sftp_init(
             return Ok(sftp.cwd().to_string());
         }
     }
+
+    // Get the connection_id for this session (for ConnectionRegistry tracking)
+    let connection_id = session_registry
+        .with_session(&session_id, |entry| entry.connection_id.clone())
+        .flatten();
 
     // Get the HandleController to open a new channel
     let handle_controller = session_registry
@@ -43,6 +50,16 @@ pub async fn sftp_init(
 
     // Register SFTP session
     sftp_registry.register(session_id.clone(), sftp);
+
+    // 🔴 关键修复: 更新 ConnectionRegistry 的 SFTP 会话状态
+    if let Some(conn_id) = connection_id {
+        if let Err(e) = connection_registry
+            .set_sftp_session(&conn_id, Some(session_id.clone()))
+            .await
+        {
+            tracing::warn!("Failed to update SFTP state in ConnectionRegistry: {}", e);
+        }
+    }
 
     info!("SFTP initialized for session {}, cwd: {}", session_id, cwd);
     Ok(cwd)
@@ -357,9 +374,26 @@ pub async fn sftp_cd(
 pub async fn sftp_close(
     session_id: String,
     sftp_registry: State<'_, Arc<SftpRegistry>>,
+    session_registry: State<'_, Arc<SessionRegistry>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
 ) -> Result<(), SftpError> {
     info!("Closing SFTP for session {}", session_id);
     sftp_registry.remove(&session_id);
+
+    // 清除 ConnectionRegistry 中的 SFTP 状态
+    let connection_id = session_registry
+        .with_session(&session_id, |entry| entry.connection_id.clone())
+        .flatten();
+
+    if let Some(conn_id) = connection_id {
+        if let Err(e) = connection_registry
+            .set_sftp_session(&conn_id, None)
+            .await
+        {
+            tracing::warn!("Failed to clear SFTP state in ConnectionRegistry: {}", e);
+        }
+    }
+
     Ok(())
 }
 

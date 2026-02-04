@@ -304,6 +304,7 @@ impl From<ForwardRule> for ForwardRuleDto {
 #[tauri::command]
 pub async fn create_port_forward(
     registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<crate::ssh::SshConnectionRegistry>>,
     request: CreateForwardRequest,
 ) -> Result<ForwardResponse, String> {
     info!(
@@ -381,7 +382,17 @@ pub async fn create_port_forward(
 
     match manager.create_forward(rule).await {
         Ok(created_rule) => {
-            info!("Port forward created: {}", created_rule.id);
+            let forward_id = created_rule.id.clone();
+            info!("Port forward created: {}", forward_id);
+
+            // 🔴 关键修复: 更新 ConnectionRegistry 的 forward 列表
+            if let Err(e) = connection_registry
+                .add_forward(&request.session_id, forward_id)
+                .await
+            {
+                warn!("Failed to update forward state in ConnectionRegistry: {}", e);
+            }
+
             Ok(ForwardResponse {
                 success: true,
                 forward: Some(created_rule.into()),
@@ -403,6 +414,7 @@ pub async fn create_port_forward(
 #[tauri::command]
 pub async fn stop_port_forward(
     registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<crate::ssh::SshConnectionRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
@@ -419,6 +431,15 @@ pub async fn stop_port_forward(
     match manager.stop_forward(&forward_id).await {
         Ok(()) => {
             info!("Port forward stopped: {}", forward_id);
+
+            // 从 ConnectionRegistry 移除 forward
+            if let Err(e) = connection_registry
+                .remove_forward(&session_id, &forward_id)
+                .await
+            {
+                warn!("Failed to remove forward from ConnectionRegistry: {}", e);
+            }
+
             Ok(ForwardResponse {
                 success: true,
                 forward: None,
@@ -652,6 +673,7 @@ impl From<ForwardStats> for ForwardStatsDto {
 #[tauri::command]
 pub async fn delete_port_forward(
     registry: State<'_, Arc<ForwardingRegistry>>,
+    connection_registry: State<'_, Arc<crate::ssh::SshConnectionRegistry>>,
     session_id: String,
     forward_id: String,
 ) -> Result<ForwardResponse, String> {
@@ -668,6 +690,15 @@ pub async fn delete_port_forward(
     match manager.delete_forward(&forward_id).await {
         Ok(()) => {
             info!("Port forward deleted: {}", forward_id);
+
+            // 从 ConnectionRegistry 移除 forward
+            if let Err(e) = connection_registry
+                .remove_forward(&session_id, &forward_id)
+                .await
+            {
+                warn!("Failed to remove forward from ConnectionRegistry: {}", e);
+            }
+
             Ok(ForwardResponse {
                 success: true,
                 forward: None,
