@@ -841,24 +841,6 @@ export const Sidebar = () => {
           >
             <Database className="h-5 w-5" />
           </Button>
-          <Button
-            variant={sidebarActiveSection === 'sftp' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => { setSidebarSection('sftp'); toggleSidebar(); }}
-            title={t('sidebar.panels.sftp')}
-            className="rounded-md h-9 w-9"
-          >
-            <Folder className="h-5 w-5" />
-          </Button>
-          <Button
-            variant={sidebarActiveSection === 'forwards' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => { setSidebarSection('forwards'); toggleSidebar(); }}
-            title={t('sidebar.panels.forwards')}
-            className="rounded-md h-9 w-9"
-          >
-            <ArrowLeftRight className="h-5 w-5" />
-          </Button>
 
           {/* SSH Connection Pool (Tab) */}
           <div className="relative">
@@ -996,24 +978,6 @@ export const Sidebar = () => {
           className="rounded-md h-9 w-9"
         >
           <Database className="h-5 w-5" />
-        </Button>
-        <Button
-          variant={sidebarActiveSection === 'sftp' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('sftp')}
-          title={t('sidebar.panels.sftp')}
-          className="rounded-md h-9 w-9"
-        >
-          <Folder className="h-5 w-5" />
-        </Button>
-        <Button
-          variant={sidebarActiveSection === 'forwards' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('forwards')}
-          title={t('sidebar.panels.forwards')}
-          className="rounded-md h-9 w-9"
-        >
-          <ArrowLeftRight className="h-5 w-5" />
         </Button>
 
         {/* SSH Connection Pool (Tab) */}
@@ -1356,68 +1320,6 @@ export const Sidebar = () => {
                     </div>
                   ));
                 })()}
-              </div>
-            </div>
-          )}
-
-          {sidebarActiveSection === 'sftp' && (
-            <div className="space-y-4">
-              <div className="px-2">
-                <span className="text-xs font-semibold text-theme-text-muted uppercase tracking-wider">{t('sidebar.panels.sftp_sessions')}</span>
-              </div>
-              <div className="space-y-1">
-                {sessionList.length === 0 ? (
-                  <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
-                    {t('sidebar.panels.no_active_sessions')}
-                  </div>
-                ) : (
-                  sessionList.filter(s => s.state === 'connected').map(session => (
-                    <div
-                      key={session.id}
-                      onClick={() => createTab('sftp', session.id)}
-                      className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text rounded-sm cursor-pointer"
-                    >
-                      <Folder className="h-3 w-3 text-theme-text-muted" />
-                      <span className="truncate flex-1">{session.name}</span>
-                    </div>
-                  ))
-                )}
-                {sessionList.length > 0 && sessionList.filter(s => s.state === 'connected').length === 0 && (
-                  <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
-                    {t('sidebar.panels.no_connected_sessions')}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {sidebarActiveSection === 'forwards' && (
-            <div className="space-y-4">
-              <div className="px-2">
-                <span className="text-xs font-semibold text-theme-text-muted uppercase tracking-wider">{t('sidebar.panels.forwards_title')}</span>
-              </div>
-              <div className="space-y-1">
-                {sessionList.length === 0 ? (
-                  <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
-                    {t('sidebar.panels.no_active_sessions')}
-                  </div>
-                ) : (
-                  sessionList.filter(s => s.state === 'connected').map(session => (
-                    <div
-                      key={session.id}
-                      onClick={() => createTab('forwards', session.id)}
-                      className="flex items-center gap-2 px-2 py-1.5 text-sm text-theme-text rounded-sm cursor-pointer"
-                    >
-                      <ArrowLeftRight className="h-3 w-3 text-theme-text-muted" />
-                      <span className="truncate flex-1">{session.name}</span>
-                    </div>
-                  ))
-                )}
-                {sessionList.length > 0 && sessionList.filter(s => s.state === 'connected').length === 0 && (
-                  <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
-                    {t('sidebar.panels.no_connected_sessions')}
-                  </div>
-                )}
               </div>
             </div>
           )}
