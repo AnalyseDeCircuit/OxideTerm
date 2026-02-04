@@ -1,6 +1,8 @@
-# OxideTerm 使用指南
+# OxideTerm 使用指南 (v1.4.0)
 
 > 从入门到精通，全面掌握 OxideTerm 的核心功能和最佳实践。
+>
+> **v1.4.0 新特性**：自动重连更可靠、SFTP 路径记忆、端口转发自动恢复。
 
 ## 📋 目录
 
@@ -272,6 +274,25 @@ OxideTerm 内置多个终端主题：
 
 右键连接 → SFTP Browser
 
+### v1.4.0 新特性
+
+#### State Gating（状态门禁）
+
+当连接不稳定时，SFTP 会自动显示等待遮罩，防止无效操作：
+
+```
+┌─────────────────────────────────────┐
+│          Waiting for connection...  │
+│          Current state: reconnecting│
+└─────────────────────────────────────┘
+```
+
+连接恢复后，SFTP 自动激活。
+
+#### Path Memory（路径记忆）
+
+重连后自动恢复之前的工作目录，无需手动导航。
+
 ### 文件操作
 
 #### 上传文件
@@ -378,10 +399,15 @@ OxideTerm 内置多个终端主题：
 2. 设置 SOCKS5 代理: `localhost:1080`
 3. 所有浏览流量通过 SSH 加密
 
-**应用场景**：
-- 安全浏览（绕过审查）
-- 访问内网资源
-- 加密所有流量
+### v1.4.0 Link Resilience
+
+端口转发规则会被持久化，重连后**自动恢复**：
+
+```
+网络断开 → 显示警告 → 自动重连 → 规则自动恢复 → 继续使用
+```
+
+无需手动重新配置。
 
 详见：[PORT_FORWARDING.md](./PORT_FORWARDING.md)
 
@@ -389,23 +415,23 @@ OxideTerm 内置多个终端主题：
 
 ## 🚀 高级功能
 
-### 自动重连
+### 自动重连 (v1.4.0 增强)
 
 **功能**: 网络断开时自动恢复连接
+
+**v1.4.0 改进**：
+- 重连成功后自动恢复 SFTP 路径
+- 端口转发规则自动重建
+- 终端无缝恢复输入
 
 **行为**：
 ```
 正常使用 → 网络断开 → 显示 Input Lock → 自动重连 → 恢复使用
 ```
 
-**配置**：
-- 默认启用
-- 最多重试 5 次
-- 指数退避（200ms → 500ms → 1s → 2s → 4s）
-
 **断线行为**：
 - **Terminal**: 输入锁定，显示 Overlay，保留历史
-- **SFTP**: 传输中断，标记错误
+- **SFTP**: 显示等待遮罩，重连后恢复路径
 - **Port Forward**: 暂停，重连后自动恢复
 
 详见：[CONNECTION_POOL.md](./CONNECTION_POOL.md)
@@ -469,19 +495,8 @@ OxideTerm 内置多个终端主题：
   任意连接到 Database Server 都会自动经过 VPN Gateway
 ```
 
-**手动配置边**：
-```json
-~/.config/oxideterm/topology_edges.json
-
-{
-  "custom_edges": [
-    { "from": "bastion", "to": "db", "cost": 1 }
-  ],
-  "excluded_edges": [
-    { "from": "local", "to": "untrusted", "cost": 1 }
-  ]
-}
-```
+**v1.4.0 级联故障处理**：
+当跳板机断开时，所有下游连接自动标记为断开，并尝试级联重连。
 
 详见：[NETWORK_TOPOLOGY.md](./NETWORK_TOPOLOGY.md)
 
@@ -640,6 +655,26 @@ OxideTerm 内置多个终端主题：
 2. 检查网络质量
 3. 联系服务器管理员调整超时
 
+### v1.4.0 特有问题
+
+#### SFTP 显示 "Waiting for connection"
+
+**原因**: State Gating 机制检测到连接未就绪
+
+**解决方案**：
+1. 等待自动重连完成
+2. 检查会话树中的连接状态
+3. 如果长时间卡住，尝试手动重连
+
+#### 重连后 SFTP 路径丢失
+
+**原因**: Path Memory 未正常工作
+
+**解决方案**：
+1. 确保使用最新版本
+2. 检查浏览器控制台是否有错误
+3. 尝试手动导航
+
 ### 性能问题
 
 #### 终端输入延迟高
@@ -681,7 +716,7 @@ OxideTerm 内置多个终端主题：
 
 ## 📚 相关文档
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - 系统架构设计
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - 系统架构设计 (v1.4.0 Strong Sync)
 - [CONNECTION_POOL.md](./CONNECTION_POOL.md) - 连接池与自动重连
 - [NETWORK_TOPOLOGY.md](./NETWORK_TOPOLOGY.md) - 拓扑路由与 ProxyJump
 - [TERMINAL_SEARCH.md](./TERMINAL_SEARCH.md) - 终端搜索功能
@@ -690,6 +725,7 @@ OxideTerm 内置多个终端主题：
 - [PORT_FORWARDING.md](./PORT_FORWARDING.md) - 端口转发配置
 - [SFTP.md](./SFTP.md) - SFTP 文件传输
 - [SERIALIZATION.md](./SERIALIZATION.md) - .oxide 文件格式
+- [SYSTEM_INVARIANTS.md](./SYSTEM_INVARIANTS.md) - 系统不变量
 
 ---
 
@@ -697,17 +733,15 @@ OxideTerm 内置多个终端主题：
 
 ### 社区支持
 
-- **GitHub Issues**: https://github.com/yourusername/oxideterm/issues
-- **Discussions**: https://github.com/yourusername/oxideterm/discussions
-- **Discord**: https://discord.gg/oxideterm
+- **GitHub Issues**: https://github.com/AnalyseDeCircuit/oxideterm/issues
+- **Discussions**: https://github.com/AnalyseDeCircuit/oxideterm/discussions
 
 ### 贡献
 
 欢迎贡献代码、文档或报告问题：
-- 查看 [CONTRIBUTING.md](../CONTRIBUTING.md)
 - Fork 项目并提交 PR
 - 报告 Bug 或功能请求
 
 ---
 
-*文档版本: v1.1.0 | 最后更新: 2026-01-19*
+*文档版本: v1.4.0 (Strong Sync + Key-Driven Reset) | 最后更新: 2026-02-04*

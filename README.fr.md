@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -26,7 +26,7 @@
 
 ## 📖 Évolution Fondamentale
 
-OxideTerm v1.3.2 représente une refonte architecturale complète. Nous ne sommes plus seulement un client SSH, mais un **moteur de terminal** avec plus de **65 000 lignes** de code Rust + TypeScript méticuleusement conçu.
+OxideTerm v1.4.0 représente une refonte architecturale complète. Nous ne sommes plus seulement un client SSH, mais un **moteur de terminal** avec plus de **65 000 lignes** de code Rust + TypeScript méticuleusement conçu.
 
 ### ⚙️ Percée Backend : Terminal Local & Modèle de Concurrence
 Nous avons introduit un support de terminal local basé sur `portable-pty`, résolvant complètement les défis de concurrence dans le runtime async de Rust :
@@ -50,7 +50,7 @@ Face aux besoins de gestion d'état drastiquement différents entre sessions loc
 
 ## 🏗️ Architecture Système
 
-v1.3.2 emploie une architecture de flux de données hybride qui route intelligemment le trafic selon le type de session :
+v1.4.0 emploie une architecture de flux de données hybride qui route intelligemment le trafic selon le type de session :
 
 ```mermaid
 flowchart TB
@@ -158,7 +158,7 @@ Nous avons construit un `SshConnectionRegistry` basé sur le comptage de référ
 
 ---
 
-## 🛠️ Stack Technique (v1.3.2)
+## 🛠️ Stack Technique (v1.4.0)
 
 | Couche | Technologie Clé | Description |
 |--------|----------------|-------------|

@@ -1,10 +1,147 @@
-# OxideTerm 系统不变量与设计约束文档
+# OxideTerm 系统不变量与设计约束文档 (v1.4.0)
 
 > **本文档约束所有未来实现**。任何修改必须遵守这些不变量。
 >
 > **目标读者：未来的 AI 开发者**。你可能倾向于"优化"这些规则。不要这样做。
 >
 > **核心原则**：系统中的五个核心实体（Session、Channel、Forward、SFTP、WebShell）有严格的依赖和生命周期关系。违反这些关系会导致资源泄漏、静默数据损坏或安全漏洞。
+>
+> **v1.4.0 新增**：Strong Consistency Sync 和 Key-Driven Reset 约束。
+
+---
+
+## 0. v1.4.0 核心架构约束（最高优先级）
+
+### 0.1 Strong Consistency Sync（强一致性同步）
+
+**定义**：前端状态必须与后端状态保持绝对一致，通过事件驱动的主动拉取实现。
+
+**不变量**：
+- **任何连接状态变更必须触发 `connection:update` 事件**
+- **前端收到事件后必须调用 `refreshConnections()` 获取最新快照**
+- **禁止前端维护连接状态的"缓存副本"**
+
+```mermaid
+flowchart LR
+    Back[Backend State Change] -->|emit| Event[connection:update]
+    Event -->|trigger| Refresh[refreshConnections]
+    Refresh -->|fetch| Snapshot[Latest Snapshot]
+    Snapshot -->|update| Store[AppStore.connections]
+    Store -->|render| UI[React Components]
+```
+
+**必须触发 `connection:update` 的场景**：
+
+| 场景 | 触发者 | trigger 值 |
+|------|--------|-----------|
+| SSH 连接建立 | `connectNodeInternal()` | `user_action` |
+| 心跳失败 | Heartbeat Task | `heartbeat_fail` |
+| 自动重连成功 | Reconnect Task | `reconnect_success` |
+| 用户断开 | `disconnect_v2()` | `user_action` |
+| 空闲超时 | Idle Timer | `idle_timeout` |
+| 跳板机级联故障 | `propagate_link_down()` | `cascade_fail` |
+
+### 0.2 Key-Driven Reset（键驱动重置）
+
+**定义**：利用 React `key` 机制，当连接 ID 变化时物理销毁旧组件。
+
+**不变量**：
+- **所有依赖连接状态的组件必须使用 `key={sessionId-connectionId}`**
+- **组件销毁时必须清理所有句柄和订阅**
+- **组件重建时必须从全局 Memory Map 恢复上下文**
+
+**必须使用 Key-Driven Reset 的组件**：
+
+| 组件 | Key 格式 | Memory Map |
+|------|---------|------------|
+| `TerminalView` | `terminal-{sessionId}-{connectionId}` | N/A |
+| `SFTPView` | `sftp-{sessionId}-{connectionId}` | `sftpPathMemory` |
+| `ForwardsView` | `forwards-{sessionId}-{connectionId}` | N/A (后端持久化) |
+
+### 0.3 State Gating（状态门禁）
+
+**定义**：所有 IO 操作必须在 `connectionState === 'active'` 时才能执行。
+
+**不变量**：
+- **前端 API 调用前必须检查 `appStore.connections.get(id)?.state`**
+- **状态非 `active` 时必须显示等待 UI，禁止发送请求**
+- **后端同样执行门禁检查，双重保护**
+
+```typescript
+// 前端门禁实现
+function checkGate(connectionId: string): boolean {
+  const state = appStore.connections.get(connectionId)?.state;
+  if (state !== 'active') {
+    console.warn(`[StateGating] Blocked: state=${state}`);
+    return false;
+  }
+  return true;
+}
+
+// 使用示例
+if (!checkGate(connectionId)) {
+  showToast('连接不稳定，请稍候...');
+  return;
+}
+await api.sftpListDir(sessionId, path);
+```
+
+### 0.4 双 Store 同步约束
+
+**定义**：`sessionTreeStore` 和 `appStore` 必须保持同步。
+
+**不变量**：
+- **`sessionTreeStore` 负责树结构和连接流程**
+- **`appStore` 负责 `connections` Map（供 SFTP/Forward 等消费）**
+- **任何修改 `rawNodes` 状态的操作必须同步调用 `refreshConnections()`**
+
+```mermaid
+flowchart TD
+    subgraph SessionTreeStore
+        RN[rawNodes]
+        CN[connectNodeInternal]
+        SD[syncDrift]
+    end
+
+    subgraph AppStore
+        CONN[connections Map]
+        RF[refreshConnections]
+    end
+
+    subgraph Consumers
+        SFTP[SFTPView]
+        FWD[ForwardsView]
+        TQ[TransferQueue]
+    end
+
+    CN -->|1. 更新| RN
+    CN -->|2. 必须调用| RF
+    SD -->|自愈后必须调用| RF
+    RF -->|更新| CONN
+    CONN -->|读取| SFTP
+    CONN -->|读取| FWD
+    CONN -->|读取| TQ
+```
+
+**禁止的行为**：
+
+```typescript
+// ❌ 危险：只更新 sessionTreeStore，SFTP 无法感知
+set((state) => ({
+  rawNodes: state.rawNodes.map(n => 
+    n.id === nodeId ? { ...n, state: { status: 'connected' } } : n
+  )
+}));
+// 缺少 refreshConnections()！
+
+// ✅ 正确：双 Store 同步
+set((state) => ({
+  rawNodes: state.rawNodes.map(n => 
+    n.id === nodeId ? { ...n, state: { status: 'connected' } } : n
+  )
+}));
+await useAppStore.getState().refreshConnections();  // 关键！
+```
 
 ---
 
@@ -56,6 +193,7 @@ struct SftpSession {
 - **所有 Forward (local/remote/dynamic) 必须共享同一个 Session Handle**
 - **Forward 的创建/销毁不得影响其他 Forward**
 - **Forward 失败不得关闭 Session**（只关闭该 Forward）
+- **v1.4.0**: Forward 规则持久化到 redb，重连后自动恢复 (Link Resilience)
 
 **禁止的行为**：
 - ❌ 每个 Forward 创建独立的 SSH 连接（浪费资源，违反会话语义）
@@ -68,11 +206,13 @@ struct SftpSession {
 - **SFTP 可以在 Session 存活期间多次初始化和关闭**
 - **SFTP 关闭必须释放 SSH Channel，但不得关闭 SSH Session**
 - **Session 关闭必须强制关闭所有 SFTP 会话**
+- **v1.4.0**: SFTP 操作前必须通过 State Gating 检查
 
 **禁止的行为**：
 - ❌ SFTP 初始化失败时关闭 Session（用户可能只想要终端）
 - ❌ 允许 SFTP 在 Session 关闭后继续操作（会导致未定义行为）
 - ❌ SFTP 操作阻塞 SSH 心跳（会导致连接超时）
+- ❌ **v1.4.0**: 在 `connectionState !== 'active'` 时执行 SFTP IO
 
 ---
 
@@ -133,21 +273,6 @@ fn good_example() {
 - **活动会话计数必须与状态转换同步更新**
 - **不得在持有 `create_lock` 时执行慢操作**（如 I/O）
 
-**禁止的行为**：
-```rust
-// ❌ 危险：TOCTOU 竞态
-if active_count < max {
-    // 另一个线程可能在这里插入
-    create_session(...); // 超过限制
-}
-
-// ✅ 正确：锁保护整个检查-插入序列
-let _guard = create_lock.lock();
-if active_count < max {
-    create_session(...);
-}
-```
-
 ---
 
 ## 3. 错误传播与恢复策略（必须遵守）
@@ -170,6 +295,7 @@ if active_count < max {
 - **可恢复错误必须触发自动重连**（指数退避）
 - **不可恢复错误必须立即清理 Session**（不得重连）
 - **错误消息必须区分这两类**（前端需要显示不同的 UI）
+- **v1.4.0**: 可恢复错误必须 emit `connection:update` (trigger: `heartbeat_fail`)
 
 ### 3.2 错误传播路径（不可跳过）
 
@@ -193,11 +319,13 @@ if active_count < max {
 - **重连必须使用原始配置**（不得修改用户输入）
 - **重连失败 5 次后必须停止**（不得无限重试）
 - **用户主动断开不触发重连**（区分 disconnect 和 network error）
+- **v1.4.0**: 重连成功后必须生成新的 `connectionId`，触发 Key-Driven Reset
 
 **禁止的行为**：
 - ❌ 重连时自动更改端口或用户名
 - ❌ 重连成功后不恢复端口转发状态
 - ❌ 重连期间阻塞 UI（必须显示进度）
+- ❌ **v1.4.0**: 重连成功后复用旧 `connectionId`
 
 ### 3.4 状态机转换约束
 
@@ -215,7 +343,15 @@ Connecting 可以转换到：
 
 Connected 可以转换到：
   → Disconnecting (主动断开)
-  → Connecting (自动重连，仅网络错误)
+  → LinkDown (心跳失败)
+
+LinkDown 可以转换到：
+  → Reconnecting (自动重连)
+  → Disconnected (用户放弃)
+
+Reconnecting 可以转换到：
+  → Connected (成功，新 connectionId)
+  → Error (达到最大重试)
 
 Error 可以转换到：
   → Connecting (用户重试)
@@ -224,10 +360,14 @@ Error 可以转换到：
 Disconnected 是终态，必须移除 Session
 ```
 
-**禁止的行为**：
-- ❌ 直接从 Connecting 跳到 Disconnected（跳过清理）
-- ❌ 从 Error 直接跳到 Connected（未重新认证）
-- ❌ 在 Connected 状态下重新握手（会创建重复资源）
+**v1.4.0 状态转换事件**：
+
+| 转换 | 必须触发 | trigger 值 |
+|------|---------|-----------|
+| `* → Connected` | `connection:update` | `user_action` / `reconnect_success` |
+| `Connected → LinkDown` | `connection:update` | `heartbeat_fail` |
+| `* → Disconnected` | `connection:update` | `user_action` / `idle_timeout` |
+| `* → Error` | `connection:update` | `reconnect_fail` |
 
 ---
 
@@ -240,24 +380,6 @@ Disconnected 是终态，必须移除 Session
 - **Forward / SFTP 可以持有 HandleController（弱引用语义）**
 - **WebSocket Server 不得持有 Session 强引用**
 
-**必须使用的模式**：
-```rust
-// ✅ 正确：Session 只被 SessionRegistry 持有
-struct SessionRegistry {
-    sessions: DashMap<SessionId, SessionEntry>,
-}
-
-// ✅ 正确：Forward 持有控制句柄（不阻止 Session 释放）
-struct ForwardingManager {
-    handle_controller: HandleController, // 可以发送命令，但不延长生命周期
-}
-
-// ❌ 禁止：BridgeManager 持有 Session 强引用
-struct BridgeManager {
-    sessions: HashMap<SessionId, Arc<Session>>, // 会导致 Session 永不释放
-}
-```
-
 ### 4.2 WebSocket 端口分配规则
 
 **不变量**：
@@ -265,22 +387,12 @@ struct BridgeManager {
 - **端口分配必须是动态的**（不得硬编码端口列表）
 - **端口释放必须在 Session 移除前完成**（避免端口占用）
 
-**禁止的行为**：
-- ❌ 多个 Session 共享同一个 WebSocket 端口
-- ❌ 使用固定端口范围（会导致端口耗尽）
-- ❌ Session 关闭后不释放端口（会导致"地址已在使用"错误）
-
 ### 4.3 缓冲区大小限制（必须执行）
 
 **不变量**：
 - **终端滚动缓冲区最大 100,000 行**（不可配置）
 - **WebSocket 发送队列最大 1000 帧**（超过时丢弃最旧帧）
 - **SFTP 传输队列最大 10 个并发**（不得无限制）
-
-**禁止的行为**：
-- ❌ 允许用户设置无限缓冲区（会导致内存耗尽）
-- ❌ 在缓冲区满时阻塞写入线程（会导致死锁）
-- ❌ SFTP 并发上传超过 10 个文件（会导致通道耗尽）
 
 ---
 
@@ -293,11 +405,6 @@ struct BridgeManager {
 - **私钥文件路径不得记录到日志**（必须脱敏）
 - **WebSocket token 必须有时间限制**（不得永久有效）
 
-**禁止的行为**：
-- ❌ 将密码明文写入 `connections.json`
-- ❌ 在日志中打印私钥内容
-- ❌ WebSocket token 无过期时间
-
 ### 5.2 主机密钥验证
 
 **不变量**：
@@ -305,21 +412,12 @@ struct BridgeManager {
 - **未知主机必须警告用户**（不得静默接受）
 - **主机密钥变更必须拒绝连接**（防止 MITM）
 
-**当前实现**（可改进但不得降低安全）：
-- 当前 `strict_host_key_checking: false`（临时接受）
-- **未来改进必须添加验证，不得移除此字段**
-
 ### 5.3 WebSocket 认证
 
 **不变量**：
 - **WebSocket 连接必须发送认证 token**（第一帧）
 - **token 错误必须立即关闭连接**（不得继续处理）
 - **token 只能使用一次**（不得重放）
-
-**禁止的行为**：
-- ❌ 允许无 token 的 WebSocket 连接
-- ❌ token 验证失败后继续处理数据帧
-- ❌ 同一个 token 用于多个 WebSocket 连接
 
 ---
 
@@ -349,12 +447,8 @@ struct BridgeManager {
 - 并发锁的获取顺序
 - 资源清理的先后顺序
 - 密码存储的方式（必须使用 keyring）
-
-**必须破坏性修改时**（遵循流程）：
-1. 更新此文档，说明新的不变量
-2. 在 `src-tauri/Cargo.toml` 中增加版本号
-3. 添加迁移逻辑（storage.rs 中的 TODO）
-4. 在 CHANGELOG 中标记为 Breaking Change
+- **v1.4.0**: Strong Sync 的事件驱动模式
+- **v1.4.0**: Key-Driven Reset 的组件销毁机制
 
 ---
 
@@ -372,6 +466,10 @@ struct BridgeManager {
 - [ ] 日志中没有敏感信息（密码、密钥、token）
 - [ ] 所有 `unwrap()` 和 `expect()` 都有合理理由
 - [ ] 单元测试覆盖并发场景
+- [ ] **v1.4.0**: 状态变更触发 `connection:update` 事件
+- [ ] **v1.4.0**: `sessionTreeStore` 修改后调用 `refreshConnections()`
+- [ ] **v1.4.0**: 依赖连接的组件使用 `key={sessionId-connectionId}`
+- [ ] **v1.4.0**: IO 操作前检查 State Gating
 
 ---
 
@@ -384,6 +482,8 @@ struct BridgeManager {
 3. **SFTP 阻塞 SSH 心跳** → 大文件传输时连接超时
 4. **TOCTOU 竞态在 `create_session`** → 连接限制被绕过
 5. **取消时不清理端口转发** → 重启应用时"端口已在使用"
+6. **v1.4.0 前**: Store 间同步缺失 → `connectionState=undefined` 死锁，SFTPView 永久卡在 "Waiting"
+7. **v1.4.0 前**: 重连后复用旧 connectionId → 旧组件持有死句柄，输入无响应
 
 **结论**：这些不变量不是"建议"，而是从血泪中总结出的生存法则。
 
@@ -404,3 +504,7 @@ struct BridgeManager {
 - 系统能稳定运行是因为这些约束，不是尽管有这些约束
 
 **保守修改，充分测试，从不假设。**
+
+---
+
+*文档版本: v1.4.0 (Strong Sync + Key-Driven Reset) | 最后更新: 2026-02-04*

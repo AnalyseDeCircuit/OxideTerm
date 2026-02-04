@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -26,7 +26,7 @@
 
 ## 📖 核心进化
 
-OxideTerm v1.3.2 是一次彻底的架构重构。我们不再只是一个 SSH 客户端，而是一个**终端引擎**，拥有超过 **65,000 行** 精心设计的 Rust + TypeScript 代码。
+OxideTerm v1.4.0 是一次彻底的架构重构。我们不再只是一个 SSH 客户端，而是一个**终端引擎**，拥有超过 **65,000 行** 精心设计的 Rust + TypeScript 代码。
 
 ### ⚙️ 后端突破：本地终端与并发模型
 我们引入了基于 `portable-pty` 的本地终端支持，彻底解决了 Rust 异步运行时中的并发难题：
@@ -50,7 +50,7 @@ OxideTerm v1.3.2 是一次彻底的架构重构。我们不再只是一个 SSH �
 
 ## 🏗️ 系统架构
 
-v1.3.2 采用了混合数据流架构，根据会话类型智能路由流量：
+v1.4.0 采用了混合数据流架构，根据会话类型智能路由流量：
 
 ```mermaid
 flowchart TB
@@ -158,7 +158,7 @@ OxideTerm 在底层细节的打磨上毫不妥协，为您提供工业级的使�
 
 ---
 
-## 🛠️ 技术栈 (v1.3.2)
+## 🛠️ 技术栈 (v1.4.0)
 
 | 层级 | 关键技术 | 说明 |
 |------|----------|------|

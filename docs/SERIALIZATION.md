@@ -1,6 +1,6 @@
-# OxideTerm 序列化架构 (v1.1.0)
+# OxideTerm 序列化架构 (v1.4.0)
 
-> 本文档描述了 OxideTerm 的数据序列化策略和技术选型。
+> 本文档描述了 OxideTerm 的数据序列化策略、技术选型，以及与 **Strong Consistency Sync** 架构的集成方式。
 
 ## 概述
 
@@ -53,6 +53,43 @@ OxideTerm 使用两种序列化格式：
 
 ---
 
+## v1.4.0 架构集成：Strong Sync 与序列化
+
+在 v1.4.0 的 **Strong Consistency Sync** 架构下，序列化层与前端状态管理紧密协作。
+
+### 数据流向
+
+```mermaid
+flowchart LR
+    subgraph Backend ["后端 (Rust)"]
+        DB[(redb 数据库)]
+        MP[MessagePack 编解码]
+        REG[ConnectionRegistry]
+    end
+
+    subgraph Frontend ["前端 (React)"]
+        APP[AppStore (Fact)]
+        TREE[SessionTreeStore (Logic)]
+    end
+
+    DB <-->|序列化/反序列化| MP
+    MP <--> REG
+    REG -->|connection:update 事件| APP
+    APP -->|refreshConnections()| REG
+    TREE -->|Intent| REG
+```
+
+### 关键约束
+
+| 操作 | 序列化格式 | Strong Sync 行为 |
+|------|-----------|------------------|
+| 保存连接配置 | JSON | 触发 `refreshConnections()` |
+| 会话恢复 | MessagePack | 恢复后触发 `connection:update` |
+| 端口转发规则持久化 | MessagePack | 重连后自动恢复，触发同步 |
+| 路径记忆 (SFTP) | 内存 Map | Key-Driven 重建时从 Map 恢复 |
+
+---
+
 ## MessagePack 序列化组件
 
 ### 1. `src/state/session.rs` - 会话恢复持久化
@@ -79,6 +116,7 @@ pub struct PersistedSession {
 - **会话恢复** ≠ **导出功能**
 - `PersistedSession` 仅在本地使用，用于应用重启后恢复会话树
 - 不会被导出到 `.oxide` 文件（`.oxide` 只导出连接配置）
+- **v1.4.0**: 恢复后必须触发 `connection:update` 事件，确保前端 Store 同步
 
 ---
 
@@ -99,6 +137,8 @@ pub struct PersistedForward {
 
 **存储位置**: redb 嵌入式数据库  
 **特殊类型**: `ForwardType`(枚举), `DateTime<Utc>`
+
+**v1.4.0 Link Resilience**: 当连接重连成功后，后端自动从 redb 恢复 `auto_start=true` 的转发规则。
 
 ---
 
@@ -134,7 +174,7 @@ let buffer = ScrollBuffer::load_from_bytes(&bytes).await?;
 
 ---
 
-### 4. `src/sftp/progress.rs` - 传输进度存储（计划中）
+### 4. `src/sftp/progress.rs` - 传输进度存储
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,7 +192,7 @@ pub struct StoredTransferProgress {
 }
 ```
 
-**存储位置**: redb 数据库（功能计划中）  
+**存储位置**: redb 数据库  
 **特殊类型**: `DateTime<Utc>`, `PathBuf`, `Option<String>`
 
 ---
@@ -245,6 +285,8 @@ pub enum SavedAuth {
 }
 ```
 
+**v1.4.0 Strong Sync**: 任何对 `connections.json` 的写入操作完成后，后端必须 emit `connection:update` 事件，触发前端 `AppStore.refreshConnections()`。
+
 ---
 
 ### 2. `src/oxide_file/format.rs` - .oxide 文件元数据
@@ -253,7 +295,7 @@ pub enum SavedAuth {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OxideMetadata {
     pub exported_at: DateTime<Utc>,
-    pub exported_by: String,           // "OxideTerm v1.1.0"
+    pub exported_by: String,           // "OxideTerm v1.4.0"
     pub description: Option<String>,
     pub num_connections: usize,
     pub connection_names: Vec<String>,
@@ -293,6 +335,7 @@ pub struct OxideMetadata {
 | `EncryptedAuth` | `oxide_file/format.rs` | password, key, certificate, agent | .oxide 导出格式 |
 | `SavedAuth` | `config/types.rs` | Password, Key, Certificate, Agent | 本地配置中的认证（keychain引用） |
 | `ForwardType` | `forwarding/mod.rs` | Local, Remote, Dynamic | 端口转发类型 |
+| `ConnectionState` | `state/types.rs` | connecting, connected, link_down, reconnecting, idle, disconnected, error | **v1.4.0 新增**: 连接生命周期状态 |
 
 **示例**: MessagePack 序列化的内部标签格式
 
@@ -422,14 +465,15 @@ serde_json::Error
 
 ## 数据持久化总览
 
-| 数据类型 | 格式 | 存储位置 | 生命周期 |
-|---------|------|---------|---------|
-| **连接配置** | JSON | `~/.oxideterm/connections.json` | 永久（用户配置） |
-| **密码/密钥口令** | 系统钥匙串 | macOS Keychain / Windows Credential / Linux libsecret | 永久 |
-| **会话恢复数据** | MessagePack | `~/.oxideterm/state.redb` (redb 数据库) | 持久（应用重启后恢复） |
-| **端口转发规则** | MessagePack | `~/.oxideterm/state.redb` | 持久 |
-| **终端缓冲区** | MessagePack | 内存（可选序列化到 `state.redb`） | 临时（会话断开后可保存/丢弃） |
-| **.oxide 导出文件** | MessagePack (加密) + JSON (元数据) | 用户指定路径 | 临时（配置迁移工具） |
+| 数据类型 | 格式 | 存储位置 | 生命周期 | Strong Sync 行为 |
+|---------|------|---------|---------|------------------|
+| **连接配置** | JSON | `~/.oxideterm/connections.json` | 永久 | 写入后 emit `connection:update` |
+| **密码/密钥口令** | 系统钥匙串 | macOS Keychain / Windows Credential / Linux libsecret | 永久 | N/A |
+| **会话恢复数据** | MessagePack | `~/.oxideterm/state.redb` | 持久 | 恢复后 emit `connection:update` |
+| **端口转发规则** | MessagePack | `~/.oxideterm/state.redb` | 持久 | 重连后自动恢复 (Link Resilience) |
+| **终端缓冲区** | MessagePack | 内存 / `state.redb` | 临时 | N/A |
+| **.oxide 导出文件** | MessagePack + JSON | 用户指定路径 | 临时 | 导入后触发 `refreshConnections()` |
+| **路径记忆 (SFTP)** | 内存 Map | `PathMemoryMap` | 临时 | Key-Driven 重建时恢复 |
 
 ---
 
@@ -437,8 +481,8 @@ serde_json::Error
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| **v1.1.0** | 2026-01-19 | **文档重写**: 澄清 `.oxide` 文件不包含会话数据；添加本地终端和滚动缓冲区说明；更新架构图 |
-| v0.4.0 | 2026-01-15 | Windows 性能优化；字体加载优化 |
+| **v1.4.0** | 2026-02-04 | **Strong Sync 集成**: 所有持久化操作与前端状态同步；新增 `ConnectionState` 枚举；移除对已废弃文档的引用 |
+| v1.1.0 | 2026-01-19 | 澄清 `.oxide` 文件不包含会话数据；添加本地终端和滚动缓冲区说明 |
 | v0.3.0 | 2026-01-15 | 从 bincode/postcard 迁移到 rmp-serde |
 | v0.2.0 | - | 使用 bincode 进行二进制序列化 |
 | v0.1.0 | - | 初始版本，全部使用 JSON |
@@ -447,11 +491,11 @@ serde_json::Error
 
 ## 相关文档
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - 整体架构设计
-- [ARCHITECTURE_v1.1.0_UPDATES.md](./ARCHITECTURE_v1.1.0_UPDATES.md) - v1.1.0 新增特性
-- [PORT_FORWARDING.md](./PORT_FORWARDING.md) - 端口转发实现
-- [SFTP.md](./SFTP.md) - SFTP 传输协议
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - 整体架构设计 (v1.4.0 Strong Sync)
+- [PORT_FORWARDING.md](./PORT_FORWARDING.md) - 端口转发与 Link Resilience
+- [SFTP.md](./SFTP.md) - SFTP 传输与路径记忆
+- [PROTOCOL.md](./PROTOCOL.md) - 前后端通信协议
 
 ---
 
-*文档版本: v1.1.0 | 最后更新: 2026-01-19*
+*文档版本: v1.4.0 | 最后更新: 2026-02-04*

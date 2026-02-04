@@ -1,6 +1,6 @@
-# OxideTerm SFTP 功能文档
+# OxideTerm SFTP 功能文档 (v1.4.0)
 
-> 本文档描述 SFTP 文件浏览器的功能和实现细节。
+> **v1.4.0 核心架构**: SFTP 模块完全遵循 **Strong Consistency Sync** 和 **Key-Driven Reset** 模式，确保连接状态与 UI 组件的绝对一致性。
 
 ## 目录
 
@@ -9,7 +9,8 @@
 3. [文件操作](#文件操作)
 4. [文件预览](#文件预览)
 5. [传输管理](#传输管理)
-6. [API 参考](#api-参考)
+6. [连接鲁棒性架构 (v1.4.0)](#连接鲁棒性架构-v140)
+7. [API 参考](#api-参考)
 
 ---
 
@@ -22,6 +23,7 @@ OxideTerm 内置 SFTP 文件浏览器，提供：
 - 👁️ **智能预览** - 支持多种文件格式预览
 - 📊 **传输队列** - 批量传输管理和进度显示
 - ⌨️ **键盘操作** - 全键盘支持
+- 🔒 **State Gating** - 连接状态门禁，防止无效 IO
 
 ---
 
@@ -122,7 +124,6 @@ OxideTerm 内置 SFTP 文件浏览器，提供：
 | `.env`, `.envrc` | 环境变量 |
 | `.dockerfile` | Docker |
 | `.makefile` | Makefile |
-| ... | 共 50+ 种 |
 
 **限制**: 文本文件最大 1MB
 
@@ -189,7 +190,6 @@ Hex View • 显示前 16KB • 共 1.2MB
 00000000  7F 45 4C 46 02 01 01 00  00 00 00 00 00 00 00 00 |.ELF............|
 00000010  03 00 3E 00 01 00 00 00  40 10 40 00 00 00 00 00 |..>.....@.@.....|
 00000020  40 00 00 00 00 00 00 00  98 19 00 00 00 00 00 00 |@...............|
-...
 
                     [加载更多 (+16KB)]
 ```
@@ -241,6 +241,147 @@ Hex View • 显示前 16KB • 共 1.2MB
 
 ---
 
+## 连接鲁棒性架构 (v1.4.0)
+
+### 核心设计原则
+
+v1.4.0 引入了 **Strong Consistency Sync** 架构，彻底解决了 SSH 重连后 SFTP 组件卡死的问题。
+
+### 三大核心机制
+
+| 机制 | 描述 | 实现 |
+|------|------|------|
+| **State Gating** | IO 操作前强制检查连接状态 | `connectionState === 'active'` |
+| **Key-Driven Reset** | 连接 ID 变化时销毁重建组件 | `key={sessionId-connectionId}` |
+| **Path Memory** | 跨重连保持目录位置 | `sftpPathMemory Map` |
+
+### State Gating (状态门禁)
+
+所有 SFTP 操作执行前，必须通过状态检查：
+
+```mermaid
+flowchart TD
+    A[用户操作] --> B{检查 connectionState}
+    B -- "active" --> C[执行 SFTP API]
+    B -- "其他状态" --> D[显示等待遮罩]
+    D --> E[等待 connection:update 事件]
+    E --> B
+    C --> F[返回结果]
+```
+
+**前端实现**：
+
+```typescript
+// SFTPView.tsx
+const connectionState = appStore.connections.get(connectionId)?.state;
+
+useEffect(() => {
+  if (connectionState !== 'active') {
+    console.debug('[SFTPView] Waiting for connection:', connectionState);
+    return;  // 阻止所有 IO
+  }
+  initializeSftp();
+}, [connectionState, connectionId]);
+```
+
+### Key-Driven Reset (键驱动重置)
+
+当连接重建生成新的 `connectionId` 时，React 自动销毁旧组件：
+
+```mermaid
+sequenceDiagram
+    participant Back as Backend
+    participant App as AppStore
+    participant React as React
+    participant Old as 旧 SFTPView
+    participant New as 新 SFTPView
+
+    Note over Back: 重连成功，新 connectionId
+    Back->>App: emit("connection:update")
+    App->>App: refreshConnections()
+    App->>React: connectionId 变化
+    React->>Old: componentWillUnmount()
+    Note over Old: 清理旧句柄
+    React->>New: componentDidMount()
+    New->>New: 从 PathMemory 恢复路径
+    New->>Back: sftp_init()
+```
+
+**组件 Key 绑定**：
+
+```tsx
+// AppLayout.tsx
+<SFTPView 
+  key={`sftp-${sessionId}-${connectionId}`}  // 关键！
+  sessionId={sessionId} 
+/>
+```
+
+### Path Memory (路径记忆)
+
+跨重连保持用户的工作目录：
+
+```typescript
+// 全局路径记忆 Map
+const sftpPathMemory = new Map<string, string>();
+
+// 保存路径
+useEffect(() => {
+  if (remotePath) {
+    sftpPathMemory.set(sessionId, remotePath);
+  }
+}, [remotePath, sessionId]);
+
+// 恢复路径
+const initializeSftp = async () => {
+  const savedPath = sftpPathMemory.get(sessionId);
+  if (savedPath) {
+    await api.sftpCd(sessionId, savedPath);
+  }
+};
+```
+
+### Strong Sync 数据流
+
+```mermaid
+flowchart LR
+    subgraph Backend
+        REG[ConnectionRegistry]
+        SFTP[SFTP Subsystem]
+    end
+
+    subgraph Frontend
+        TREE[SessionTreeStore]
+        APP[AppStore]
+        VIEW[SFTPView]
+    end
+
+    TREE -- "connectNodeInternal()" --> REG
+    REG -- "SSH 连接成功" --> TREE
+    TREE -- "refreshConnections()" --> APP
+    APP -- "connections Map 更新" --> VIEW
+    VIEW -- "State Gating 检查" --> SFTP
+```
+
+### TransferQueue 状态门禁
+
+传输队列同样遵循 State Gating：
+
+```typescript
+// TransferQueue.tsx
+const connectionState = connections.get(connectionId)?.state;
+
+useEffect(() => {
+  if (connectionState !== 'active') {
+    console.debug('[TransferQueue] Connection not ready');
+    return;  // 暂停所有传输
+  }
+  resumeTransfers();
+}, [connectionState]);
+```
+
+---
+
 ## API 参考
 
 ### 初始化 SFTP
@@ -250,6 +391,8 @@ Hex View • 显示前 16KB • 共 1.2MB
 const cwd = await api.sftpInit(sessionId);
 // 返回当前工作目录，如 "/home/user"
 ```
+
+**v1.4.0 注意**: 调用前必须确保 `connectionState === 'active'`。
 
 ### 目录操作
 
@@ -367,12 +510,19 @@ interface TransferProgress {
 
 ## 常见问题
 
-### Q: 为什么某些文件显示为"不支持预览"？
+### Q: 为什么 SFTP 显示 "Waiting for connection"？
 
-**A:** 可能的原因：
-1. 文件类型未被识别 - 尝试使用正确的扩展名
-2. 文件过大 - 超过了预览限制
-3. 二进制文件 - 会自动使用 Hex 视图
+**A:** 这是 v1.4.0 的 **State Gating** 机制。可能原因：
+1. SSH 连接尚未完成 - 等待连接建立
+2. 连接正在重连 - 等待 `connection:update` 事件
+3. `appStore.connections` 未同步 - 检查是否调用了 `refreshConnections()`
+
+### Q: 重连后为什么路径没有恢复？
+
+**A:** 确保：
+1. 路径已存入 `sftpPathMemory` Map
+2. 组件使用了 `key={sessionId-connectionId}`
+3. 初始化时读取了 `sftpPathMemory`
 
 ### Q: 传输速度很慢？
 
@@ -388,6 +538,14 @@ interface TransferProgress {
 - Ubuntu: `sudo apt install libreoffice`
 - Windows: 从官网下载安装
 
-### Q: 如何预览超过限制的大文件？
+---
 
-**A:** 下载到本地后使用本地应用打开。
+## 相关文档
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - 系统架构 (v1.4.0 Strong Sync)
+- [PROTOCOL.md](./PROTOCOL.md) - 前后端协议
+- [CONNECTION_POOL.md](./CONNECTION_POOL.md) - 连接池与自动重连
+
+---
+
+*文档版本: v1.4.0 (Strong Sync + Key-Driven Reset) | 最后更新: 2026-02-04*
