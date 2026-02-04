@@ -312,6 +312,27 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // Buffer getter for AI context capture
+    const getBufferContent = (): string => {
+      const buffer = term.buffer.active;
+      const lines: string[] = [];
+      // Get visible lines plus some scrollback
+      const startRow = Math.max(0, buffer.baseY);
+      const endRow = buffer.baseY + term.rows;
+      for (let i = startRow; i < endRow; i++) {
+        const line = buffer.getLine(i);
+        if (line) {
+          lines.push(line.translateToString(true));
+        }
+      }
+      return lines.join('\n');
+    };
+    
+    // Selection getter for AI sidebar context
+    const getSelectionContent = (): string => {
+      return term.getSelection() || '';
+    };
+
     // Register buffer getter for AI context capture
     // Now uses paneId as key (for split pane support)
     registerTerminalBuffer(
@@ -319,20 +340,8 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
       effectiveTabId,
       sessionId,
       'local_terminal',
-      () => {
-        const buffer = term.buffer.active;
-        const lines: string[] = [];
-        // Get visible lines plus some scrollback
-        const startRow = Math.max(0, buffer.baseY);
-        const endRow = buffer.baseY + term.rows;
-        for (let i = startRow; i < endRow; i++) {
-          const line = buffer.getLine(i);
-          if (line) {
-            lines.push(line.translateToString(true));
-          }
-        }
-        return lines.join('\n');
-      }
+      getBufferContent,
+      getSelectionContent  // Include selection getter
     );
 
     // Initial fit

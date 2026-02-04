@@ -1,6 +1,6 @@
 # AI Sidebar Chat
 
-> OxideTerm's intelligent terminal assistant with persistent conversations
+> OxideTerm's intelligent terminal assistant with persistent conversations and deep context awareness
 
 ## Overview
 
@@ -10,9 +10,10 @@ The AI Sidebar Chat provides an integrated AI assistant directly in the OxideTer
 |---------|-------------|
 | **Persistent History** | Conversations are saved to localStorage and survive app restarts |
 | **Streaming Responses** | Real-time streaming responses with stop capability |
+| **Auto Context Injection** | Automatically captures environment, buffer, and selection context |
 | **Terminal Context** | Optionally include terminal buffer content for context-aware assistance |
 | **Code Execution** | Insert AI-generated commands directly into active terminal |
-| **Multi-language** | Full i18n support across 9 languages |
+| **Multi-language** | Full i18n support across 11 languages |
 
 ## Features
 
@@ -22,6 +23,29 @@ The AI Sidebar Chat provides an integrated AI assistant directly in the OxideTer
 - **Auto-titles**: Conversations are automatically titled based on the first message
 - **Quick Delete**: Remove individual conversations or clear all history
 - **Conversation Switching**: Seamlessly switch between past conversations
+
+### 🧠 Automatic Context Injection (NEW in v1.4.1)
+
+The sidebar chat now automatically gathers deep context from your environment—similar to GitHub Copilot's awareness:
+
+#### 1. Environment Snapshot
+When you send a message, the AI automatically knows:
+- **Local OS**: macOS / Windows / Linux
+- **Terminal Type**: SSH or Local terminal
+- **Connection Details**: `user@host` for SSH sessions
+- **Remote OS Hint**: Guessed from hostname patterns
+
+#### 2. Dynamic Buffer Sync
+The last 50 lines of terminal output are automatically included as context, giving the AI visibility into:
+- Recent command outputs
+- Error messages
+- System responses
+
+#### 3. Selection Priority
+If you have text selected in the terminal, it becomes the **primary focus**:
+- Selection is marked as "Focus Area" in the context
+- AI treats selected text as the main subject of your query
+- Perfect for asking about specific error messages or log lines
 
 ### 🖥️ Terminal Integration
 
@@ -72,13 +96,26 @@ interface AiChatState {
 }
 ```
 
-### Components
+### Context Injection Pipeline
 
-| Component | Purpose |
-|-----------|---------|
-| `AiChatPanel.tsx` | Main panel with conversation management |
-| `ChatMessage.tsx` | Message rendering with code block support |
-| `ChatInput.tsx` | Input area with context toggle |
+The new `sidebarContextProvider.ts` module aggregates context automatically:
+
+```typescript
+// Gather complete sidebar context for AI
+const context = gatherSidebarContext({
+  maxBufferLines: 50,      // Last 50 lines from terminal
+  maxBufferChars: 8000,    // Max 8KB of buffer content
+  maxSelectionChars: 2000, // Max 2KB of selection
+});
+
+// Context structure
+interface SidebarContext {
+  env: EnvironmentSnapshot;     // OS, connection, session info
+  terminal: TerminalContext;    // Buffer and selection
+  systemPromptSegment: string;  // Formatted for system prompt
+  contextBlock: string;         // Formatted for API context
+}
+```
 
 ### Data Flow
 
@@ -89,12 +126,29 @@ ChatInput (context capture optional)
     ↓
 aiChatStore.sendMessage()
     ↓
+gatherSidebarContext() ← Auto-inject environment snapshot
+    ├── Local OS detection (platform.ts)
+    ├── Connection details (appStore/sessionTreeStore)
+    ├── Buffer content (terminalRegistry)
+    └── Selection text (terminalRegistry)
+    ↓
+Enhanced System Prompt + Context Block
+    ↓
 streamChatCompletion() (OpenAI API)
     ↓
 Streaming response → ChatMessage render
     ↓
 Command insertion (optional) → Active terminal
 ```
+
+### Components
+
+| Component | Purpose |
+|-----------|---------|
+| `AiChatPanel.tsx` | Main panel with conversation management |
+| `ChatMessage.tsx` | Message rendering with code block support |
+| `ChatInput.tsx` | Input area with context toggle |
+| `sidebarContextProvider.ts` | Environment and terminal context aggregation |
 
 ## Keyboard Shortcuts
 
@@ -109,32 +163,78 @@ Full i18n support is available in:
 
 - 🇺🇸 English
 - 🇨🇳 中文 (Simplified Chinese)
+-  繁體中文 (Traditional Chinese)
 - 🇯🇵 日本語 (Japanese)
 - 🇰🇷 한국어 (Korean)
 - 🇩🇪 Deutsch (German)
 - 🇫🇷 Français (French)
 - 🇪🇸 Español (Spanish)
+- 🇮🇹 Italiano (Italian)
 - 🇧🇷 Português (Brazilian Portuguese)
 - 🇻🇳 Tiếng Việt (Vietnamese)
 
 ## Technical Notes
 
-### Terminal Registry
+### Terminal Registry with Selection Support
 
-The `terminalRegistry.ts` module provides a robust mechanism for AI context capture:
+The `terminalRegistry.ts` module provides robust mechanisms for AI context capture:
 
 ```typescript
 interface TerminalEntry {
-  getter: BufferGetter;
+  getter: BufferGetter;           // Get buffer content
+  selectionGetter?: SelectionGetter; // Get current selection (NEW)
   registeredAt: number;
   tabId: string;
+  sessionId: string;
+  terminalType: 'terminal' | 'local_terminal';
 }
+
+// New selection APIs
+export function getActiveTerminalSelection(): string | null;
+export function getTerminalSelection(paneId: string): string | null;
 ```
 
 **Safety Features:**
 - **Tab ID Validation**: Each registry entry is bound to a specific tab ID, preventing cross-tab context leakage
 - **Expiration Check**: Entries older than 5 minutes are automatically invalidated
 - **Error Isolation**: Failed getter calls are caught and return null gracefully
+- **Selection Isolation**: Selection getters are optional and fail gracefully
+
+### Sidebar Context Provider
+
+The new `sidebarContextProvider.ts` module provides:
+
+```typescript
+// Main API
+export function gatherSidebarContext(config): SidebarContext;
+export function getEnvironmentInfo(): EnvironmentSnapshot;  // Lightweight
+export function hasTerminalContext(): boolean;              // Quick check
+export function getQuickSelection(): string | null;         // Selection only
+
+// Environment detection
+function getLocalOS(): 'macOS' | 'Windows' | 'Linux';
+function guessRemoteOS(host, username): string | null;
+```
+
+**Context Format in System Prompt:**
+```
+## Environment
+- Local OS: macOS
+- Terminal: SSH to user@example.com
+- Remote OS: Linux (guessed)
+
+## User Selection (Priority Focus)
+The user has selected specific text in the terminal...
+```
+
+**Context Format in API Messages:**
+```
+=== SELECTED TEXT (Focus Area) ===
+[selected text here]
+
+=== Terminal Output (last 50 lines) ===
+[buffer content here]
+```
 
 ### Bracketed Paste Mode
 
@@ -159,3 +259,8 @@ Terminal context capture uses different methods depending on terminal type:
 | No response from AI | Check API endpoint and key configuration |
 | Context not captured | Ensure you have an active terminal tab (SSH or local) |
 | Insert button not showing | Only shell/bash/zsh/powershell code blocks show insert button |
+| Selection not detected | Make sure terminal has focus before selecting text |
+
+---
+
+*Documentation version: v1.4.1 | Last updated: 2026-02-05*

@@ -8,12 +8,15 @@
  * - Key changed from sessionId to paneId
  * - Added activePaneId tracking for focus management
  * - Unified SSH and Local terminal registration
+ * - Added selection getter for AI context injection
  */
 
 type BufferGetter = () => string;
+type SelectionGetter = () => string;
 
 interface TerminalEntry {
   getter: BufferGetter;
+  selectionGetter?: SelectionGetter;                // Optional: get current selection
   registeredAt: number;
   tabId: string;
   sessionId: string;                                // Original session ID for reference
@@ -36,16 +39,19 @@ const MAX_AGE_MS = 5 * 60 * 1000;
  * @param sessionId - The terminal session ID
  * @param terminalType - Whether this is SSH or Local terminal
  * @param getter - Function that returns the terminal buffer content
+ * @param selectionGetter - Optional: Function that returns the current selection
  */
 export function registerTerminalBuffer(
   paneId: string, 
   tabId: string, 
   sessionId: string,
   terminalType: 'terminal' | 'local_terminal',
-  getter: BufferGetter
+  getter: BufferGetter,
+  selectionGetter?: SelectionGetter
 ): void {
   registry.set(paneId, {
     getter,
+    selectionGetter,
     registeredAt: Date.now(),
     tabId,
     sessionId,
@@ -300,5 +306,49 @@ export function getRegistryStats(): { count: number; activePaneId: string | null
     activePaneId,
     paneIds: Array.from(registry.keys()),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Selection Support (for AI Sidebar Context Injection)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get the current selection from a specific pane
+ * @param paneId - The pane ID
+ * @returns Selection text or null if not available
+ */
+export function getTerminalSelection(paneId: string): string | null {
+  const entry = registry.get(paneId);
+  if (!entry?.selectionGetter) return null;
+  
+  try {
+    return entry.selectionGetter() || null;
+  } catch (e) {
+    console.error('[TerminalRegistry] Failed to get selection:', e);
+    return null;
+  }
+}
+
+/**
+ * Get the active pane's current selection
+ * Convenience method for AI sidebar context retrieval
+ * @returns Selection text or null if no active pane or no selection
+ */
+export function getActiveTerminalSelection(): string | null {
+  if (!activePaneId) return null;
+  return getTerminalSelection(activePaneId);
+}
+
+/**
+ * Update the selection getter for an existing entry
+ * (Useful when the terminal instance is created after initial registration)
+ * @param paneId - The pane ID
+ * @param selectionGetter - Function that returns the current selection
+ */
+export function updateSelectionGetter(paneId: string, selectionGetter: SelectionGetter): void {
+  const entry = registry.get(paneId);
+  if (entry) {
+    entry.selectionGetter = selectionGetter;
+  }
 }
 
