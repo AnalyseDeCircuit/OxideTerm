@@ -1,7 +1,7 @@
-# OxideTerm 架构设计 (v1.3.2)
+# OxideTerm 架构设计 (v1.4.0)
 
-> **版本**: v1.3.2 (2026-01-31)
-> **上次更新**: 2026-01-31
+> **版本**: v1.4.0 (2026-02-04)
+> **上次更新**: 2026-02-04
 > 本文档描述 OxideTerm 的系统架构、设计决策和核心组件。
 
 ## 目录
@@ -16,14 +16,15 @@
 8. **[搜索架构](#搜索架构)**
 9. **[Oxide 文件加密格式](#oxide-文件加密格式)**
 10. [前端架构](#前端架构-react)
-11. **[多 Store 架构 (v1.3.0)](#多-store-架构)**
-12. [AI 侧边栏聊天 (v1.3.0)](#ai-侧边栏聊天-v130)
-13. [SSH 连接池](#ssh-连接池)
-14. [数据流与协议](#数据流与协议)
-15. [会话生命周期](#会话生命周期)
-16. [重连机制](#重连机制)
-17. [安全设计](#安全设计)
-18. [性能优化](#性能优化)
+11. **[多 Store 架构 (v1.4.0)](#多-store-架构)**
+12. **[异常链路架构 (v1.4.0)](#异常链路架构)**
+13. [AI 侧边栏聊天 (v1.3.0)](#ai-侧边栏聊天-v130)
+14. [SSH 连接池](#ssh-连接池)
+15. [数据流与协议](#数据流与协议)
+16. [会话生命周期](#会话生命周期)
+17. [重连机制](#重连机制)
+18. [安全设计](#安全设计)
+19. [性能优化](#性能优化)
 
 ---
 
@@ -54,17 +55,19 @@ flowchart TB
     subgraph Frontend ["Frontend Layer (React 19)"]
         UI[User Interface]
         
-        subgraph Stores ["Multi-Store State Management"]
-            RemoteStore["AppStore (Zustand)<br/>Remote Sessions"]
-            IdeStore["IdeStore (Zustand)<br/>IDE Mode"]
-            LocalStore["LocalTerminalStore (Zustand)<br/>Local PTYs"]
+        subgraph Stores ["Multi-Store Sync System (v1.4.0)"]
+            TreeStore["SessionTreeStore (Logic)<br/>User Intent"]
+            RemoteStore["AppStore (Fact)<br/>Connection State"]
+            IdeStore["IdeStore (Context)<br/>Project State"]
+            LocalStore["LocalTerminalStore<br/>Local PTY"]
         end
 
         Terminal["xterm.js + WebGL"]
 
+        UI --> TreeStore
         UI --> RemoteStore
-        UI --> IdeStore
-        UI --> LocalStore
+        
+        TreeStore -- "Sync (refreshConnections)" --> RemoteStore
         RemoteStore --> Terminal
         LocalStore --> Terminal
     end
@@ -84,25 +87,28 @@ flowchart TB
 
         subgraph LocalEngine ["Local Engine (PTY)"]
             PtyMgr["PTY Manager"]
-            PtyHandle["Thread-Safe PtyHandle<br/>(Arc+Mutex Wrapper)"]
+            PtyHandle["Thread-Safe PtyHandle"]
             NativePTY["portable-pty (Native/ConPTY)"]
         end
     end
 
     %% Data Flows
-    LocalStore <-->|Tauri IPC Binary| PtyMgr
+    LocalStore <-->|Tauri IPC| PtyMgr
     PtyMgr --> PtyHandle --> NativePTY
     
-    RemoteStore <-->|Tauri IPC Control| Router
-    Terminal <-->|WebSocket Binary Stream| WS
+    TreeStore -->|Connect/Retry| Router
+    RemoteStore <-->|Events/Fetch| Router
+    
+    Terminal <-->|WebSocket Binary| WS
     WS <--> SSH <--> Pool
     
     LocalFeat -.-> LocalEngine
     
     style Frontend fill:#e1f5ff,stroke:#01579b
     style Backend fill:#fff3e0,stroke:#e65100
-    style LocalEngine fill:#e8f5e9,stroke:#2e7d32
-    style RemoteEngine fill:#fce4ec,stroke:#c2185b
+    style Start fill:#f9fbe7
+    style TreeStore fill:#fff3cd,stroke:#fbc02d
+    style RemoteStore fill:#fce4ec,stroke:#c2185b
 ```
 
 ---
@@ -404,30 +410,16 @@ unsafe impl Sync for PtyHandle {}
 
 与远程 SSH 不同，本地终端使用 Tauri IPC 进行 I/O：
 
-```
-┌─────────────────┐
-│ LocalTerminalView│
-│   (Frontend)    │
-└────────┬────────┘
-         │ Tauri IPC
-         │ invoke('local_write_terminal', data)
-         ▼
-┌─────────────────┐
-│ LocalSession    │
-│   (Backend)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   PtyHandle     │
-│ (Arc+Mutex)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ portable-pty    │
-│ (Native/ConPTY) │
-└─────────────────┘
+```mermaid
+graph TD
+    View["LocalTerminalView<br/>(Frontend)"]
+    Session["LocalSession<br/>(Backend)"]
+    Handle["PtyHandle<br/>(Arc+Mutex)"]
+    Native["portable-pty<br/>(Native/ConPTY)"]
+
+    View -->|Tauri IPC<br/>invoke('local_write_terminal')| Session
+    Session --> Handle
+    Handle --> Native
 ```
 
 **优势**：
@@ -534,32 +526,45 @@ src/components/ide/
 
 > **注意**: 文件图标映射逻辑位于 `src/lib/fileIcons.tsx`
 
-### SFTP 驱动文件树
+### SFTP 驱动文件树 (Active Gating)
 
-IDE 模式的文件树基于 SFTP 协议，而非本地文件系统：
+IDE 模式的文件树基于 SFTP 协议，但受 v1.4.0 **连接状态门控 (State Gating)** 保护：
 
 ```mermaid
 sequenceDiagram
     participant Tree as IdeTree
     participant Store as ideStore
+    participant App as AppStore
     participant API as Tauri SFTP API
-    participant SSH as SSH Server
 
-    Tree->>Store: 请求目录内容(path)
-    Store->>API: sftpReadDir(sessionId, path)
-    API->>SSH: SFTP READDIR
-    SSH-->>API: 文件列表
+    Tree->>Store: 请求目录 (path)
+    
+    rect rgb(255, 230, 230)
+        Note over Store, App: Critical Check
+        Store->>App: checkConnection(connectionId)
+        alt Not Active
+            App-->>Store: throw "Connection Not Ready"
+            Store-->>Tree: Render Loading/Error
+        end
+    end
+
+    Store->>API: sftpReadDir(connectionId, path)
     API-->>Store: FileInfo[]
-    Store->>Store: 合并 Git 状态
     Store-->>Tree: 渲染文件树
 ```
 
-**懒加载策略**：
+**生命周期绑定 (Lifecycle Binding)**:
+IDE 工作区组件被包裹在 `Key = sessionId + connectionId` 中。这意味着：
+1.  **重连发生时**: `connectionId` 改变。
+2.  **组件重置**: 旧 `IdeTree` 直接销毁，取消所有未完成的 SFTP 请求。
+3.  **状态恢复**: 新 `IdeTree` 挂载，从 `ideStore.expandedPaths` 恢复展开状态。
+
+**懒加载策略**:
 - 目录首次展开时从服务器获取
 - 本地缓存已展开目录（5 秒 TTL）
-- 支持手动刷新（F5 或右键菜单）
+- 缓存键包含 `connectionId`，连接变更自动失效缓存
 
-### 编辑器集成
+---
 
 基于 CodeMirror 6 的远程文件编辑器：
 
@@ -1028,132 +1033,104 @@ const TerminalView = ({ sessionId, wsUrl }: Props) => {
 
 ---
 
-## 多 Store 架构 (v1.3.0)
+## 多 Store 架构 (v1.4.0)
 
 ### 架构概览
 
 ```mermaid
 flowchart TB
     subgraph Frontend ["Frontend State Layer"]
-        AppStore["appStore.ts<br/>(30KB)<br/>Remote SSH Sessions"]
-        IdeStore["ideStore.ts<br/>(35KB)<br/>IDE Mode State"]
-        LocalStore["localTerminalStore.ts<br/>(5KB)<br/>Local PTY Instances"]
-        SessionTree["sessionTreeStore.ts<br/>(48KB)<br/>Tree View State"]
-        Settings["settingsStore.ts<br/>(18KB)<br/>Unified Settings"]
-        Transfer["transferStore.ts<br/>(8KB)<br/>SFTP Transfers"]
-        AiChat["aiChatStore.ts<br/>(12KB)<br/>AI Chat"]
+        SessionTree["sessionTreeStore.ts<br/>(User Intent)<br/>Decides WHAT to connect"]
+        AppStore["appStore.ts<br/>(Backend Fact)<br/>Knows STATE of connection"]
+        
+        IdeStore["ideStore.ts<br/>(Context)<br/>Uses connectionId"]
+        Transfer["transferStore.ts<br/>(Task)<br/>Uses connectionId"]
+        
+        SessionTree -- "3. Refresh Signal" --> AppStore
+        AppStore -- "Fact: ConnectionId" --> IdeStore
+        AppStore -- "Fact: ConnectionId" --> Transfer
     end
 
-    subgraph Components ["Component Layer"]
-        TermView["TerminalView.tsx"]
-        LocalView["LocalTerminalView.tsx"]
-        IdeView["IdeView.tsx<br/>IDE Mode"]
-        TreeUI["SessionTreeView.tsx"]
+    subgraph Backend ["Backend Layer"]
+        RPC["Tauri Commands"]
+        Events["Events (LinkDown/Up)"]
     end
 
-    TermView --> AppStore
-    LocalView --> LocalStore
-    IdeView --> IdeStore
-    TreeUI --> SessionTree
+    SessionTree -- "1. Connect" --> RPC
+    RPC -- "2. Result (Ok)" --> SessionTree
+    Events -- "Auto Update" --> AppStore
 
-    AppStore -.-> Backend1["Tauri IPC: SSH Commands"]
-    LocalStore -.-> Backend2["Tauri IPC: Local Commands"]
-    
-    style AppStore fill:#fce4ec
+    style AppStore fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style SessionTree fill:#fff3cd,stroke:#fbc02d,stroke-width:2px
     style IdeStore fill:#f3e5f5
-    style LocalStore fill:#e8f5e9
-    style SessionTree fill:#fff3cd
-    style Settings fill:#e1f5ff
-    style AiChat fill:#fff8e1
+    style Backend fill:#fff3e0
 ```
 
-### AppStore (远程会话)
+### AppStore (Connection Fact)
 
-**职责**：
-- SSH 连接生命周期管理
-- 远程终端会话状态
-- 端口转发规则
-- SFTP 会话管理
+**权威性**: 后端连接状态的真实镜像 (Backend Truth Mirror)。
 
-**关键状态**：
+**职责**:
+- 维护 `connectionId` -> `ConnectionInfo` 的映射
+- 监听后端所有的连接事件 (Connected, Disconnected, Reconnecting)
+- 为 SFTP、PortForward 提供连接握手信息 (Transport Check)
+
+**关键状态**:
 ```typescript
 interface AppState {
-  sessions: Map<string, SessionInfo>;        // 远程SSH会话
-  connections: Map<string, ConnectionInfo>;  // 连接池条目
+  sessions: Map<string, SessionInfo>;        // 远程 SSH 会话 (Terminal)
+  connections: Map<string, ConnectionInfo>;  // 连接池状态 (Source of Truth)
   forwards: Map<string, ForwardInfo>;        // 端口转发规则
-  // ...
 }
 ```
 
-### IdeStore (IDE模式核心)
+### SessionTreeStore (User Intent)
 
-**职责**：
-- 远程项目文件管理
-- 多标签页编辑器状态
-- Git 状态刷新回调注册
-- 搜索缓存清除联动
+**权威性**: 用户逻辑意图的唯一来源 (Logic Brain)。
 
-**关键状态**：
+**职责**:
+- 决定"哪个节点应该连接"
+- 执行连接命令 (`connectTreeNode`)
+- **主动触发跨 Store 同步** (`refreshConnections`)
+
+### Store Synchronization Protocol (v1.4.0)
+
+这是 v1.4.0 架构的核心约束。任何改变连接状态的操作，都必须遵循 **"Action -> Event/Sync -> Update"** 模式。
+
+#### 同步矩阵 (Synchronization Matrix)
+
+| 触发操作 (Trigger) | 发起组件 | 必须执行的同步 | 原因 |
+| :--- | :--- | :--- | :--- |
+| **User Connect** | `sessionTreeStore.connectNode` | `appStore.refreshConnections()` | 后端生成新 UUID，前端需立即获取以挂载 SFTP |
+| **User Disconnect** | `sessionTreeStore.disconnectNode` | `appStore.refreshConnections()` | 清除过期的 Connection Entry |
+| **State Drift Fix** | `sessionTreeStore.syncDrift` | `appStore.refreshConnections()` | 修复 "UI 显示断开但后端已连接" 的状态不一致 |
+| **Auto Reconnect** | Backend (Event) | `appStore.updateSession` | 响应后端的自动重连事件 |
+| **IDE Mount** | `IdeWorkspace` | `appStore.refreshConnections()` | 确保 IDE 初始化时获取最新连接状态 |
+
+#### 代码范式：强制同步
+
 ```typescript
-interface IdeState {
-  // 会话关联
-  connectionId: string | null;
-  sftpSessionId: string | null;
+// src/store/sessionTreeStore.ts
 
-  // 项目状态
-  project: IdeProject | null;    // 项目路径、Git仓库状态
-
-  // 编辑器状态
-  tabs: IdeTab[];                // 打开的文件标签
-  activeTabId: string | null;
-
-  // 文件树状态
-  expandedPaths: Set<string>;    // 展开的目录
-
-  // 回调注册（用于跨组件通信）
-  refreshCallbacks: {
-    git: () => void;             // Git刷新
-    search: () => void;          // 搜索缓存清除
-  };
+async connectNodeInternal(nodeId: string) {
+    // 1. Backend Action (RPC)
+    await api.connectTreeNode({ nodeId });
+    
+    // 2. Local State Update (Optimistic)
+    set((state) => ({ 
+        rawNodes: state.rawNodes.map(n => n.id === nodeId ? { ...n, status: 'connected' } : n) 
+    }));
+    
+    // 3. 🔴 Critical Sync: 强制 AppStore 拉取最新状态
+    // 如果没有这一步，SFTP 组件会看到 connectionId=undefined 并一直等待
+    await useAppStore.getState().refreshConnections();
 }
 ```
 
-**设计亮点**：
-- **注册模式**：通过 `registerGitRefreshCallback()` 实现组件间松耦合
-- **防抖集成**：文件操作自动触发 Git 刷新（1秒防抖）
-- **冲突检测**：保存前检查服务器 mtime，防止覆盖他人修改
+### IdeStore & LocalTerminalStore
 
-### LocalTerminalStore (本地终端)
-
-**职责**：
-- 本地 PTY 实例生命周期
-- Shell 进程监控
-- 本地终端 I/O 管道
-
-**关键API**：
-```typescript
-interface LocalTerminalStore {
-  terminals: Map<string, LocalTerminalInfo>;  // 本地PTY实例
-  shells: ShellInfo[];                         // 已扫描的shell列表
-  defaultShell: ShellInfo | null;              // 用户首选shell
-  
-  createTerminal(request?: CreateLocalTerminalRequest): Promise<LocalTerminalInfo>;
-  closeTerminal(sessionId: string): Promise<void>;
-  writeTerminal(sessionId: string, data: Uint8Array): Promise<void>;
-}
-```
-
-### SessionTreeStore (会话树)
-
-**职责**：
-- 分层会话树（Group -> Connection -> Session）
-- 拓扑感知跳板机路径展示
-- 树节点展开/折叠状态
-
-**特性**：
-- 48KB 代码，包含复杂的树节点操作逻辑
-- 支持 ProxyJump 链式节点渲染
-- 与 `settingsStore.treeUI` 集成，持久化 UI 状态
+*   **IdeStore**: 负责 IDE 模式的上下文（打开的文件、Git 状态）。它**不管理连接**，而是通过 `connectionId` 引用 `AppStore` 中的连接。
+*   **LocalTerminalStore**: 独立管理的本地 PTY 实例，不参与远程连接同步循环。
 
 ### SettingsStore (统一设置)
 
@@ -1181,6 +1158,82 @@ interface PersistedSettingsV2 {
 - 检测 `SETTINGS_VERSION = 2`
 - 自动清理遗留 localStorage 键值
 - 无需数据库迁移，直接重置为默认值
+
+---
+
+## 连接自愈与重连架构 (First-Class)
+
+在 v1.4.0 中，"网络不稳定" 被视为一种常态而非异常。系统设计了一套完整的自愈机制，确保连接中断后能够自动恢复，且用户界面能够平滑过渡。
+
+### 核心概念：StateDrift (状态漂移)
+
+由于前端 (React State) 和后端 (Rust State) 是异步通信的，可能会出现状态不一致（Status Drift）：
+
+*   **场景**: 后端自动重连成功，但前端因事件丢失仍显示 "Link Down"。
+*   **检测**: `checkStateDrift()` 对比 SessionTree 的节点状态与 AppStore 的实际连接池状态。
+*   **修复**: 发现漂移时，强制触发 `syncDrift()`，执行全量状态同步。
+
+### 状态同步与自愈流程
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Tree as SessionTreeStore
+    participant App as AppStore
+    participant Backend as ConnectionRegistry
+
+    Note over Backend: 网络闪断，自动重连成功
+    Backend->>Backend: State: Reconnecting -> Active
+    
+    opt 事件丢失 (Event Lost)
+        Backend-xApp: "ConnectionActive" Event Missed
+    end
+    
+    Note over Tree: UI 仍显示灰色 (Offline)
+    User->>Tree: 点击节点 (Intent: Connect)
+    
+    Tree->>Backend: check_state(nodeId)
+    Backend-->>Tree: "Already Connected"
+    
+    Tree->>Tree: Detect StateDrift!
+    Tree->>App: 1. refreshConnections() 🟢
+    App->>Backend: fetch_all_connections()
+    Backend-->>App: Updated List (Active)
+    
+    App->>App: Update connectionId & State
+    App-->>Tree: Notify Update
+    Tree->>Tree: Update UI (Green)
+```
+
+### Key-Driven Reset 模式 (React)
+
+这是实现无感重连的关键 UI 模式。
+
+当连接断开并重连时，后端的 `connectionId` (UUID) 会发生变化。为了清除组件内部的陈旧状态（如 SFTP 的传输队列锁、缓冲区），我们利用 React 的 Key 机制强行重置组件生命周期。
+
+```tsx
+// AppLayout.tsx
+const connectionKey = `${sessionId}-${connectionId}`; // 复合 Key
+
+<SFTPView 
+  key={`sftp-${connectionKey}`}  // changes on reconnect -> remount
+  sessionId={sessionId} 
+/>
+<IdeWorkspace
+  key={`ide-${connectionKey}`}   // changes on reconnect -> remount
+  sessionId={sessionId}
+/>
+```
+
+**生命周期流转**:
+1.  **Disconnect**: `connectionId` 变为 `undefined`, Key 变化/失效。
+2.  **Reconnect**: 获得新的 `connectionId`。
+3.  **Remount**: 组件卸载并重新挂载。
+    *   `SFTPView`: 重新列出目录，从 `sftpPathMemory` 恢复上次路径。
+    *   `IdeWorkspace`: 重新建立 Git 监听，刷新文件树。
+    *   **PortForward**: 重新应用转发规则。
+
+此模式比手动编写 `useEffect` 来重置几十个状态变量要健壮得多 (Robustness through Destruction)。
 
 ---
 
@@ -1263,41 +1316,72 @@ const bracketedPaste = `\x1b[200~${command}\x1b[201~`;
 
 ---
 
-## 会话生命周期
+## 会话生命周期 (v1.4.0)
 
+v1.4.0 将会话生命周期划分为 **逻辑层 (SessionTree)** 和 **物理层 (AppStore/Backend)** 双轨运行。
+
+### 双轨状态机
+
+```mermaid
+stateDiagram-v2
+    subgraph Frontend["Frontend Logic (SessionTree)"]
+        Idle --> Connecting: User Click
+        Connecting --> Connected: Backend Return
+        Connected --> Active: Sync Complete (refreshConnections)
+        Active --> LinkDown: Event (LinkDown)
+        LinkDown --> Active: Auto Heal
+    end
+
+    subgraph Backend["Backend Physical (SshConnection)"]
+        None --> Handshaking: Connect()
+        Handshaking --> Authenticated: Auth OK
+        Authenticated --> Ready: Channel Open
+        Ready --> Reconnecting: Heartbeat Fail
+        Reconnecting --> Ready: Retry Success
+    end
+
+    Connecting --> Handshaking: IPC Call
+    Handshaking --> Connecting: Await
+    Authenticated --> Connected: Success Return
+    
+    note right of Connected
+        CRITICAL GAP:
+        Backend is ready, but
+        Frontend has NO ConnectionId yet.
+        Must trigger refreshConnections()
+    end note
+    
+    Connected --> Ready: Sync Action
 ```
-┌─────────────┐
-│   Created   │  用户点击 "Connect"
-└──────┬──────┘
-       │ connect_v2()
-       ▼
-┌─────────────┐
-│ Connecting  │  建立 TCP + SSH 握手
-└──────┬──────┘
-       │ 认证成功
-       ▼
-┌─────────────┐
-│  Connected  │  开启 PTY channel + WS bridge
-└──────┬──────┘
-       │
-       ├─────────────────────────────────┐
-       │                                 │
-       ▼                                 ▼
-┌─────────────┐                   ┌─────────────┐
-│   Active    │ ◄─── 心跳 ──────► │   Healthy   │
-└──────┬──────┘                   └─────────────┘
-       │
-       │ 网络断开 / 用户关闭
-       ▼
-┌─────────────┐
-│ Reconnecting│  (可选) 自动重连
-└──────┬──────┘
-       │ 重连失败 / 主动断开
-       ▼
-┌─────────────┐
-│Disconnected │  清理资源
-└─────────────┘
-```
+
+### 生命周期阶段详解
+
+1.  **Connecting (握手期)**
+    *   UI 显示加载 Spinner。
+    *   后端执行 TCP 握手、SSH 协议交换、密钥认证。
+    *   *阻塞点*: KBI/MFA 交互在此阶段发生。
+
+2.  **Synchronizing (同步期 - v1.4.0新增)**
+    *   后端连接成功，返回 `Ok`。
+    *   前端 `SessionTree` 标记为 `connected`。
+    *   **关键动作**: 前端立即调用 `appStore.refreshConnections()` 拉取 `connectionId`。
+    *   在此动作完成前，SFTP 视图处于 "Waiting for Transport" 状态。
+
+3.  **Active (活跃期)**
+    *   `connectionId` 存在且有效。
+    *   WebSocket 建立，PTY 数据流转。
+    *   SFTP/PortForward 功能可用。
+
+4.  **LinkDown / Reconnecting (保活期)**
+    *   心跳连续失败 (默认 30s)。
+    *   后端进入 `Reconnecting` 状态，尝试指数退避重连。
+    *   前端收到事件，UI 变灰，输入锁定。
+    *   用户看到的 Terminal 内容保留（History Buffer）。
+
+5.  **Disconnected (终止期)**
+    *   重连超时或用户主动断开。
+    *   清理所有后端资源 (Channels, PTYs)。
+    *   前端清除 `connectionId`，重置 UI。
 
 ---
 
@@ -1411,87 +1495,6 @@ impl ScrollBuffer {
 - **spawn_blocking**：正则搜索在独立线程执行
 - **MessagePack 序列化**：持久化到磁盘（计划中）---
 
-## 连接池与重连机制
-
-### SSH 连接池架构
-
-OxideTerm 实现了独立的 SSH 连接池，支持连接复用和自动重连：
-
-```
-┌─────────────────────────────────────────────────────┐
-│              SshConnectionRegistry                  │
-│  ┌──────────────────────────────────────────────┐   │
-│  │  ConnectionEntry (host:port)                 │   │
-│  │  ├── HandleController                         │   │
-│  │  ├── ref_count (Terminal + SFTP + Forward)   │   │
-│  │  ├── state (Active/LinkDown/Reconnecting)    │   │
-│  │  ├── heartbeat_task (15s interval)           │   │
-│  │  └── reconnect_task (exponential backoff)    │   │
-│  └──────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-           │
-           ├───> Terminal 1 (shared connection)
-           ├───> Terminal 2 (shared connection)
-           ├───> SFTP Session
-           └───> Port Forwards
-```
-
-**核心特性**：
-- **连接复用**：多个终端会话共享同一 SSH 连接
-- **空闲超时**：引用计数归零后 30 分钟自动断开
-- **心跳检测**：15s 间隔，2 次失败触发重连
-- **状态守卫**：避免重复发送相同状态事件
-
-### 心跳与重连流程
-
-```
-┌──────────┐   Heartbeat (15s)   ┌───────────┐
-│  Active  │ ────────────────────>│  Ping OK  │
-└──────────┘                      └───────────┘
-     │                                   
-     │ Ping timeout × 2                  
-     ▼                                   
-┌──────────┐                             
-│ LinkDown │                             
-└────┬─────┘                             
-     │                                   
-     │ start_reconnect()                 
-     ▼                                   
-┌──────────────┐   Retry 1 (1s)         
-│ Reconnecting │ ──────────────> Connect SSH
-└──────────────┘                         │
-     │                                   │
-     │ Success                           │ Fail
-     │                                   ▼
-     │                           Retry 2 (2s)
-     │                                   │
-     ▼                                   │ Fail
-┌──────────┐                            ▼
-│  Active  │                    Retry 3 (4s)...
-└──────────┘                    (exponential backoff)
-```
-
-**重连行为**：
-- **Terminal**: 输入锁定，显示 Input Lock Overlay，保留历史输出
-- **SFTP**: 传输中断，标记为 error，支持断点续传（计划中）
-- **Port Forward**: 自动恢复所有转发规则
-
-### 事件系统
-
-连接状态变更通过 Tauri 事件广播到前端：
-
-```typescript
-// 前端监听连接状态
-listen('connection_status_changed', (event) => {
-  const { connection_id, status } = event.payload;
-  // status: 'active' | 'link_down' | 'reconnecting' | 'connected' | 'disconnected'
-});
-```
-
-**状态守卫**：只有状态真正变化时才发送事件，避免事件风暴
-**AppHandle 缓存**：启动时 AppHandle 未就绪的事件会被缓存，就绪后立即发送
-
----
 
 ## SSH 连接池
 
@@ -1636,52 +1639,7 @@ graph LR
 
 ---
 
-## 会话生命周期
-
-### 状态机流程
-
-```mermaid
-stateDiagram-v2
-    [*] --> Created: 用户点击连接
-    
-    Created --> Connecting: connect_v2()
-    Connecting --> Connecting: DNS 解析<br/>TCP 握手
-    
-    Connecting --> Connected: SSH 认证成功
-    Connecting --> Error: 连接失败<br/>认证失败
-    
-    Connected --> Active: PTY+WS 启动
-    Active --> Active: 正常 I/O
-    
-    Active --> LinkDown: 心跳失败 × 2
-    LinkDown --> Reconnecting: start_reconnect()
-    
-    Reconnecting --> Reconnecting: 重试中...<br/>(1s, 2s, 4s...)
-    Reconnecting --> Active: 重连成功
-    Reconnecting --> Error: 达到最大重试次数
-    
-    Active --> Disconnecting: 用户主动断开
-    Disconnecting --> Disconnected: 清理资源
-    
-    Error --> Disconnected: 清理资源
-    Disconnected --> [*]
-    
-    note right of LinkDown
-        输入锁定
-        显示 Overlay
-        Port Forward 暂停
-    end note
-    
-    note right of Reconnecting
-        Shell: 保留历史输出
-        SFTP: 传输中断
-        Forward: 等待恢复
-    end note
-```
-
----
-
-## 重连机制
+## 后端重连与心跳实现
 
 ### 心跳检测与重连
 

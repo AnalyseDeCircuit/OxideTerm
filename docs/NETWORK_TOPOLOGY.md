@@ -1,6 +1,6 @@
-# 网络拓扑与 ProxyJump - 智能路由多跳连接
+# 网络拓扑与 ProxyJump - 智能路由多跳连接 (v1.4.0)
 
-> 通过拓扑图自动计算最优路径，支持无限级跳板机级联和动态节点钻入。
+> 通过拓扑图自动计算最优路径，支持无限级跳板机级联、动态节点钻入，以及 **级联故障自愈**。
 
 ## 🎯 核心概念
 
@@ -8,6 +8,16 @@ OxideTerm 提供两种方式管理多跳 SSH 连接：
 
 1. **ProxyJump (proxy_chain)**：配置时静态指定跳板机链路
 2. **Network Topology**：自动构建拓扑图，动态计算最优路径
+
+### v1.4.0 架构对齐
+
+在 v1.4.0 的 **Strong Consistency Sync** 架构下，网络拓扑模块遵循以下准则：
+
+| 准则 | 实现 |
+|------|------|
+| **级联状态传播** | 当链路中任一跳板机断开，所有下游节点的连接状态同步标记为 `link_down` |
+| **Key-Driven 销毁** | 前端组件使用 `key={sessionId-connectionId}`，链路断开时物理级销毁整棵组件树 |
+| **路径记忆** | 重连后自动恢复之前的工作目录（SFTP）和端口转发规则 |
 
 ### 什么是 ProxyJump？
 
@@ -45,6 +55,25 @@ ssh -J admin@jump.example.com:2222 user@target.internal
 │      └── establish_tunneled_connection()                   │
 │          └── 通过父连接的 direct-tcpip 建立隧道           │
 └────────────────────────────────────────────────────────────┘
+```
+
+### 状态同步流程 (v1.4.0 Strong Sync)
+
+```mermaid
+sequenceDiagram
+    participant Jump as 跳板机 (Jump Host)
+    participant Reg as SshConnectionRegistry
+    participant App as AppStore (Fact)
+    participant UI as React UI (Key-Driven)
+
+    Note over Jump: 心跳失败 (LinkDown)
+    Jump->>Reg: 标记 state = link_down
+    Reg->>Reg: 遍历 parent_connection_id 链
+    Reg->>Reg: 级联标记所有下游节点为 link_down
+    Reg->>App: emit("connection:update")
+    App->>App: refreshConnections() [Strong Sync]
+    App->>UI: 更新 Observables
+    Note over UI: key 变化 → 组件树销毁重建
 ```
 
 ---
@@ -376,6 +405,83 @@ let new_connection_id = registry.establish_tunneled_connection(
     parent_connection_id,  // 已连接的跳板机 ID
     target_config,         // 目标服务器配置
 ).await?;
+```
+
+---
+
+## ⚡ 级联故障处理 (v1.4.0)
+
+当多跳链路中的某个节点断开时，v1.4.0 架构确保整条链路的状态一致性和前端组件的自动自愈。
+
+### 问题场景
+
+```
+local → bastion → gateway → target
+              ↑
+         心跳失败！
+```
+
+当 `bastion` 断开时，`gateway` 和 `target` 的连接也会失效（因为它们依赖 `bastion` 的 `direct-tcpip` 隧道）。
+
+### 解决方案：级联状态传播
+
+```mermaid
+flowchart TD
+    subgraph Backend
+        B1[bastion: link_down] --> B2[遍历 parent_connection_id]
+        B2 --> B3[gateway: link_down]
+        B2 --> B4[target: link_down]
+    end
+
+    subgraph Frontend
+        F1[AppStore.refreshConnections] --> F2{检查 state}
+        F2 -- "link_down" --> F3[UI 组件 key 变化]
+        F3 --> F4[物理销毁旧组件]
+        F4 --> F5[显示重连遮罩]
+    end
+
+    B3 --> F1
+    B4 --> F1
+```
+
+### 实现细节
+
+1. **后端级联标记**：
+   ```rust
+   // 当检测到 link_down 时
+   fn propagate_link_down(&self, connection_id: &str) {
+       // 找到所有以此连接为 parent 的下游连接
+       let children = self.find_children(connection_id);
+       for child_id in children {
+           self.set_state(&child_id, ConnectionState::LinkDown);
+           self.propagate_link_down(&child_id); // 递归
+       }
+   }
+   ```
+
+2. **前端 Key-Driven 销毁**：
+   ```tsx
+   // 伪代码：连接 ID 变化时，整个终端组件树重建
+   <TerminalView
+     key={`${sessionId}-${connectionId}`}
+     sessionId={sessionId}
+   />
+   ```
+
+3. **路径记忆与恢复**：
+   - SFTP 当前路径存入 `PathMemoryMap[sessionId]`
+   - 重连成功后，新组件挂载时自动恢复路径
+
+### 状态门禁
+
+在级联故障期间，所有 IO 操作被 **State Gating** 拦截：
+
+```typescript
+// 前端检查
+if (appStore.getConnectionState(sessionId) !== 'active') {
+  // 拒绝操作，显示 "连接不稳定" 提示
+  return;
+}
 ```
 
 ---
@@ -717,4 +823,4 @@ NetworkTopology::exclude_edge(
 
 ---
 
-*文档版本: v1.1.0 | 最后更新: 2026-01-19*
+*文档版本: v1.4.0 | 最后更新: 2026-02-04*

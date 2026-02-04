@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -26,7 +26,7 @@
 
 ## 📖 Core Evolution
 
-OxideTerm v1.3.2 represents a complete architectural overhaul. We are no longer just an SSH client, but a **terminal engine** with over **65,000 lines** of meticulously crafted Rust + TypeScript code.
+OxideTerm v1.4.0 represents a complete architectural overhaul. We are no longer just an SSH client, but a **terminal engine** with over **65,000 lines** of meticulously crafted Rust + TypeScript code.
 
 ### ⚙️ Backend Breakthrough: Local Terminal & Concurrency Model
 We've introduced local terminal support based on `portable-pty`, completely solving concurrency challenges in Rust's async runtime:
@@ -50,7 +50,7 @@ Facing drastically different state management needs for local, remote, and IDE s
 
 ## 🏗️ System Architecture
 
-v1.3.2 employs a hybrid dataflow architecture that intelligently routes traffic based on session type:
+v1.4.0 employs a hybrid dataflow architecture that intelligently routes traffic based on session type:
 
 ```mermaid
 flowchart TB
@@ -158,7 +158,7 @@ We've built a reference-counted `SshConnectionRegistry` implementing true SSH Mu
 
 ---
 
-## 🛠️ Tech Stack (v1.3.2)
+## 🛠️ Tech Stack (v1.4.0)
 
 | Layer | Key Technology | Description |
 |-------|---------------|-------------|

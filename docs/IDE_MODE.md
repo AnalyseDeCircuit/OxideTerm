@@ -14,7 +14,7 @@ IDE 模式是 OxideTerm 的核心特性之一，让你无需安装 VS Code Remot
 | **轻量快速** | 基于 SFTP 协议，复用现有 SSH 连接 |
 | **原生体验** | CodeMirror 6 编辑器，支持语法高亮、自动补全 |
 | **Git 集成** | 实时显示文件修改状态和分支信息 |
-| **项目搜索** | 全项目 grep 搜索，快速定位代码 |
+| **自愈连接** | v1.4.0 引入的强一致性连接架构，断网重连不丢失上下文 |
 
 ## 🚀 快速开始
 
@@ -58,35 +58,96 @@ IDE 模式是 OxideTerm 的核心特性之一，让你无需安装 VS Code Remot
 | **终端面板** | 集成 SSH 终端，可执行命令、运行程序 |
 | **状态栏** | 显示光标位置、文件编码、语言、Git 分支信息 |
 
-## ⌨️ 快捷键
+## ⚙️ 核心流程与架构 (v1.4.0)
 
-### 文件操作
+OxideTerm v1.4.0 彻底重构了 IDE 模式的连接管理，采用了 **"强一致性同步"** 和 **"Key-Driven 重置"** 架构，确保在极其不稳定的网络环境下也能保证数据一致性。
 
-| 快捷键 | 功能 |
-|--------|------|
-| `Cmd/Ctrl + S` | 保存当前文件 |
-| `Cmd/Ctrl + Shift + S` | 保存所有文件 |
-| `Cmd/Ctrl + W` | 关闭当前标签 |
-| `Cmd/Ctrl + Shift + W` | 关闭所有标签 |
+### 1. 强一致性同步架构
 
-### 编辑器
+IDE 模式的所有 IO 操作（文件读取、Git 刷新、保存）都必须经过严格的状态门禁：
 
-| 快捷键 | 功能 |
-|--------|------|
-| `Cmd/Ctrl + F` | 文件内搜索 |
-| `Cmd/Ctrl + G` | 跳转到行号 |
-| `Cmd/Ctrl + D` | 选中下一个相同单词 |
-| `Cmd/Ctrl + /` | 切换注释 |
-| `Tab` | 缩进 |
-| `Shift + Tab` | 取消缩进 |
+```mermaid
+sequenceDiagram
+    participant User
+    participant IdeTree
+    participant IdeStore
+    participant AppStore
+    participant Backend
 
-### 面板控制
+    Note over IdeStore, AppStore: State Gating Check
+    
+    User->>IdeTree: 展开目录 / 保存文件
+    IdeTree->>IdeStore: Action (e.g. readDir)
+    
+    IdeStore->>AppStore: checkConnection(connectionId)
+    
+    alt Connection Active
+        AppStore-->>IdeStore: Status: Active
+        IdeStore->>Backend: SFTP / SSH Exec
+        Backend-->>IdeStore: Result
+        IdeStore-->>IdeTree: Update UI
+    else Connection Broken / Reconnecting
+        AppStore-->>IdeStore: Status: Moving/Down
+        IdeStore-->>IdeTree: 🚫 Block IO (Show Loading)
+    end
+```
 
-| 快捷键 | 功能 |
-|--------|------|
-| `` Cmd/Ctrl + ` `` | 切换终端面板显示 |
-| `Cmd/Ctrl + B` | 切换文件树显示 |
-| `Cmd/Ctrl + Shift + F` | 打开项目搜索 |
+### 2. Key-Driven 自动重置与自愈
+
+为了解决 SSH 重连后旧状态残留的问题，我们引入了基于 React Key 的物理级重置机制：
+
+```tsx
+// IdeWorkspaceWrapper.tsx
+const connectionKey = `${sessionId}-${connectionId}`;
+
+// 当重连发生 (connectionId 改变)，整个 IDE 树被销毁并重建
+return (
+  <IdeWorkspace 
+    key={connectionKey} 
+    sessionId={sessionId}
+    initialPath={restoredPath}
+  />
+);
+```
+
+**生命周期流转**：
+1. **断网**：Backend 重连，前一个 `connectionId` 失效。
+2. **销毁**：React 卸载旧组件，自动清理所有 Pending 的 SFTP 请求、Watcher 和各种内存状态。
+3. **重建**：重连成功，生成新 `connectionId`，组件重新挂载。
+4. **恢复**：
+    - 从全局 `pathMemory` 恢复上次的目录路径。
+    - 重新订阅 Git 状态变更。
+    - 重新加载文件树根目录。
+
+### 3. 多 Store 协同
+
+IDE 模式不仅仅依赖单一 Store，而是三个 Store 的协奏曲：
+
+```mermaid
+graph TD
+    subgraph Context ["User Intent Context"]
+        IdeStore["ideStore<br/>(File Tree, Tabs, Search)"]
+    end
+    
+    subgraph Fact ["Backend Truth"]
+        AppStore["appStore<br/>(ConnectionId, State)"]
+    end
+    
+    subgraph Logic ["Logic Driver"]
+        TreeStore["sessionTreeStore<br/>(Connect/Disconnect Actions)"]
+    end
+    
+    TreeStore -->|1. Connect Action| AppStore
+    TreeStore -->|2. Force Refresh| AppStore
+    
+    AppStore -->|3. Source of Truth| IdeStore
+    
+    IdeStore -->|4. IO Gating| AppStore
+    
+    style IdeStore fill:#e3f2fd,stroke:#1565c0
+    style AppStore fill:#fce4ec,stroke:#c2185b
+    style TreeStore fill:#fff3cd,stroke:#fbc02d
+```
 
 ## 🌳 文件树功能
 
@@ -103,131 +164,51 @@ IDE 模式是 OxideTerm 的核心特性之一，让你无需安装 VS Code Remot
 | ⚫ 灰色 | Untracked | 未跟踪 |
 | 🔴 深红 | Conflict | 冲突 |
 
-### 操作
+### 行为驱动刷新 (Behavior-Driven Refresh)
 
-- **单击目录**：展开/折叠
-- **双击文件**：在编辑器中打开
-- **右键菜单**：更多操作（重命名、删除等）
-- **刷新按钮**：重新加载文件列表
-- **切换目录**：点击顶部文件夹图标选择其他项目目录
+为了减少 SSH 流量，Git 状态不再使用轮询，而是由用户行为触发：
+
+- **文件保存**: `ideStore.saveFile()` -> 触发刷新
+- **文件操作**: 新建/删除/重命名 -> 触发刷新
+- **终端回车**: 在集成终端按 Enter 键 -> 延迟 500ms 触发刷新 (智能捕获 CLI git 命令)
+- **窗口聚焦**: 窗口重新获得焦点 -> 触发刷新
 
 ## 📝 编辑器功能
 
-### 支持的语言
+### 文件冲突处理 (Data Consistency)
 
-IDE 模式支持 50+ 种编程语言的语法高亮：
+当保存文件时，IDE 会执行 "乐观锁" 检查：
 
-- **Web**: TypeScript, JavaScript, HTML, CSS, Vue, React
-- **系统**: Rust, Go, C/C++, Python, Java
-- **脚本**: Shell, PowerShell, Lua, Ruby, Perl
-- **配置**: JSON, YAML, TOML, XML, Markdown
-- **数据库**: SQL, GraphQL
+1. **保存前**: 获取远程文件 `mtime`。
+2. **比较**: 与文件打开时的 `mtime` 对比。
+3. **冲突**: 如果远程更新，弹出冲突解决对话框。
+    - **覆盖保存**：用本地内容覆盖远程文件
+    - **重新加载**：放弃本地修改，加载远程最新内容
 
-### 自动检测
+## 🔧 技术实现细节
 
-编辑器会根据文件扩展名自动选择语言模式，也可以在状态栏手动切换。
+### 搜索缓存策略
 
-### 文件冲突处理
+为了在远程 SFTP 环境下提供流畅的全局搜索：
 
-当保存文件时，如果远程文件已被其他进程修改，会弹出冲突对话框：
+- **缓存键**: `Query + Options + ConnectionId`
+- **TTL**: 60 秒 (文件变动自动失效)
+- **失效机制**: 任何文件写入操作都会清空当前连接的搜索缓存
 
-- **覆盖保存**：用本地内容覆盖远程文件
-- **重新加载**：放弃本地修改，加载远程最新内容
-- **取消**：保持现状，稍后手动处理
+### 路径记忆 (Path Memory)
 
-## 🔍 项目搜索
+组件重装不应丢失上下文。我们使用全局 Map 存储会话状态：
 
-### 使用方法
+```typescript
+// 全局内存，跨组件生命周期
+const idePathMemory = new Map<string, string>();
 
-1. 按 `Cmd/Ctrl + Shift + F` 打开搜索面板
-2. 输入搜索关键词
-3. 结果按文件分组显示
-4. 点击结果项跳转到对应位置
+// Mount 时
+const lastPath = idePathMemory.get(sessionId) || defaultPath;
 
-### 搜索特性
-
-- **实时搜索**：输入时自动搜索（300ms 防抖）
-- **结果缓存**：60 秒内相同搜索直接返回缓存
-- **上下文显示**：显示匹配行的前后内容
-- **正则支持**：支持正则表达式搜索（计划中）
-
-## 💻 集成终端
-
-### 特性
-
-- 复用 SSH 连接，无需额外认证
-- 自动 `cd` 到项目根目录
-- 支持所有终端功能（颜色、历史、Tab 补全等）
-- 可调整面板高度
-
-### 行为驱动刷新
-
-终端与编辑器状态智能同步：
-
-- 在终端执行 `git` 命令后，Git 状态自动刷新
-- 修改文件后，文件树状态实时更新
-- 窗口重新获得焦点时自动检查变更
-
-## ⚙️ 配置选项
-
-### 布局持久化
-
-- 文件树宽度
-- 终端面板高度
-- 面板显示/隐藏状态
-
-这些设置会自动保存，下次打开时恢复。
-
-### 标签管理
-
-- 最多同时打开 20 个标签
-- 超出时自动关闭最早未使用的标签
-- 未保存的文件会提示保存
-
-## 🔧 技术实现
-
-### 架构
-
+// Unmount 时 (React Effect Cleanup)
+// 只有在 Close Session 时才清理，Reconnect 不清理
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      前端 (React)                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  IdeTree    │  │  IdeEditor  │  │    IdeTerminal      │ │
-│  │  (文件树)    │  │ (CodeMirror)│  │    (xterm.js)       │ │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
-│         │                │                     │            │
-│         └────────────────┴─────────────────────┘            │
-│                          │                                  │
-│                    Tauri IPC                                │
-├─────────────────────────────────────────────────────────────┤
-│                      后端 (Rust)                            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ SFTP 会话   │  │ SSH 连接池  │  │  终端会话管理       │ │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
-│         └────────────────┴─────────────────────┘            │
-│                          │                                  │
-│                    SSH 协议                                 │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                    远程服务器
-```
-
-### 关键技术
-
-| 组件 | 技术 |
-|------|------|
-| 编辑器 | CodeMirror 6 |
-| 终端 | xterm.js + WebGL 渲染 |
-| 文件操作 | SFTP 协议 |
-| 状态管理 | Zustand |
-| Git 状态 | `git status --porcelain` 命令解析 |
-
-### 性能优化
-
-- **搜索缓存**：60 秒 TTL，避免重复远程 grep
-- **行为驱动刷新**：替代轮询，降低 SSH 流量
-- **细粒度订阅**：Zustand selector 优化，减少无效重渲染
-- **增量加载**：文件树按需加载子目录
 
 ## 📋 已知限制
 
@@ -236,7 +217,7 @@ IDE 模式支持 50+ 种编程语言的语法高亮：
 | 文件大小 | 建议 < 1MB，大文件会切换到只读模式 |
 | 二进制文件 | 不支持编辑，会提示打开 Hex 查看器 |
 | 实时协作 | 不支持多人同时编辑 |
-| LSP | 暂不支持语言服务器协议（自动补全基于本地） |
+| LSP | 暂不支持语言服务器协议（自动补全基于本地 CodeMirror） |
 
 ## 🗺️ 路线图
 
@@ -249,13 +230,6 @@ IDE 模式支持 50+ 种编程语言的语法高亮：
 - [ ] 书签系统
 - [ ] 片段管理 (Snippets)
 
-## 💡 使用建议
-
-1. **小项目优先**：IDE 模式最适合快速编辑配置文件、脚本或小型项目
-2. **配合终端使用**：编辑代码后直接在终端运行/调试
-3. **善用搜索**：项目搜索比手动查找更高效
-4. **注意保存**：养成 `Cmd+S` 的习惯，避免丢失更改
-
 ---
 
-*IDE 模式持续优化中，欢迎反馈建议！*
+*文档版本: v1.4.0 | 适配架构: Strong Sync + Key-Driven Reset*

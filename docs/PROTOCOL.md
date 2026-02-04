@@ -1,6 +1,6 @@
-# OxideTerm Protocol Documentation
+# OxideTerm Protocol Documentation (v1.4.0)
 
-> 本文档记录前后端通信协议，避免开发时的格式不匹配问题。
+> **v1.4.0 核心架构**: 本协议文档已与 **Strong Consistency Sync** 和 **Key-Driven Reset** 架构完全对齐。所有连接状态变更均通过事件系统触发前端强制同步。
 
 ## 目录
 
@@ -11,8 +11,9 @@
    - [SFTP Commands](#sftp-commands)
    - [Port Forwarding Commands](#port-forwarding-commands)
    - [Health Commands](#health-commands)
-3. [Events](#events-事件)
-4. [数据类型映射](#数据类型映射)
+3. [Events (事件系统)](#events-事件系统)
+4. [Strong Sync 协议流程](#strong-sync-协议流程)
+5. [数据类型映射](#数据类型映射)
 
 ---
 
@@ -41,6 +42,7 @@
 - 服务端每 30s 发送心跳 (seq 递增)
 - 客户端收到后立即回显相同 seq
 - 90s 无响应则断开连接
+- **v1.4.0**: 心跳失败触发 `connection:update` 事件，前端进入 State Gating 模式
 
 ---
 
@@ -96,25 +98,39 @@ pub enum AuthRequest {
 ```typescript
 interface ConnectResponseV2 {
   session_id: string;
-  ws_url: string;      // e.g., "ws://localhost:55880"
+  connection_id: string;   // v1.4.0: 用于 Key-Driven Reset
+  ws_url: string;          // e.g., "ws://localhost:55880"
   port: number;
   session: SessionInfo;
 }
 
 interface SessionInfo {
   id: string;
+  connection_id: string;   // v1.4.0: 连接标识符
   name: string;
   host: string;
   port: number;
   username: string;
-  state: 'disconnected' | 'connecting' | 'connected' | 'disconnecting' | 'error';
+  state: ConnectionState;
   error?: string;
   ws_url?: string;
-  color: string;       // 自动生成的 hex 颜色
+  color: string;           // 自动生成的 hex 颜色
   uptime_secs: number;
-  order: number;       // Tab 排序
+  order: number;           // Tab 排序
 }
+
+type ConnectionState = 
+  | 'disconnected' 
+  | 'connecting' 
+  | 'connected' 
+  | 'link_down'      // 心跳失败
+  | 'reconnecting'   // 自动重连中
+  | 'idle'           // 空闲 (ref_count = 0)
+  | 'disconnecting' 
+  | 'error';
 ```
+
+**v1.4.0 Strong Sync**: 连接成功后，后端 emit `connection:update` 事件。
 
 #### `disconnect_v2`
 
@@ -126,6 +142,8 @@ interface SessionInfo {
 void (成功) 或 Error string
 ```
 
+**v1.4.0**: 断开后 emit `connection:update`，触发前端 `refreshConnections()`。
+
 #### `list_sessions_v2`
 
 ```typescript
@@ -136,6 +154,8 @@ void (成功) 或 Error string
 SessionInfo[]
 ```
 
+**v1.4.0**: 这是 **Strong Sync** 的核心拉取接口。前端收到 `connection:update` 事件后必须调用此命令获取最新状态快照。
+
 #### `resize_session_v2`
 
 ```typescript
@@ -145,6 +165,8 @@ SessionInfo[]
 // 响应
 void
 ```
+
+**v1.4.0 State Gating**: 前端调用前必须检查 `connectionState === 'connected'`。
 
 #### `reorder_sessions`
 
@@ -178,6 +200,8 @@ interface SessionStats {
   connected: number;
   connecting: number;
   disconnected: number;
+  link_down: number;      // v1.4.0 新增
+  reconnecting: number;   // v1.4.0 新增
   error: number;
 }
 ```
@@ -280,6 +304,8 @@ interface SaveConnectionRequest {
 ConnectionInfo
 ```
 
+**v1.4.0**: 保存成功后 emit `connection:update`。
+
 #### `delete_connection`
 
 删除连接（同时删除 keychain 中的密码）。
@@ -291,6 +317,8 @@ ConnectionInfo
 // 响应
 void
 ```
+
+**v1.4.0**: 删除后 emit `connection:update`。
 
 #### `mark_connection_used`
 
@@ -345,6 +373,8 @@ interface SshHostInfo {
 // 响应
 ConnectionInfo
 ```
+
+**v1.4.0**: 导入后 emit `connection:update`。
 
 #### `get_ssh_config_path`
 
@@ -406,6 +436,8 @@ interface ConnectionInfo {
 ### SFTP Commands
 
 所有 SFTP 命令需要先调用 `sftp_init` 初始化会话。
+
+**v1.4.0 State Gating**: 所有 SFTP 命令执行前，前端必须检查 `connectionState === 'connected'`。
 
 #### `sftp_init`
 
@@ -563,6 +595,8 @@ string
 string  // 新的工作目录绝对路径
 ```
 
+**v1.4.0 Path Memory**: 前端应将成功切换的路径存入 `PathMemoryMap[sessionId]`，以便 Key-Driven 重建后恢复。
+
 #### `sftp_close`
 
 关闭 SFTP 会话。
@@ -631,6 +665,8 @@ interface ForwardResponse {
   error?: string;
 }
 ```
+
+**v1.4.0 Link Resilience**: 创建的规则会被持久化到 redb，重连后自动恢复。
 
 #### `stop_port_forward`
 
@@ -704,6 +740,14 @@ interface ForwardRuleDto {
   target_port: number;
   status: 'starting' | 'active' | 'stopped' | 'error';
   description?: string;
+  traffic_stats?: TrafficStats;  // v1.4.0 新增
+}
+
+interface TrafficStats {
+  bytes_sent: number;
+  bytes_received: number;
+  connections_total: number;
+  connections_active: number;
 }
 ```
 
@@ -791,9 +835,43 @@ void
 
 ---
 
-## Events (事件)
+## Events (事件系统)
 
-### SFTP 传输进度
+### 1. 连接状态变更 (Strong Sync 核心)
+
+**事件名:** `connection:update`
+
+> **重要**: 这是 v1.4.0 Strong Sync 架构的核心事件。任何连接状态变更都会触发此事件，前端必须监听并调用 `list_sessions_v2` 完成同步。
+
+```typescript
+interface ConnectionUpdateEvent {
+    session_id: string;
+    connection_id: string;
+    old_state: ConnectionState;
+    new_state: ConnectionState;
+    trigger: ConnectionTrigger;
+    timestamp: number;        // Unix timestamp (ms)
+}
+
+type ConnectionState = 
+  | 'connecting' 
+  | 'connected' 
+  | 'link_down'       // 心跳失败，链路中断
+  | 'reconnecting'    // 自动重连中
+  | 'idle'            // 空闲 (ref_count = 0)
+  | 'disconnected'
+  | 'error';
+
+type ConnectionTrigger = 
+  | 'user_action'        // 用户主动操作
+  | 'heartbeat_fail'     // 心跳检测失败
+  | 'reconnect_success'  // 自动重连成功
+  | 'reconnect_fail'     // 自动重连失败
+  | 'idle_timeout'       // 空闲超时
+  | 'cascade_fail';      // 级联故障 (跳板机断开)
+```
+
+### 2. SFTP 传输进度
 
 **事件名:** `sftp:progress:{sessionId}`
 
@@ -807,6 +885,86 @@ interface TransferProgress {
   speed_bps: number;        // bytes per second
   eta_secs?: number;        // 预计剩余秒数
 }
+```
+
+### 3. 端口转发状态变更
+
+**事件名:** `forward:update:{sessionId}`
+
+```typescript
+interface ForwardUpdateEvent {
+  forward_id: string;
+  old_status: ForwardStatus;
+  new_status: ForwardStatus;
+  trigger: 'user_action' | 'link_restored' | 'error';
+}
+
+type ForwardStatus = 'starting' | 'active' | 'stopped' | 'error';
+```
+
+---
+
+## Strong Sync 协议流程
+
+### 连接建立流程
+
+```mermaid
+sequenceDiagram
+    participant UI as React UI
+    participant Tree as SessionTreeStore
+    participant App as AppStore (Fact)
+    participant Back as Backend (Rust)
+
+    UI->>Tree: 用户点击连接
+    Tree->>Back: connect_v2(request)
+    Back->>Back: 建立 SSH 连接
+    Back-->>Tree: ConnectResponseV2 (connection_id)
+    Back->>App: emit("connection:update")
+    App->>Back: list_sessions_v2()
+    Back-->>App: SessionInfo[] (最新快照)
+    App->>UI: 更新 Observables
+    Note over UI: key={sessionId-connectionId} 组件挂载
+```
+
+### 心跳失败与自愈流程
+
+```mermaid
+sequenceDiagram
+    participant HB as Heartbeat Task
+    participant Reg as ConnectionRegistry
+    participant App as AppStore
+    participant UI as React UI
+
+    Note over HB: 心跳失败 × 2
+    HB->>Reg: set_state(link_down)
+    Reg->>App: emit("connection:update", trigger: heartbeat_fail)
+    App->>App: refreshConnections() [Strong Sync]
+    App->>UI: 更新 state = link_down
+    Note over UI: State Gating 激活，禁止 IO
+
+    Reg->>Reg: 启动自动重连
+    Reg->>App: emit("connection:update", trigger: reconnect_success)
+    Note over App: connection_id 可能变更
+    App->>App: refreshConnections()
+    App->>UI: 更新 state, connection_id
+    Note over UI: key 变化 → 组件销毁重建
+    Note over UI: 从 PathMemoryMap 恢复路径
+```
+
+### Key-Driven Reset 流程
+
+```mermaid
+flowchart TD
+    A[connection_id 变更] --> B{React 检测 key 变化}
+    B --> C[销毁旧组件]
+    C --> D[清理旧句柄/订阅]
+    D --> E[挂载新组件]
+    E --> F[获取新句柄]
+    F --> G{有路径记忆?}
+    G -- Yes --> H[从 PathMemoryMap 恢复]
+    G -- No --> I[使用默认路径]
+    H --> J[恢复完成]
+    I --> J
 ```
 
 ---
@@ -846,3 +1004,6 @@ interface TransferProgress {
    - Rust: `DefaultKey`
    - JSON: `"default_key"`
 
+---
+
+*文档版本: v1.4.0 (Strong Sync + Key-Driven Reset) | 最后更新: 2026-02-04*
