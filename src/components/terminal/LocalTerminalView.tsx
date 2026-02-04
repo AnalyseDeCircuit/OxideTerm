@@ -98,29 +98,41 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
    * 
    * 预设轨道: 返回内置字体栈（系统优先 → 内置 woff2 兜底）
    * 自定义轨道: 返回用户输入的字体栈 + monospace 兜底
+   * 
+   * 🎯 CJK 策略: 所有字体都 fallback 到 Maple Mono NF CN
+   *    拉丁字母 → 用户选择的字体
+   *    中日韩字符 → Maple Mono NF CN
    */
   const getFontFamily = (fontFamily: string, customFontFamily?: string): string => {
-    // 自定义轨道: 用户输入优先
+    // CJK fallback: Maple Mono NF CN 提供完美的中日韩字符支持
+    const CJK_FALLBACK = '"Maple Mono NF CN"';
+    
+    // 自定义轨道: 用户输入优先，添加 CJK fallback
     if (fontFamily === 'custom' && customFontFamily?.trim()) {
-      // 确保有 monospace 兜底
       const stack = customFontFamily.trim();
-      return stack.toLowerCase().includes('monospace') ? stack : `${stack}, monospace`;
+      // 如果已有 monospace，在其前插入 CJK fallback
+      if (stack.toLowerCase().includes('monospace')) {
+        return stack.replace(/,?\s*monospace\s*$/i, `, ${CJK_FALLBACK}, monospace`);
+      }
+      return `${stack}, ${CJK_FALLBACK}, monospace`;
     }
     
-    // 预设轨道: 系统字体优先 → 内置 woff2 兜底
+    // 预设轨道: 拉丁字符用选定字体，CJK 字符 fallback 到 Maple Mono
     switch(fontFamily) {
       case 'jetbrains':
-        return '"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF", "JetBrains Mono", monospace';
+        return `"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF", "JetBrains Mono", ${CJK_FALLBACK}, monospace`;
       case 'meslo':
-        return '"MesloLGM Nerd Font", "MesloLGM Nerd Font Mono", "MesloLGM NF", "Meslo LG M", monospace';
+        return `"MesloLGM Nerd Font", "MesloLGM Nerd Font Mono", "MesloLGM NF", "Meslo LG M", ${CJK_FALLBACK}, monospace`;
+      case 'maple':
+        return '"Maple Mono NF CN", "Maple Mono NF", "Maple Mono", monospace';
       case 'cascadia':
-        return '"Cascadia Code NF", "Cascadia Mono NF", "Cascadia Code", "Cascadia Mono", monospace';
+        return `"Cascadia Code NF", "Cascadia Mono NF", "Cascadia Code", "Cascadia Mono", ${CJK_FALLBACK}, monospace`;
       case 'consolas':
-        return 'Consolas, "Courier New", monospace';
+        return `Consolas, "Courier New", ${CJK_FALLBACK}, monospace`;
       case 'menlo':
-        return 'Menlo, Monaco, "Courier New", monospace';
+        return `Menlo, Monaco, "Courier New", ${CJK_FALLBACK}, monospace`;
       default:
-        return '"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF", "JetBrains Mono", monospace';
+        return `"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF", "JetBrains Mono", ${CJK_FALLBACK}, monospace`;
     }
   };
 
