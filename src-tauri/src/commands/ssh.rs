@@ -618,6 +618,9 @@ pub async fn create_terminal(
                 // 这是因为如果前端从未连接，保留这个会话没有意义
                 if matches!(reason, crate::bridge::DisconnectReason::AcceptTimeout) {
                     warn!("Session {} WS accept timeout, removing from registries", session_id_clone);
+                    // 🔴 关键修复：发送 disconnected 事件通知前端
+                    // 这样前端可以清理掉对这个已失效 session 的引用
+                    conn_registry_clone.emit_connection_status_changed(&conn_id_clone, "disconnected").await;
                     // 从连接的终端列表中移除
                     let _ = conn_registry_clone.remove_terminal(&conn_id_clone, &session_id_clone).await;
                     // 完全移除会话
@@ -938,6 +941,8 @@ pub async fn recreate_terminal_pty(
                 // AcceptTimeout: 前端没有连接，清理会话
                 if matches!(reason, crate::bridge::DisconnectReason::AcceptTimeout) {
                     warn!("Recreated session {} WS accept timeout, removing from registries", session_id_clone);
+                    // 🔴 关键修复：发送 disconnected 事件通知前端
+                    conn_registry_clone.emit_connection_status_changed(&conn_id_clone, "disconnected").await;
                     let _ = conn_registry_clone.remove_terminal(&conn_id_clone, &session_id_clone).await;
                     let _ = registry_clone.disconnect_complete(&session_id_clone, true);
                 } else {
