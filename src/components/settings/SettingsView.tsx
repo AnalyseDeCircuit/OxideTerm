@@ -476,6 +476,7 @@ export const SettingsView = () => {
                                             <SelectContent>
                                                 <SelectItem value="jetbrains">JetBrains Mono NF ✓</SelectItem>
                                                 <SelectItem value="meslo">MesloLGM NF ✓</SelectItem>
+                                                <SelectItem value="maple">Maple Mono NF CN ✓</SelectItem>
                                                 <SelectItem value="cascadia">Cascadia Code</SelectItem>
                                                 <SelectItem value="consolas">Consolas</SelectItem>
                                                 <SelectItem value="menlo">Menlo</SelectItem>
@@ -509,14 +510,15 @@ export const SettingsView = () => {
                                             style={{ 
                                                 fontFamily: terminal.fontFamily === 'custom' && terminal.customFontFamily 
                                                     ? (terminal.customFontFamily.toLowerCase().includes('monospace') 
-                                                        ? terminal.customFontFamily 
-                                                        : `${terminal.customFontFamily}, monospace`)
-                                                    : terminal.fontFamily === 'jetbrains' ? '"JetBrainsMono Nerd Font", "JetBrains Mono NF", monospace'
-                                                    : terminal.fontFamily === 'meslo' ? '"MesloLGM Nerd Font", "MesloLGM NF", monospace'
-                                                    : terminal.fontFamily === 'cascadia' ? '"Cascadia Code NF", "Cascadia Code", monospace'
-                                                    : terminal.fontFamily === 'consolas' ? 'Consolas, monospace'
-                                                    : terminal.fontFamily === 'menlo' ? 'Menlo, Monaco, monospace'
-                                                    : 'monospace',
+                                                        ? terminal.customFontFamily.replace(/,?\s*monospace\s*$/, ', "Maple Mono NF CN", monospace')
+                                                        : `${terminal.customFontFamily}, "Maple Mono NF CN", monospace`)
+                                                    : terminal.fontFamily === 'jetbrains' ? '"JetBrainsMono Nerd Font", "JetBrains Mono NF", "Maple Mono NF CN", monospace'
+                                                    : terminal.fontFamily === 'meslo' ? '"MesloLGM Nerd Font", "MesloLGM NF", "Maple Mono NF CN", monospace'
+                                                    : terminal.fontFamily === 'maple' ? '"Maple Mono NF CN", "Maple Mono NF", monospace'
+                                                    : terminal.fontFamily === 'cascadia' ? '"Cascadia Code NF", "Cascadia Code", "Maple Mono NF CN", monospace'
+                                                    : terminal.fontFamily === 'consolas' ? 'Consolas, "Maple Mono NF CN", monospace'
+                                                    : terminal.fontFamily === 'menlo' ? 'Menlo, Monaco, "Maple Mono NF CN", monospace'
+                                                    : '"Maple Mono NF CN", monospace',
                                                 fontSize: `${terminal.fontSize}px`,
                                                 lineHeight: terminal.lineHeight,
                                             }}

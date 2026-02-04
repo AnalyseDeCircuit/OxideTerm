@@ -49,6 +49,7 @@ export type RendererType = 'auto' | 'webgl' | 'canvas';
  * 预设轨道 (Preset Track):
  * - jetbrains: JetBrains Mono NF (bundled woff2 fallback)
  * - meslo: MesloLGM NF (bundled woff2 fallback)
+ * - maple: Maple Mono NF CN (bundled, CJK optimized)
  * - cascadia: Cascadia Code (system, Windows)
  * - consolas: Consolas (system, Windows)
  * - menlo: Menlo (system, macOS)
@@ -59,6 +60,7 @@ export type RendererType = 'auto' | 'webgl' | 'canvas';
 export type FontFamily = 
   | 'jetbrains'   // JetBrains Mono Nerd Font (内置保底)
   | 'meslo'       // Meslo Nerd Font (内置保底)
+  | 'maple'       // Maple Mono NF CN (内置，CJK 优化)
   | 'cascadia'    // Cascadia Code (系统字体)
   | 'consolas'    // Consolas (系统字体)
   | 'menlo'       // Menlo (系统字体)
