@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getVersion } from '@tauri-apps/api/app';
 import { useAppStore } from '../../store/appStore';
 import { useSettingsStore, type RendererType, type FontFamily, type CursorStyle, type Language } from '../../store/settingsStore';
 import { Button } from '../ui/button';
@@ -25,11 +26,12 @@ import {
     SelectLabel,
     SelectSeparator
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
+import { platform } from '../../lib/platform';
 
 const formatThemeName = (key: string) => {
     return key.split('-')
@@ -242,6 +244,175 @@ const LocalTerminalSettings = () => {
     );
 };
 
+// Help & About Section Component
+const HelpAboutSection = () => {
+    const { t } = useTranslation();
+    const [appVersion, setAppVersion] = useState<string>('...');
+
+    useEffect(() => {
+        getVersion().then(setAppVersion).catch(() => setAppVersion('1.4.0'));
+    }, []);
+
+    const isMac = platform.isMac;
+    
+    // Define shortcuts by category with platform-specific keys
+    const shortcutCategories = [
+        {
+            title: t('settings_view.help.category_app'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_new_tab'), mac: '⌘T', other: 'Ctrl+T' },
+                { label: t('settings_view.help.shortcut_shell_launcher'), mac: '⌘⇧T', other: 'Ctrl+Shift+T' },
+                { label: t('settings_view.help.shortcut_next_tab'), mac: '⌘}', other: 'Ctrl+Tab' },
+                { label: t('settings_view.help.shortcut_prev_tab'), mac: '⌘{', other: 'Ctrl+Shift+Tab' },
+            ],
+        },
+        {
+            title: t('settings_view.help.category_terminal'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_find'), mac: '⌘F', other: 'Ctrl+Shift+F' },
+                { label: t('settings_view.help.shortcut_ai_panel'), mac: '⌘I', other: 'Ctrl+Shift+I' },
+                { label: t('settings_view.help.shortcut_close_panel'), mac: 'Esc', other: 'Esc' },
+            ],
+        },
+        {
+            title: t('settings_view.help.category_split'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_split_h'), mac: '⌘⇧E', other: 'Ctrl+Shift+E' },
+                { label: t('settings_view.help.shortcut_split_v'), mac: '⌘⇧D', other: 'Ctrl+Shift+D' },
+                { label: t('settings_view.help.shortcut_close_pane'), mac: '⌘⇧W', other: 'Ctrl+Shift+W' },
+                { label: t('settings_view.help.shortcut_nav_pane'), mac: '⌘⌥Arrow', other: 'Ctrl+Alt+Arrow' },
+            ],
+        },
+        {
+            title: t('settings_view.help.category_file_manager'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_select_all'), mac: '⌘A', other: 'Ctrl+A' },
+                { label: t('settings_view.help.shortcut_copy'), mac: '⌘C', other: 'Ctrl+C' },
+                { label: t('settings_view.help.shortcut_cut'), mac: '⌘X', other: 'Ctrl+X' },
+                { label: t('settings_view.help.shortcut_paste'), mac: '⌘V', other: 'Ctrl+V' },
+                { label: t('settings_view.help.shortcut_rename'), mac: 'F2', other: 'F2' },
+                { label: t('settings_view.help.shortcut_delete'), mac: 'Delete', other: 'Delete' },
+                { label: t('settings_view.help.shortcut_quick_look'), mac: 'Space', other: 'Space' },
+                { label: t('settings_view.help.shortcut_open'), mac: 'Enter', other: 'Enter' },
+            ],
+        },
+        {
+            title: t('settings_view.help.category_editor'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_save'), mac: '⌘S', other: 'Ctrl+S' },
+                { label: t('settings_view.help.shortcut_close'), mac: 'Esc', other: 'Esc' },
+            ],
+        },
+    ];
+
+    return (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div>
+                <h3 className="text-2xl font-medium text-theme-text mb-2">{t('settings_view.help.title')}</h3>
+                <p className="text-theme-text-muted">{t('settings_view.help.description')}</p>
+            </div>
+            <Separator />
+
+            {/* Version Info */}
+            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                <h4 className="text-sm font-medium text-theme-text mb-4 uppercase tracking-wider">
+                    {t('settings_view.help.version_info')}
+                </h4>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-theme-text-muted">{t('settings_view.help.app_name')}</span>
+                        <span className="text-theme-text font-medium">OxideTerm</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-theme-text-muted">{t('settings_view.help.version')}</span>
+                        <span className="text-theme-text font-mono">{appVersion}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tech Stack */}
+            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                <h4 className="text-sm font-medium text-theme-text mb-4 uppercase tracking-wider">
+                    {t('settings_view.help.tech_stack')}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                    <span className="px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 text-xs font-medium">Rust</span>
+                    <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-medium">Tauri 2.0</span>
+                    <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">React</span>
+                    <span className="px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-medium">TypeScript</span>
+                    <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-xs font-medium">xterm.js</span>
+                    <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">redb</span>
+                </div>
+            </div>
+
+            {/* Keyboard Shortcuts */}
+            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                <h4 className="text-sm font-medium text-theme-text mb-4 uppercase tracking-wider flex items-center gap-2">
+                    <Keyboard className="h-4 w-4" />
+                    {t('settings_view.help.shortcuts')}
+                </h4>
+                <div className="space-y-5 text-sm">
+                    {shortcutCategories.map((category, catIndex) => (
+                        <div key={catIndex}>
+                            <h5 className="text-xs font-medium text-theme-text-muted uppercase tracking-wider mb-2">
+                                {category.title}
+                            </h5>
+                            <div className="space-y-1">
+                                {category.shortcuts.map((shortcut, index) => (
+                                    <div key={index} className={`flex items-center justify-between py-1.5 ${index < category.shortcuts.length - 1 ? 'border-b border-theme-border/30' : ''}`}>
+                                        <span className="text-theme-text-muted">{shortcut.label}</span>
+                                        <kbd className="px-2 py-0.5 rounded bg-theme-bg text-theme-text text-xs font-mono">
+                                            {isMac ? shortcut.mac : shortcut.other}
+                                        </kbd>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Resources */}
+            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                <h4 className="text-sm font-medium text-theme-text mb-4 uppercase tracking-wider">
+                    {t('settings_view.help.resources')}
+                </h4>
+                <div className="space-y-2">
+                    <a
+                        href="https://github.com/AnalyseDeCircuit/oxideterm"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between p-3 rounded-lg hover:bg-theme-bg-hover transition-colors group"
+                    >
+                        <div className="flex items-center gap-3">
+                            <Github className="h-5 w-5 text-theme-text-muted" />
+                            <span className="text-theme-text">{t('settings_view.help.github')}</span>
+                        </div>
+                        <ExternalLink className="h-4 w-4 text-theme-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                    <a
+                        href="https://github.com/AnalyseDeCircuit/oxideterm/issues"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between p-3 rounded-lg hover:bg-theme-bg-hover transition-colors group"
+                    >
+                        <div className="flex items-center gap-3">
+                            <HelpCircle className="h-5 w-5 text-theme-text-muted" />
+                            <span className="text-theme-text">{t('settings_view.help.issues')}</span>
+                        </div>
+                        <ExternalLink className="h-4 w-4 text-theme-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                </div>
+            </div>
+
+            {/* License */}
+            <div className="text-center text-xs text-theme-text-muted">
+                <p>{t('settings_view.help.license')}</p>
+            </div>
+        </div>
+    );
+};
+
 export const SettingsView = () => {
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState('general');
@@ -395,6 +566,13 @@ export const SettingsView = () => {
                         onClick={() => setActiveTab('local')}
                     >
                         <Square className="h-4 w-4" /> {t('settings_view.tabs.local')}
+                    </Button>
+                    <Button
+                        variant={activeTab === 'help' ? 'secondary' : 'ghost'}
+                        className="w-full justify-start gap-3 h-10 font-normal"
+                        onClick={() => setActiveTab('help')}
+                    >
+                        <HelpCircle className="h-4 w-4" /> {t('settings_view.tabs.help')}
                     </Button>
                 </div>
             </div>
@@ -1035,6 +1213,10 @@ export const SettingsView = () => {
 
                     {activeTab === 'local' && (
                         <LocalTerminalSettings />
+                    )}
+
+                    {activeTab === 'help' && (
+                        <HelpAboutSection />
                     )}
 
                     {activeTab === 'sftp' && (
