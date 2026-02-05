@@ -2,6 +2,11 @@
 //!
 //! Built with Rust, Tauri, and xterm.js for high-performance terminal emulation.
 
+// Use mimalloc as the global allocator for better performance
+// with high-frequency small allocations (WebSocket frames, scroll buffer, etc.)
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod bridge;
 pub mod commands;
 pub mod config;
