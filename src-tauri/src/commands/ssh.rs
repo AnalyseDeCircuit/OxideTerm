@@ -435,15 +435,17 @@ pub async fn create_terminal(
             if reason.is_recoverable() {
                 // 🔧 修复 ref_count 泄漏：超时后释放连接引用
                 let conn_reg_for_cleanup = conn_registry_clone.clone();
+                let session_id_for_cleanup = session_id_clone.clone();
                 let _ = registry_clone.mark_ws_detached_with_cleanup(
                     &session_id_clone,
                     Duration::from_secs(300),
                     Some(move |conn_id: String| {
                         // 在 TTL 过期时释放连接池引用
                         let conn_reg = conn_reg_for_cleanup;
+                        let sid = session_id_for_cleanup;
                         tokio::spawn(async move {
-                            info!("Releasing connection {} ref after WS detach timeout", conn_id);
-                            let _ = conn_reg.remove_terminal(&conn_id, "").await; // session already removed
+                            info!("Releasing connection {} ref after WS detach timeout (session: {})", conn_id, sid);
+                            let _ = conn_reg.remove_terminal(&conn_id, &sid).await;
                             let _ = conn_reg.release(&conn_id).await;
                         });
                     }),
@@ -775,14 +777,16 @@ pub async fn recreate_terminal_pty(
             if reason.is_recoverable() {
                 // 🔧 修复 ref_count 泄漏：超时后释放连接引用
                 let conn_reg_for_cleanup = conn_registry_clone.clone();
+                let session_id_for_cleanup = session_id_clone.clone();
                 let _ = registry_clone.mark_ws_detached_with_cleanup(
                     &session_id_clone,
                     Duration::from_secs(300),
                     Some(move |conn_id: String| {
                         let conn_reg = conn_reg_for_cleanup;
+                        let sid = session_id_for_cleanup;
                         tokio::spawn(async move {
-                            info!("Releasing connection {} ref after recreated WS detach timeout", conn_id);
-                            let _ = conn_reg.remove_terminal(&conn_id, "").await;
+                            info!("Releasing connection {} ref after recreated WS detach timeout (session: {})", conn_id, sid);
+                            let _ = conn_reg.remove_terminal(&conn_id, &sid).await;
                             let _ = conn_reg.release(&conn_id).await;
                         });
                     }),
