@@ -75,7 +75,9 @@
       "offline": "오프라인",
       "manage_providers": "공급자 관리",
       "no_provider": "공급자 미설정",
-      "refresh_models": "새로고침"
+      "refresh_models": "새로고침",
+      "api_key_not_found": "API 키를 찾을 수 없습니다. 설정 > AI에서 구성하세요.",
+      "failed_to_get_api_key": "API 키 가져오기 실패."
     }
   }
 }

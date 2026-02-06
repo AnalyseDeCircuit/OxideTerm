@@ -75,7 +75,9 @@
       "offline": "オフライン",
       "manage_providers": "プロバイダーを管理",
       "no_provider": "プロバイダー未設定",
-      "refresh_models": "更新"
+      "refresh_models": "更新",
+      "api_key_not_found": "API キーが見つかりません。設定 > AI で設定してください。",
+      "failed_to_get_api_key": "API キーの取得に失敗しました。"
     }
   }
 }

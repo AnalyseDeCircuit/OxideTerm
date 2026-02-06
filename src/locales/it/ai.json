@@ -76,7 +76,9 @@
       "offline": "Offline",
       "manage_providers": "Gestisci provider",
       "no_provider": "Nessun provider configurato",
-      "refresh_models": "Aggiorna"
+      "refresh_models": "Aggiorna",
+      "api_key_not_found": "Chiave API non trovata. Configurala in Impostazioni > IA.",
+      "failed_to_get_api_key": "Impossibile recuperare la chiave API."
     }
   }
 }

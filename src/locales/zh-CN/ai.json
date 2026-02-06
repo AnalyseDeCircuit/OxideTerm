@@ -75,7 +75,9 @@
       "offline": "离线",
       "manage_providers": "管理提供商",
       "no_provider": "未配置提供商",
-      "refresh_models": "刷新"
+      "refresh_models": "刷新",
+      "api_key_not_found": "未找到 API 密钥。请在设置 > AI 中配置。",
+      "failed_to_get_api_key": "获取 API 密钥失败。"
     }
   }
 }
