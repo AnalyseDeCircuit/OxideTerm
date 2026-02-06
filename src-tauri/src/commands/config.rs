@@ -3,7 +3,7 @@
 //! Tauri commands for managing saved connections and SSH config import.
 
 use crate::config::{
-    default_ssh_config_path, parse_ssh_config, AiProviderVault, AiVault, ConfigFile, ConfigStorage,
+    default_ssh_config_path, parse_ssh_config, AiProviderVault, ConfigFile, ConfigStorage,
     Keychain, KeychainError, ProxyHopConfig, SavedAuth, SavedConnection, SshConfigHost,
 };
 use parking_lot::RwLock;
@@ -844,151 +844,59 @@ pub async fn get_saved_connection_for_connect(
     })
 }
 
-// ============ AI API Key Commands (Vault-based with Keychain migration) ============
+// ============ AI API Key Commands (Legacy compat → routes to ai_keychain) ============
 
-/// Fixed keychain ID for AI API key (for migration only)
-const AI_API_KEY_KEYCHAIN_ID: &str = "oxideterm-ai-api-key";
+/// Legacy provider ID used when the old single-key API is called.
+/// Maps to the built-in OpenAI provider ("builtin-openai").
+const LEGACY_PROVIDER_ID: &str = "builtin-openai";
 
-/// Helper to get the AI vault instance
-fn get_ai_vault(app_handle: &tauri::AppHandle) -> Result<AiVault, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-    Ok(AiVault::new(app_data_dir))
-}
-
-/// Set AI API key - saves to local encrypted vault file
+/// Set AI API key — legacy compat, routes to OS keychain under `builtin-openai`.
 #[tauri::command]
 pub async fn set_ai_api_key(
-    app_handle: tauri::AppHandle,
     api_key: String,
+    state: State<'_, Arc<ConfigState>>,
 ) -> Result<(), String> {
-    let vault = get_ai_vault(&app_handle)?;
-    
     if api_key.is_empty() {
-        tracing::info!("Deleting AI API key");
-        // Delete from vault
-        vault.delete().map_err(|e| e.to_string())?;
+        tracing::info!("[legacy] Deleting AI API key for {}", LEGACY_PROVIDER_ID);
+        if let Err(e) = state.ai_keychain.delete(LEGACY_PROVIDER_ID) {
+            tracing::debug!("[legacy] Keychain delete (may not exist): {}", e);
+        }
     } else {
-        tracing::info!("Storing AI API key in vault (length: {})", api_key.len());
-        vault.save(&api_key).map_err(|e| format!("Failed to save API key to vault: {}", e))?;
-        tracing::info!("AI API key stored successfully in vault");
+        tracing::info!("[legacy] Storing AI API key in keychain for {} (length: {})", LEGACY_PROVIDER_ID, api_key.len());
+        state.ai_keychain.store(LEGACY_PROVIDER_ID, &api_key)
+            .map_err(|e| format!("Failed to store API key: {}", e))?;
     }
     Ok(())
 }
 
-/// Get AI API key - reads from vault, migrates from keychain if needed
+/// Get AI API key — legacy compat, reads from OS keychain under `builtin-openai`.
 #[tauri::command]
 pub async fn get_ai_api_key(
-    app_handle: tauri::AppHandle,
     state: State<'_, Arc<ConfigState>>,
 ) -> Result<Option<String>, String> {
-    let vault = get_ai_vault(&app_handle)?;
-    
-    // Step 1: Try to load from vault first
-    match vault.load() {
-        Ok(key) => {
-            tracing::debug!("AI API key found in vault (length: {})", key.len());
-            return Ok(Some(key));
-        }
-        Err(crate::config::VaultError::NotFound) => {
-            tracing::debug!("AI API key not in vault, checking keychain for migration...");
-        }
-        Err(e) => {
-            tracing::error!("Failed to read vault: {}", e);
-            return Err(format!("Failed to read vault: {}", e));
-        }
-    }
-    
-    // Step 2: Not in vault - try keychain migration
-    match state.get_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
-        Ok(key) => {
-            tracing::info!("Found API key in keychain, migrating to vault...");
-            
-            // Migrate to vault
-            if let Err(e) = vault.save(&key) {
-                tracing::error!("Failed to migrate key to vault: {}", e);
-                // Still return the key even if migration fails
-                return Ok(Some(key));
-            }
-            
-            // Delete from keychain after successful migration
-            if let Err(e) = state.delete_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
-                tracing::warn!("Failed to delete old keychain entry: {}", e);
-                // Continue anyway - the vault now has the key
-            }
-            
-            tracing::info!("Successfully migrated API key from keychain to vault");
-            Ok(Some(key))
-        }
-        Err(e) => {
-            let e_lower = e.to_lowercase();
-            if e_lower.contains("not found") || e_lower.contains("noentry") || e_lower.contains("no entry") {
-                tracing::debug!("AI API key not found in vault or keychain");
-                Ok(None)
-            } else {
-                // Keychain error, but vault was already checked - return None
-                tracing::warn!("Keychain error during migration check: {}", e);
-                Ok(None)
-            }
-        }
+    match state.ai_keychain.get(LEGACY_PROVIDER_ID) {
+        Ok(key) => Ok(Some(key)),
+        Err(_) => Ok(None),
     }
 }
 
-/// Check if AI API key exists (in vault or keychain)
+/// Check if AI API key exists — legacy compat.
 #[tauri::command]
 pub async fn has_ai_api_key(
-    app_handle: tauri::AppHandle,
     state: State<'_, Arc<ConfigState>>,
 ) -> Result<bool, String> {
-    let vault = get_ai_vault(&app_handle)?;
-    
-    // Check vault first
-    if vault.exists() {
-        tracing::debug!("AI API key exists in vault");
-        return Ok(true);
-    }
-    
-    // Fallback: check keychain (for users who haven't migrated yet)
-    match state.get_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
-        Ok(_) => {
-            tracing::debug!("AI API key exists in keychain (pending migration)");
-            Ok(true)
-        }
-        Err(e) => {
-            let e_lower = e.to_lowercase();
-            if e_lower.contains("not found") || e_lower.contains("noentry") || e_lower.contains("no entry") {
-                tracing::debug!("AI API key does not exist");
-                Ok(false)
-            } else {
-                // Keychain error, but we can still say key doesn't exist if vault check passed
-                tracing::warn!("Keychain check error: {}", e);
-                Ok(false)
-            }
-        }
-    }
+    Ok(state.ai_keychain.exists(LEGACY_PROVIDER_ID).unwrap_or(false))
 }
 
-/// Delete AI API key - clears both vault and keychain (for clean uninstall)
+/// Delete AI API key — legacy compat.
 #[tauri::command]
 pub async fn delete_ai_api_key(
-    app_handle: tauri::AppHandle,
     state: State<'_, Arc<ConfigState>>,
 ) -> Result<(), String> {
-    let vault = get_ai_vault(&app_handle)?;
-    
-    // Delete from vault
-    if let Err(e) = vault.delete() {
-        tracing::warn!("Failed to delete from vault: {}", e);
+    if let Err(e) = state.ai_keychain.delete(LEGACY_PROVIDER_ID) {
+        tracing::debug!("[legacy] Keychain delete (may not exist): {}", e);
     }
-    
-    // Also try to delete from keychain (clean up legacy)
-    if let Err(e) = state.delete_keychain_value(AI_API_KEY_KEYCHAIN_ID) {
-        tracing::debug!("Keychain delete (may not exist): {}", e);
-    }
-    
-    tracing::info!("AI API key deleted from all storage locations");
+    tracing::info!("[legacy] AI API key deleted for {}", LEGACY_PROVIDER_ID);
     Ok(())
 }
 
@@ -1157,7 +1065,7 @@ pub async fn list_ai_provider_keys(
 
     // Check known provider IDs in keychain
     // Since keychain doesn't support enumeration, we probe known provider IDs
-    let known_ids = ["openai", "anthropic", "gemini", "ollama"];
+    let known_ids = ["builtin-openai", "builtin-anthropic", "builtin-gemini", "builtin-ollama"];
     for id in &known_ids {
         if state.ai_keychain.get(id).is_ok() {
             providers.insert(id.to_string());

@@ -20,11 +20,10 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, X, Sparkles, HardDrive } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, X, HardDrive, Sparkles, ExternalLink } from 'lucide-react';
 import { api } from '../../lib/api';
 import { SshKeyInfo, SshHostInfo } from '../../types';
 import { themes } from '../../lib/themes';
-import { platform } from '../../lib/platform';
 
 const ThemePreview = ({ themeName }: { themeName: string }) => {
     const theme = themes[themeName] || themes.default;
@@ -50,19 +49,14 @@ const ThemePreview = ({ themeName }: { themeName: string }) => {
 
 export const SettingsModal = () => {
   const { t } = useTranslation();
-  const { modals, toggleModal } = useAppStore();
+  const { modals, toggleModal, createTab } = useAppStore();
   const [activeTab, setActiveTab] = useState('terminal');
   
   // Use unified settings store
-  const { settings, updateTerminal, updateBuffer, updateAppearance, updateConnectionDefaults, updateAi, updateSftp } = useSettingsStore();
-  const { terminal, buffer, appearance, connectionDefaults, ai, sftp } = settings;
+  const { settings, updateTerminal, updateBuffer, updateAppearance, updateConnectionDefaults, updateSftp } = useSettingsStore();
+  const { terminal, buffer, appearance, connectionDefaults, sftp } = settings;
   
-  // AI enable confirmation dialog
-  const [showAiConfirm, setShowAiConfirm] = useState(false);
-  // AI API key state
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [apiKeySaving, setApiKeySaving] = useState(false);
+
   
   // Data State
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
@@ -92,15 +86,7 @@ export const SettingsModal = () => {
                   console.error('Failed to load SSH hosts:', e);
                   setSshHosts([]);
                 });
-          } else if (activeTab === 'ai') {
-              // Check if API key exists
-              api.hasAiApiKey()
-                .then(setHasApiKey)
-                .catch((e) => {
-                  console.error('Failed to check API key:', e);
-                  setHasApiKey(false);
-                });
-          }
+
       }
   }, [activeTab, modals.settings]);
 
@@ -202,11 +188,15 @@ export const SettingsModal = () => {
                         <Key className="h-4 w-4" /> {t('modals.settings.tabs.ssh')}
                     </Button>
                     <Button 
-                        variant={activeTab === 'ai' ? 'secondary' : 'ghost'} 
-                        className="w-full justify-start gap-2 h-8"
-                        onClick={() => setActiveTab('ai')}
+                        variant="ghost"
+                        className="w-full justify-start gap-2 h-8 text-zinc-400 hover:text-zinc-200"
+                        onClick={() => {
+                            toggleModal('settings', false);
+                            createTab('settings');
+                        }}
                     >
                         <Sparkles className="h-4 w-4" /> {t('modals.settings.tabs.ai')}
+                        <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
                     </Button>
                 </div>
             </div>
@@ -599,243 +589,6 @@ export const SettingsModal = () => {
                                     {t('modals.settings.ssh_keys.no_keys')}
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'ai' && (
-                    <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-medium text-zinc-100 mb-1">{t('modals.settings.ai.title')}</h3>
-                            <p className="text-sm text-zinc-500">{t('modals.settings.ai.description')}</p>
-                        </div>
-                        <Separator />
-
-                        {/* Enable Toggle with Confirmation */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-theme-bg-panel border border-theme-border rounded-md">
-                                <div className="flex items-center gap-3">
-                                    <Sparkles className="h-5 w-5 text-theme-accent" />
-                                    <div>
-                                        <div className="font-medium text-zinc-200">{t('modals.settings.ai.enable.title')}</div>
-                                        <div className="text-xs text-zinc-500">
-                                            {platform.isWindows ? t('modals.settings.ai.enable.shortcut_windows') : t('modals.settings.ai.enable.shortcut_mac')}
-                                        </div>
-                                    </div>
-                                </div>
-                                <Checkbox 
-                                    id="ai-enabled"
-                                    checked={ai.enabled}
-                                    onCheckedChange={(checked) => {
-                                        if (checked && !ai.enabledConfirmed) {
-                                            setShowAiConfirm(true);
-                                        } else {
-                                            updateAi('enabled', !!checked);
-                                        }
-                                    }}
-                                />
-                            </div>
-
-                            {/* Privacy Notice */}
-                            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 px-4 py-3 rounded-md text-sm">
-                                <p className="font-semibold mb-2">{t('modals.settings.ai.privacy.title')}</p>
-                                <ul className="space-y-1 text-xs opacity-90">
-                                    <li>• {t('modals.settings.ai.privacy.local_requests')}</li>
-                                    <li>• {t('modals.settings.ai.privacy.no_server')}</li>
-                                    <li>• {t('modals.settings.ai.privacy.context_only')}</li>
-                                    <li>• {t('modals.settings.ai.privacy.keychain')}</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        {/* API Configuration (only shown when enabled) */}
-                        {ai.enabled && (
-                            <>
-                                <div>
-                                    <h4 className="text-md font-medium text-zinc-100 mb-1">{t('modals.settings.ai.config.title')}</h4>
-                                    <p className="text-sm text-zinc-500">{t('modals.settings.ai.config.description')}</p>
-                                </div>
-                                <Separator />
-
-                                <div className="grid gap-4">
-                                    <div className="grid gap-2">
-                                        <Label>{t('modals.settings.ai.config.base_url')}</Label>
-                                        <Input 
-                                            value={ai.baseUrl}
-                                            onChange={(e) => updateAi('baseUrl', e.target.value)}
-                                            placeholder={t('modals.settings.ai.config.base_url_placeholder')}
-                                        />
-                                        <p className="text-xs text-zinc-500">
-                                            {t('modals.settings.ai.config.base_url_hint')}
-                                        </p>
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label>{t('modals.settings.ai.config.model')}</Label>
-                                        <Input 
-                                            value={ai.model}
-                                            onChange={(e) => updateAi('model', e.target.value)}
-                                            placeholder={t('modals.settings.ai.config.model_placeholder')}
-                                        />
-                                        <p className="text-xs text-zinc-500">
-                                            {t('modals.settings.ai.config.model_hint')}
-                                        </p>
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label>{t('modals.settings.ai.config.api_key')}</Label>
-                                        {hasApiKey ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-10 px-3 flex items-center bg-green-500/10 border border-green-500/30 rounded-md text-green-400 text-sm">
-                                                    <Shield className="h-4 w-4 mr-2" />
-                                                    {t('modals.settings.ai.config.api_key_configured')}
-                                                </div>
-                                                <Button 
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="text-red-400 hover:text-red-300"
-                                                    onClick={async () => {
-                                                        if (confirm(t('modals.settings.ai.config.api_key_remove_confirm'))) {
-                                                            try {
-                                                                await api.setAiApiKey('');
-                                                                setHasApiKey(false);
-                                                            } catch (e) {
-                                                                alert(t('modals.settings.errors.remove_api_key_failed', { error: e }));
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex gap-2">
-                                                <Input 
-                                                    type="password"
-                                                    placeholder={t('modals.settings.ai.config.api_key_placeholder')}
-                                                    className="flex-1"
-                                                    value={apiKeyInput}
-                                                    onChange={(e) => setApiKeyInput(e.target.value)}
-                                                />
-                                                <Button 
-                                                    variant="secondary"
-                                                    disabled={!apiKeyInput.trim() || apiKeySaving}
-                                                    onClick={async () => {
-                                                        if (!apiKeyInput.trim()) return;
-                                                        setApiKeySaving(true);
-                                                        try {
-                                                            await api.setAiApiKey(apiKeyInput);
-                                                            setApiKeyInput('');
-                                                            setHasApiKey(true);
-                                                        } catch (e) {
-                                                            alert(t('modals.settings.errors.save_api_key_failed', { error: e }));
-                                                        } finally {
-                                                            setApiKeySaving(false);
-                                                        }
-                                                    }}
-                                                >
-                                                    {apiKeySaving ? t('modals.settings.ai.config.saving') : t('modals.settings.ai.config.save')}
-                                                </Button>
-                                            </div>
-                                        )}
-                                        <p className="text-xs text-zinc-500">
-                                            {t('modals.settings.ai.config.api_key_hint')}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h4 className="text-md font-medium text-zinc-100 mb-1">{t('modals.settings.ai.context.title')}</h4>
-                                    <p className="text-sm text-zinc-500">{t('modals.settings.ai.context.description')}</p>
-                                </div>
-                                <Separator />
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="grid gap-2">
-                                        <Label>{t('modals.settings.ai.context.max_chars')}</Label>
-                                        <Select 
-                                            value={ai.contextMaxChars.toString()}
-                                            onValueChange={(v) => updateAi('contextMaxChars', parseInt(v))}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="2000">{t('modals.settings.ai.context.chars_2000')}</SelectItem>
-                                                <SelectItem value="4000">{t('modals.settings.ai.context.chars_4000')}</SelectItem>
-                                                <SelectItem value="8000">{t('modals.settings.ai.context.chars_8000')}</SelectItem>
-                                                <SelectItem value="16000">{t('modals.settings.ai.context.chars_16000')}</SelectItem>
-                                                <SelectItem value="32000">{t('modals.settings.ai.context.chars_32000')}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>{t('modals.settings.ai.context.visible_lines')}</Label>
-                                        <Select 
-                                            value={ai.contextVisibleLines.toString()}
-                                            onValueChange={(v) => updateAi('contextVisibleLines', parseInt(v))}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="50">{t('modals.settings.ai.context.lines_50')}</SelectItem>
-                                                <SelectItem value="100">{t('modals.settings.ai.context.lines_100')}</SelectItem>
-                                                <SelectItem value="120">{t('modals.settings.ai.context.lines_120')}</SelectItem>
-                                                <SelectItem value="200">{t('modals.settings.ai.context.lines_200')}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-zinc-500">
-                                    {t('modals.settings.ai.context.token_hint')}
-                                </p>
-                            </>
-                        )}
-                    </div>
-                )}
-
-                {/* AI Enable Confirmation Dialog */}
-                {showAiConfirm && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-theme-bg-panel border border-theme-border rounded-lg p-6 max-w-md mx-4">
-                            <h3 className="text-lg font-semibold text-zinc-100 mb-2 flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-theme-accent" />
-                                {t('modals.settings.ai.confirm.title')}
-                            </h3>
-                            <div className="text-sm text-zinc-400 space-y-3 mb-6">
-                                <p>{t('modals.settings.ai.confirm.intro')}</p>
-                                <ul className="space-y-2 text-xs">
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span dangerouslySetInnerHTML={{ __html: t('modals.settings.ai.confirm.point_local') }} />
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span dangerouslySetInnerHTML={{ __html: t('modals.settings.ai.confirm.point_no_server') }} />
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span dangerouslySetInnerHTML={{ __html: t('modals.settings.ai.confirm.point_context') }} />
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-yellow-400">!</span>
-                                        <span>{t('modals.settings.ai.confirm.point_responsibility')}</span>
-                                    </li>
-                                </ul>
-                            </div>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setShowAiConfirm(false)}>
-                                    {t('modals.settings.ai.confirm.cancel')}
-                                </Button>
-                                <Button onClick={() => {
-                                    updateAi('enabledConfirmed', true);
-                                    updateAi('enabled', true);
-                                    setShowAiConfirm(false);
-                                }}>
-                                    {t('modals.settings.ai.confirm.confirm')}
-                                </Button>
-                            </div>
                         </div>
                     </div>
                 )}

@@ -121,7 +121,9 @@ impl Keychain {
 
     /// Check if a secret exists
     pub fn exists(&self, id: &str) -> Result<bool, KeychainError> {
-        let entry = Entry::new(&self.service, id)?;
+        // Use same username-prefixed account as store()/get()/delete()
+        let username = whoami::username();
+        let entry = Entry::new(&self.service, &format!("{}@{}", username, id))?;
         match entry.get_password() {
             Ok(_) => Ok(true),
             Err(keyring::Error::NoEntry) => Ok(false),
