@@ -245,11 +245,6 @@ export const AiInlinePanel: React.FC<AiInlinePanelProps> = ({
           apiKey = await api.getAiProviderApiKey(activeProvider.id) || '';
         } catch { /* ignore */ }
         if (!apiKey) {
-          try {
-            apiKey = await api.getAiApiKey() || '';
-          } catch { /* ignore */ }
-        }
-        if (!apiKey) {
           throw new Error(t('terminal.ai.api_key_required'));
         }
       }

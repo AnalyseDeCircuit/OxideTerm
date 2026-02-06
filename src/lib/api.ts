@@ -938,11 +938,10 @@ export const api = {
     return invoke('destroy_node_sessions', { nodeId });
   },
 
-  // ============ AI API Key Commands ============
+  // ============ AI API Key Commands (Legacy compat → routes to builtin-openai keychain) ============
 
   /**
-   * Set AI API key in local encrypted vault
-   * Pass empty string to delete the key
+   * @deprecated Use setAiProviderApiKey instead. Routes to builtin-openai in OS keychain.
    */
   setAiApiKey: async (apiKey: string): Promise<void> => {
     if (USE_MOCK) return;
@@ -950,9 +949,7 @@ export const api = {
   },
 
   /**
-   * Get AI API key from local encrypted vault
-   * Automatically migrates from legacy keychain if needed
-   * Returns null if not set
+   * @deprecated Use getAiProviderApiKey instead. Routes to builtin-openai in OS keychain.
    */
   getAiApiKey: async (): Promise<string | null> => {
     if (USE_MOCK) return null;
@@ -960,7 +957,7 @@ export const api = {
   },
 
   /**
-   * Check if AI API key exists in vault or keychain
+   * @deprecated Use hasAiProviderApiKey instead. Routes to builtin-openai in OS keychain.
    */
   hasAiApiKey: async (): Promise<boolean> => {
     if (USE_MOCK) return false;
@@ -968,17 +965,17 @@ export const api = {
   },
 
   /**
-   * Delete AI API key from all storage locations (vault and keychain)
+   * @deprecated Use deleteAiProviderApiKey instead. Routes to builtin-openai in OS keychain.
    */
   deleteAiApiKey: async (): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('delete_ai_api_key');
   },
 
-  // ============ AI Provider API Key Commands ============
+  // ============ AI Provider API Key Commands (OS Keychain) ============
 
   /**
-   * Set API key for a specific AI provider
+   * Set API key for a specific AI provider — stored in OS keychain
    */
   setAiProviderApiKey: async (providerId: string, apiKey: string): Promise<void> => {
     if (USE_MOCK) return;
@@ -986,7 +983,7 @@ export const api = {
   },
 
   /**
-   * Get API key for a specific AI provider
+   * Get API key for a specific AI provider — from OS keychain
    */
   getAiProviderApiKey: async (providerId: string): Promise<string | null> => {
     if (USE_MOCK) return null;
@@ -994,7 +991,7 @@ export const api = {
   },
 
   /**
-   * Check if API key exists for a specific AI provider
+   * Check if API key exists for a specific AI provider — checks keychain + legacy vault
    */
   hasAiProviderApiKey: async (providerId: string): Promise<boolean> => {
     if (USE_MOCK) return false;
@@ -1002,7 +999,7 @@ export const api = {
   },
 
   /**
-   * Delete API key for a specific AI provider
+   * Delete API key for a specific AI provider — removes from keychain + vault
    */
   deleteAiProviderApiKey: async (providerId: string): Promise<void> => {
     if (USE_MOCK) return;
