@@ -44,7 +44,8 @@
     "connection_matrix": "Ma trận kết nối",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "Chuyển tiếp",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "Quản lý phiên"
   },
   "ide": {
     "loading_project": "Đang tải dự án...",

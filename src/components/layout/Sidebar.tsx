@@ -7,13 +7,9 @@ import {
   Settings,
   Plus,
   ChevronRight,
-  ChevronDown,
   Server,
-  Trash2,
+  Search,
   ListChecks,
-  Check,
-  Download,
-  Upload,
   Link2,
   Activity,
   Network,
@@ -23,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   HeartPulse,
+  LayoutList,
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
@@ -31,11 +28,7 @@ import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
-import { Checkbox } from '../ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { EditConnectionModal } from '../modals/EditConnectionModal';
-import { OxideExportModal } from '../modals/OxideExportModal';
-import { OxideImportModal } from '../modals/OxideImportModal';
 import { SessionTree } from '../sessions/SessionTree';
 import { Breadcrumb } from '../sessions/Breadcrumb';
 import { FocusedNodeList } from '../sessions/FocusedNodeList';
@@ -43,8 +36,8 @@ import { DrillDownDialog } from '../modals/DrillDownDialog';
 import { SavePathAsPresetDialog } from '../modals/SavePathAsPresetDialog';
 import { AddRootNodeDialog } from '../modals/AddRootNodeDialog';
 import { api } from '../../lib/api';
+import { connectToSaved } from '../../lib/connectToSaved';
 import { waitForConnectionActive, isConnectionGuardError } from '../../lib/connectionGuard';
-import type { UnifiedFlatNode } from '../../types';
 import { SystemHealthPanel } from './SystemHealthPanel';
 
 export const Sidebar = () => {
@@ -72,11 +65,8 @@ export const Sidebar = () => {
     activeTabId,
     setActiveTab,
     savedConnections,
-    groups,
-    selectedGroup,
     loadSavedConnections,
     loadGroups,
-    setSelectedGroup,
     modals,
     editingConnection,
     refreshConnections,
@@ -97,18 +87,13 @@ export const Sidebar = () => {
     closeTerminalForNode,
     connectNode,
     disconnectNode,
-    addRootNode,
     setFocusedNode,
     getBreadcrumbPath,
     getVisibleNodes,
     enterNode,
   } = useSessionTreeStore();
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['ungrouped']));
-  const [isManageMode, setIsManageMode] = useState(false);
-  const [selectedConnections, setSelectedConnections] = useState<Set<string>>(new Set());
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [savedSearchQuery, setSavedSearchQuery] = useState('');
 
   // 视图模式：'tree' = 传统树形视图, 'focus' = 面包屑+聚焦模式
   const [viewMode, setViewMode] = useState<'tree' | 'focus'>('tree');
@@ -606,204 +591,19 @@ export const Sidebar = () => {
     }
   }, [connectNode, createTerminalForNode, createTab, getNode, toast, t, tabs, closeTab]);
 
-  // 从 Saved Connections 连接 - 在树中创建根节点
+  // 从 Saved Connections 连接 - 使用提取后的共享函数
   const handleConnectSaved = useCallback(async (connectionId: string) => {
-    try {
-      // 获取保存连接的完整信息
-      const savedConn = await api.getSavedConnectionForConnect(connectionId);
-
-      // 映射 auth_type（带 default_key → key fallback）
-      const mapAuthType = (authType: string): 'password' | 'key' | 'agent' | undefined => {
-        if (authType === 'agent') return 'agent';
-        if (authType === 'key') return 'key';
-        if (authType === 'password') return 'password';
-        return undefined; // default_key
-      };
-
-      // 映射 auth_type（用于 proxy_chain hops，无 default_key）
-      const mapPresetAuthType = (authType: string): 'password' | 'key' | 'agent' => {
-        if (authType === 'agent') return 'agent';
-        if (authType === 'key') return 'key';
-        if (authType === 'password') return 'password';
-        return 'key'; // default_key fallback to key
-      };
-
-      // ========== Phase 3.4: Proxy Chain 支持 ==========
-      // 使用 expandManualPreset + connectNodeWithAncestors 实现前端驱动的线性连接
-      if (savedConn.proxy_chain && savedConn.proxy_chain.length > 0) {
-        const { expandManualPreset, connectNodeWithAncestors, createTerminalForNode } = useSessionTreeStore.getState();
-
-        // 构建预设链请求
-        const hops = savedConn.proxy_chain.map((hop: { host: string; port: number; username: string; auth_type: string; password?: string; key_path?: string; passphrase?: string }) => ({
-          host: hop.host,
-          port: hop.port,
-          username: hop.username,
-          authType: mapPresetAuthType(hop.auth_type),
-          password: hop.password,
-          keyPath: hop.key_path,
-          passphrase: hop.passphrase,
-        }));
-
-        const target = {
-          host: savedConn.host,
-          port: savedConn.port,
-          username: savedConn.username,
-          authType: mapPresetAuthType(savedConn.auth_type),
-          password: savedConn.password,
-          keyPath: savedConn.key_path,
-          passphrase: savedConn.passphrase,
-        };
-
-        const request = {
-          savedConnectionId: connectionId,
-          hops,
-          target,
-        };
-
-        // Step 1: 展开预设链为树节点（不建立连接）
-        const expandResult = await expandManualPreset(request);
-        
-        // Step 2: 使用线性连接器连接整条链路
-        await connectNodeWithAncestors(expandResult.targetNodeId);
-        
-        // Step 3: 为目标节点创建终端并打开标签页
-        const terminalId = await createTerminalForNode(expandResult.targetNodeId);
-        createTab('terminal', terminalId);
-
-        // 显示成功提示
-        toast({
-          title: t('connections.toast.proxy_chain_established'),
-          description: t('connections.toast.proxy_chain_desc', { depth: expandResult.chainDepth }),
-          variant: 'success',
-        });
-
-        // 标记连接已使用
-        await api.markConnectionUsed(connectionId);
-        return;
-      }
-
-      // ========== 直连（无 proxy_chain）==========
-      // 检查是否已有相同主机的根节点
-      const { nodes } = useSessionTreeStore.getState();
-      const existingNode = nodes.find((n: UnifiedFlatNode) =>
-        n.depth === 0 &&
-        n.host === savedConn.host &&
-        n.port === savedConn.port &&
-        n.username === savedConn.username
-      );
-
-      let nodeId: string;
-
-      if (existingNode) {
-        // 已存在相同节点 - 直接使用
-        nodeId = existingNode.id;
-        useSessionTreeStore.setState({ selectedNodeId: nodeId });
-
-        // 如果节点未连接，尝试连接（使用线性连接器）
-        if (existingNode.runtime.status === 'idle' || existingNode.runtime.status === 'error') {
-          const { connectNodeWithAncestors } = useSessionTreeStore.getState();
-          await connectNodeWithAncestors(nodeId);
-        }
-      } else {
-        // 创建新节点
-        nodeId = await addRootNode({
-          host: savedConn.host,
-          port: savedConn.port,
-          username: savedConn.username,
-          authType: mapAuthType(savedConn.auth_type),
-          password: savedConn.password,
-          keyPath: savedConn.key_path,
-          passphrase: savedConn.passphrase,
-          displayName: savedConn.name,
-        });
-
-        // 自动连接新创建的节点（使用线性连接器）
-        const { connectNodeWithAncestors } = useSessionTreeStore.getState();
-        await connectNodeWithAncestors(nodeId);
-      }
-
-      // 标记连接已使用
-      await api.markConnectionUsed(connectionId);
-    } catch (error) {
-      console.error('Failed to connect to saved connection:', error);
-      // 只有真正的连接错误才打开编辑器，不包括锁错误
-      const errorMsg = String(error);
-      if (!errorMsg.includes('already connecting') && 
-          !errorMsg.includes('already connected') &&
-          !errorMsg.includes('CHAIN_LOCK_BUSY') &&
-          !errorMsg.includes('NODE_LOCK_BUSY')) {
-        openConnectionEditor(connectionId);
-      }
-    }
-  }, [addRootNode, openConnectionEditor, createTab, toast, t]);
-
-  const toggleGroup = (groupName: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
-      } else {
-        next.add(groupName);
-      }
-      return next;
+    await connectToSaved(connectionId, {
+      createTab,
+      toast,
+      t,
+      onError: openConnectionEditor,
     });
-  };
+  }, [openConnectionEditor, createTab, toast, t]);
 
-  const toggleConnectionSelection = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedConnections(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
 
-  const handleBatchDelete = async () => {
-    if (selectedConnections.size === 0) return;
 
-    const count = selectedConnections.size;
-    const confirmed = window.confirm(t('common.confirm.delete_batch', { count }));
 
-    if (!confirmed) {
-      return; // User cancelled, do nothing
-    }
-
-    try {
-      // Delete all selected connections
-      await Promise.all(
-        Array.from(selectedConnections).map(async (id) => {
-          try {
-            await api.deleteConnection(id);
-            console.log(`Successfully deleted connection: ${id}`);
-          } catch (err) {
-            console.error(`Failed to delete connection ${id}:`, err);
-            throw err;
-          }
-        })
-      );
-
-      // Success: Clear selection and refresh list
-      setSelectedConnections(new Set());
-      await loadSavedConnections();
-      console.log(`Successfully deleted ${count} connection(s)`);
-
-    } catch (error: unknown) {
-      console.error('Failed to delete connections:', error);
-      const message = error instanceof Error ? error.message : String(error);
-      alert(t('common.errors.delete_failed', { message }));
-      // Refresh list anyway to show which ones were deleted
-      await loadSavedConnections();
-    }
-  };
-
-  const toggleManageMode = () => {
-    setIsManageMode(prev => !prev);
-    setSelectedConnections(new Set());
-  };
 
   // Collapsed state: only show activity bar
   if (sidebarCollapsed) {
@@ -841,6 +641,17 @@ export const Sidebar = () => {
             className="rounded-md h-9 w-9"
           >
             <Database className="h-5 w-5" />
+          </Button>
+
+          {/* Session Manager (Tab) */}
+          <Button
+            variant={tabs.find(t => t.id === activeTabId)?.type === 'session_manager' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => createTab('session_manager')}
+            title={t('sidebar.panels.session_manager')}
+            className="rounded-md h-9 w-9"
+          >
+            <LayoutList className="h-5 w-5" />
           </Button>
 
           {/* SSH Connection Pool (Tab) */}
@@ -991,6 +802,17 @@ export const Sidebar = () => {
           className="rounded-md h-9 w-9"
         >
           <Database className="h-5 w-5" />
+        </Button>
+
+        {/* Session Manager (Tab) */}
+        <Button
+          variant={tabs.find(t => t.id === activeTabId)?.type === 'session_manager' ? 'secondary' : 'ghost'}
+          size="icon"
+          onClick={() => createTab('session_manager')}
+          title={t('sidebar.panels.session_manager')}
+          className="rounded-md h-9 w-9"
+        >
+          <LayoutList className="h-5 w-5" />
         </Button>
 
         {/* SSH Connection Pool (Tab) */}
@@ -1195,155 +1017,86 @@ export const Sidebar = () => {
             </div>
           )}
 
-          {/* Saved Connections Section */}
+          {/* Saved Connections Section (Slim: quick-connect list + open Session Manager) */}
           {sidebarActiveSection === 'saved' && (
-            <div className="space-y-4">
+            <div className="flex flex-col h-full space-y-2">
               <div className="flex items-center justify-between px-2">
                 <span className="text-xs font-semibold text-theme-text-muted uppercase tracking-wider">
                   {t('sidebar.panels.saved_title')}
                 </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover"
-                    onClick={() => setShowImportModal(true)}
-                    title={t('sidebar.panels.import_tooltip')}
-                  >
-                    <Download className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover"
-                    onClick={() => setShowExportModal(true)}
-                    title={t('sidebar.panels.export_tooltip')}
-                  >
-                    <Upload className="h-3 w-3" />
-                  </Button>
-                  {isManageMode && selectedConnections.size > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-red-500 hover:text-red-400 hover:bg-theme-bg-hover"
-                      onClick={handleBatchDelete}
-                      title="Delete Selected"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
-                  <Button
-                    variant={isManageMode ? "secondary" : "ghost"}
-                    size="icon"
-                    className={cn("h-6 w-6 text-theme-text-muted hover:text-theme-text hover:bg-theme-bg-hover", isManageMode && "text-theme-accent bg-theme-bg-hover")}
-                    onClick={toggleManageMode}
-                    title={isManageMode ? "Done" : "Manage Connections"}
-                  >
-                    {isManageMode ? <Check className="h-3 w-3" /> : <ListChecks className="h-3 w-3" />}
-                  </Button>
+              </div>
+
+              {/* Quick search */}
+              <div className="px-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-theme-text-muted pointer-events-none" />
+                  <input
+                    type="text"
+                    value={savedSearchQuery}
+                    onChange={(e) => setSavedSearchQuery(e.target.value)}
+                    placeholder={t('sessionManager.toolbar.search_placeholder')}
+                    className="w-full h-7 pl-7 pr-2 text-xs rounded bg-theme-bg border border-theme-border text-theme-text placeholder:text-theme-text-muted focus:outline-none focus:ring-1 focus:ring-theme-accent"
+                  />
                 </div>
               </div>
 
-              {/* Group Filter */}
-              {groups.length > 0 && (
-                <div className="px-2">
-                  <Select
-                    value={selectedGroup || 'all'}
-                    onValueChange={(value) => setSelectedGroup(value === 'all' ? null : value)}
-                  >
-                    <SelectTrigger className="w-full h-7 text-xs bg-theme-bg-panel border-theme-border text-theme-text hover:bg-theme-bg-hover focus:ring-1 focus:ring-theme-accent">
-                      <SelectValue placeholder="All Groups" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-theme-bg-panel border-theme-border text-theme-text">
-                      <SelectItem value="all" className="text-xs">All Groups</SelectItem>
-                      {groups.map(group => (
-                        <SelectItem key={group} value={group} className="text-xs">{group}</SelectItem>
-                      ))}
-                      <SelectItem value="ungrouped" className="text-xs">Ungrouped</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Connections List */}
-              <div className="space-y-1">
+              {/* Connections List (simple click-to-connect) */}
+              <div className="flex-1 overflow-y-auto space-y-0.5 px-1">
                 {(() => {
-                  const filteredConnections = selectedGroup !== null
-                    ? savedConnections.filter(c => c.group === selectedGroup)
+                  const filtered = savedSearchQuery.trim()
+                    ? savedConnections.filter(c => {
+                        const q = savedSearchQuery.toLowerCase();
+                        return c.name.toLowerCase().includes(q)
+                          || c.host.toLowerCase().includes(q)
+                          || c.username.toLowerCase().includes(q)
+                          || (c.group || '').toLowerCase().includes(q);
+                      })
                     : savedConnections;
 
-                  // Group connections
-                  const grouped = filteredConnections.reduce((acc, conn) => {
-                    const groupName = conn.group || 'ungrouped';
-                    if (!acc[groupName]) acc[groupName] = [];
-                    acc[groupName].push(conn);
-                    return acc;
-                  }, {} as Record<string, typeof savedConnections>);
-
-                  if (Object.keys(grouped).length === 0) {
+                  if (filtered.length === 0) {
                     return (
-                      <div className="text-sm text-theme-text-muted px-2 py-4 text-center">
-                        {t('sidebar.panels.no_saved_connections')}
+                      <div className="text-xs text-theme-text-muted px-2 py-4 text-center">
+                        {savedSearchQuery ? t('sessionManager.table.no_search_results') : t('sidebar.panels.no_saved_connections')}
                       </div>
                     );
                   }
 
-                  return Object.entries(grouped).map(([groupName, conns]) => (
-                    <div key={groupName} className="space-y-1">
-                      {/* Group Header */}
-                      {Object.keys(grouped).length > 1 && (
+                  return filtered.map(conn => (
+                    <div
+                      key={conn.id}
+                      onClick={() => handleConnectSaved(conn.id)}
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer group text-theme-text hover:bg-theme-bg-hover transition-colors"
+                    >
+                      {conn.color && (
                         <div
-                          onClick={() => toggleGroup(groupName)}
-                          className="flex items-center gap-1 px-2 py-1 text-xs text-theme-text-muted hover:bg-theme-bg-hover rounded-sm cursor-pointer select-none"
-                        >
-                          {expandedGroups.has(groupName) ? (
-                            <ChevronDown className="h-3 w-3" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3" />
-                          )}
-                          <span className="font-medium">{groupName}</span>
-                          <span className="text-theme-text-muted">({conns.length})</span>
-                        </div>
+                          className="w-0.5 h-6 rounded-full shrink-0"
+                          style={{ backgroundColor: conn.color }}
+                        />
                       )}
-
-                      {/* Group Connections */}
-                      {(Object.keys(grouped).length === 1 || expandedGroups.has(groupName)) && conns.map(conn => (
-                        <div
-                          key={conn.id}
-                          onClick={isManageMode ? (e) => toggleConnectionSelection(conn.id, e) : () => handleConnectSaved(conn.id)}
-                          className={cn(
-                            "flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer group ml-4 transition-colors",
-                            selectedConnections.has(conn.id)
-                              ? "bg-theme-accent/20 text-theme-accent hover:bg-theme-accent/30"
-                              : "text-theme-text hover:bg-theme-bg-hover"
-                          )}
-                        >
-                          {isManageMode ? (
-                            <div className="flex items-center justify-center w-3 h-3">
-                              <Checkbox
-                                checked={selectedConnections.has(conn.id)}
-                                onCheckedChange={() => { }} // Handled by parent click
-                                className="h-3 w-3 border-theme-border data-[state=checked]:bg-theme-accent data-[state=checked]:border-theme-accent"
-                              />
-                            </div>
-                          ) : (
-                            <Server className="h-3 w-3 text-theme-text-muted" />
-                          )}
-
-                          <div className="flex-1 truncate">
-                            <div className="truncate font-medium">{conn.name}</div>
-                            <div className="text-xs text-theme-text-muted truncate">
-                              {conn.username}@{conn.host}:{conn.port}
-                            </div>
-                          </div>
-                          {!isManageMode && (
-                            <ChevronRight className="h-3 w-3 text-theme-text-muted opacity-0 group-hover:opacity-100" />
-                          )}
+                      <Server className="h-3 w-3 text-theme-text-muted shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate font-medium text-xs">{conn.name}</div>
+                        <div className="text-[10px] text-theme-text-muted truncate">
+                          {conn.username}@{conn.host}:{conn.port}
                         </div>
-                      ))}
+                      </div>
+                      <ChevronRight className="h-3 w-3 text-theme-text-muted opacity-0 group-hover:opacity-100 shrink-0" />
                     </div>
                   ));
                 })()}
+              </div>
+
+              {/* Open Session Manager button */}
+              <div className="shrink-0 border-t border-theme-border px-2 py-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 text-xs"
+                  onClick={() => createTab('session_manager')}
+                >
+                  <LayoutList className="h-3 w-3" />
+                  {t('sidebar.panels.open_session_manager')}
+                </Button>
               </div>
             </div>
           )}
@@ -1371,16 +1124,6 @@ export const Sidebar = () => {
         onConnect={() => {
           loadSavedConnections();
         }}
-      />
-
-      <OxideExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-      />
-
-      <OxideImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
       />
 
       {/* DrillDown Dialog */}

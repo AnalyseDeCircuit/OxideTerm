@@ -1,0 +1,94 @@
+{
+  "sessionManager": {
+    "title": "Session Manager",
+    "toolbar": {
+      "search_placeholder": "Search connections...",
+      "new_connection": "New Connection",
+      "import": "Import",
+      "export": "Export",
+      "auto_route": "Auto-Route"
+    },
+    "folder_tree": {
+      "all_connections": "All Connections",
+      "ungrouped": "Ungrouped",
+      "recent": "Recent",
+      "rename_group": "Rename Group",
+      "delete_group": "Delete Group",
+      "new_subgroup": "New Subgroup",
+      "confirm_delete_group": "Delete group \"{{name}}\"? Connections will be moved to Ungrouped."
+    },
+    "table": {
+      "name": "Name",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "auth_type": "Auth",
+      "group": "Group",
+      "tags": "Tags",
+      "last_used": "Last Used",
+      "actions": "Actions",
+      "no_connections": "No connections found",
+      "no_connections_hint": "Create a new connection to get started",
+      "no_search_results": "No connections match your search",
+      "select_all": "Select all",
+      "selected_count": "{{count}} selected",
+      "never_used": "Never"
+    },
+    "time": {
+      "just_now": "Just now",
+      "minutes_ago": "{{count}}m ago",
+      "hours_ago": "{{count}}h ago",
+      "days_ago": "{{count}}d ago"
+    },
+    "actions": {
+      "connect": "Connect",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "manage_tags": "Manage Tags",
+      "move_to_group": "Move to Group",
+      "confirm_delete": "Delete connection \"{{name}}\"?",
+      "confirm_batch_delete": "Delete {{count}} selected connections?"
+    },
+    "batch": {
+      "title": "Batch Actions",
+      "delete": "Delete Selected",
+      "move_to_group": "Move to Group",
+      "add_tags": "Add Tags"
+    },
+    "tags": {
+      "add_tag": "Add tag...",
+      "remove_tag": "Remove tag \"{{tag}}\""
+    },
+    "toast": {
+      "connection_deleted": "Connection deleted",
+      "connections_deleted": "{{count}} connections deleted",
+      "connection_duplicated": "Connection duplicated",
+      "connections_moved": "{{count}} connections moved to \"{{group}}\"",
+      "tags_updated": "Tags updated"
+    },
+    "edit_properties": {
+      "title": "Edit Connection",
+      "description": "Modify the connection properties.",
+      "name": "Name",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "auth_type": "Authentication",
+      "auth_password": "Password",
+      "auth_key": "SSH Key",
+      "auth_agent": "Agent",
+      "password_hint": "Password will be prompted on connect.",
+      "key_path": "Key File Path",
+      "browse": "Browse",
+      "agent_hint": "Use system SSH Agent for authentication.",
+      "group": "Group",
+      "ungrouped": "Ungrouped",
+      "color": "Color",
+      "clear_color": "Clear",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    }
+  }
+}

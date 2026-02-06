@@ -44,7 +44,8 @@
     "connection_matrix": "接続マトリックス",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "転送",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "セッションマネージャー"
   },
   "ide": {
     "loading_project": "プロジェクトを読み込み中...",

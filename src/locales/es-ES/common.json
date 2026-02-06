@@ -44,7 +44,8 @@
     "connection_matrix": "Matriz de conexiones",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "Reenvío",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "Gestor de sesiones"
   },
   "ide": {
     "loading_project": "Cargando proyecto...",

@@ -44,7 +44,8 @@
     "connection_matrix": "连接矩阵",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "转发",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "会话管理器"
   },
   "ide": {
     "loading_project": "正在加载项目...",

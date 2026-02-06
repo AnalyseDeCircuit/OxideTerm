@@ -26,7 +26,9 @@
       "no_connected_sessions": "Không có phiên đã kết nối",
       "import_tooltip": "Nhập từ file .oxide",
       "export_tooltip": "Xuất sang file .oxide",
-      "system_health": "Sức khỏe hệ thống"
+      "system_health": "Sức khỏe hệ thống",
+      "session_manager": "Quản lý phiên",
+      "open_session_manager": "Mở quản lý phiên"
     },
     "tooltips": {
       "settings": "Cài đặt",

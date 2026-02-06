@@ -202,17 +202,23 @@ const FileList = ({
       return;
     }
     
-    // Enter: Open directory or preview file
+    // Enter: Open directory
     if (e.key === 'Enter' && selectedFiles.length === 1) {
       e.preventDefault();
       const file = files.find(f => f.name === selectedFiles[0]);
-      if (file) {
-        if (file.file_type === 'Directory') {
-          const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
-          onNavigate(newPath);
-        } else if (onPreview) {
-          onPreview(file);
-        }
+      if (file && file.file_type === 'Directory') {
+        const newPath = path === '/' ? `/${file.name}` : `${path}/${file.name}`;
+        onNavigate(newPath);
+      }
+      return;
+    }
+
+    // Space: Quick look / preview file
+    if (e.key === ' ' && selectedFiles.length === 1) {
+      e.preventDefault();
+      const file = files.find(f => f.name === selectedFiles[0]);
+      if (file && file.file_type !== 'Directory' && onPreview) {
+        onPreview(file);
       }
       return;
     }
@@ -453,9 +459,9 @@ const FileList = ({
                 isSelected && "bg-theme-accent/20 text-theme-accent"
               )}
             >
-              <div className="flex-1 flex items-center gap-2 truncate">
-                {file.file_type === 'Directory' ? <Folder className="h-3.5 w-3.5 text-blue-400" /> : <File className="h-3.5 w-3.5 text-zinc-400" />}
-                <span>{file.name}</span>
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                {file.file_type === 'Directory' ? <Folder className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" /> : <File className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />}
+                <span className="truncate">{file.name}</span>
               </div>
               <div className="w-20 text-right text-zinc-500">
                 {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}

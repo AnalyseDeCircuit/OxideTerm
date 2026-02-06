@@ -21,6 +21,7 @@ const SFTPView = lazy(() => import('../sftp/SFTPView').then(m => ({ default: m.S
 const ForwardsView = lazy(() => import('../forwards/ForwardsView').then(m => ({ default: m.ForwardsView })));
 const IdeWorkspace = lazy(() => import('../ide').then(m => ({ default: m.IdeWorkspace })));
 const LocalFileManager = lazy(() => import('../fileManager').then(m => ({ default: m.LocalFileManager })));
+const SessionManagerPanel = lazy(() => import('../sessionManager').then(m => ({ default: m.SessionManagerPanel })));
 
 // Loading fallback for lazy components
 const ViewLoader = () => {
@@ -141,6 +142,11 @@ export const AppLayout = () => {
                   {tab.type === 'file_manager' && (
                     <Suspense fallback={<ViewLoader />}>
                       <LocalFileManager />
+                    </Suspense>
+                  )}
+                  {tab.type === 'session_manager' && (
+                    <Suspense fallback={<ViewLoader />}>
+                      <SessionManagerPanel />
                     </Suspense>
                   )}
                 </div>

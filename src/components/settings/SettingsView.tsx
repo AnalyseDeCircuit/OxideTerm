@@ -297,6 +297,18 @@ const HelpAboutSection = () => {
             ],
         },
         {
+            title: t('settings_view.help.category_sftp'),
+            shortcuts: [
+                { label: t('settings_view.help.shortcut_select_all'), mac: '⌘A', other: 'Ctrl+A' },
+                { label: t('settings_view.help.shortcut_quick_look'), mac: 'Space', other: 'Space' },
+                { label: t('settings_view.help.shortcut_sftp_enter_dir'), mac: 'Enter', other: 'Enter' },
+                { label: t('settings_view.help.shortcut_sftp_upload'), mac: '→', other: '→' },
+                { label: t('settings_view.help.shortcut_sftp_download'), mac: '←', other: '←' },
+                { label: t('settings_view.help.shortcut_rename'), mac: 'F2', other: 'F2' },
+                { label: t('settings_view.help.shortcut_delete'), mac: 'Delete', other: 'Delete' },
+            ],
+        },
+        {
             title: t('settings_view.help.category_editor'),
             shortcuts: [
                 { label: t('settings_view.help.shortcut_save'), mac: '⌘S', other: 'Ctrl+S' },

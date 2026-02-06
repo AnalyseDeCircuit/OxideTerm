@@ -430,11 +430,11 @@ export const FileList: React.FC<FileListProps> = ({
                 isSelected && "bg-theme-accent/20 text-theme-accent"
               )}
             >
-              <div className="flex-1 flex items-center gap-2 truncate">
+              <div className="flex-1 flex items-center gap-2 min-w-0">
                 {file.file_type === 'Directory' 
-                  ? <Folder className="h-3.5 w-3.5 text-blue-400" /> 
-                  : <File className="h-3.5 w-3.5 text-zinc-400" />}
-                <span>{file.name}</span>
+                  ? <Folder className="h-3.5 w-3.5 flex-shrink-0 text-blue-400" /> 
+                  : <File className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />}
+                <span className="truncate">{file.name}</span>
               </div>
               <div className="w-20 text-right text-zinc-500">
                 {file.file_type === 'Directory' ? '-' : formatFileSize(file.size)}
