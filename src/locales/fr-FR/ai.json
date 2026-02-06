@@ -76,7 +76,9 @@
       "offline": "Hors ligne",
       "manage_providers": "Gérer les fournisseurs",
       "no_provider": "Aucun fournisseur configuré",
-      "refresh_models": "Actualiser"
+      "refresh_models": "Actualiser",
+      "api_key_not_found": "Clé API introuvable. Veuillez la configurer dans Paramètres > IA.",
+      "failed_to_get_api_key": "Échec de la récupération de la clé API."
     }
   }
 }

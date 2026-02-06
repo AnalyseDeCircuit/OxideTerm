@@ -75,7 +75,9 @@
       "offline": "Offline",
       "manage_providers": "Anbieter verwalten",
       "no_provider": "Kein Anbieter konfiguriert",
-      "refresh_models": "Aktualisieren"
+      "refresh_models": "Aktualisieren",
+      "api_key_not_found": "API-Schlüssel nicht gefunden. Bitte konfigurieren Sie ihn in Einstellungen > KI.",
+      "failed_to_get_api_key": "API-Schlüssel konnte nicht abgerufen werden."
     }
   }
 }

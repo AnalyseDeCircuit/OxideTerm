@@ -6,6 +6,7 @@ import { gatherSidebarContext, type SidebarContext } from '../lib/sidebarContext
 import { getProvider } from '../lib/ai/providerRegistry';
 import type { ChatMessage as ProviderChatMessage } from '../lib/ai/providers';
 import type { AiChatMessage, AiConversation } from '../types';
+import i18n from '../i18n';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -376,12 +377,12 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
       }
       // Ollama doesn't require an API key
       if (!apiKey && providerType !== 'ollama') {
-        set({ error: 'API key not found. Please configure it in Settings > AI.' });
+        set({ error: i18n.t('ai.model_selector.api_key_not_found') });
         return;
       }
     } catch (e) {
       if (providerType !== 'ollama') {
-        set({ error: 'Failed to get API key.' });
+        set({ error: i18n.t('ai.model_selector.failed_to_get_api_key') });
         return;
       }
     }
