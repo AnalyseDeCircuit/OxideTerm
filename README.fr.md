@@ -308,10 +308,11 @@ cargo build --no-default-features --release
 
 ## 🔒 Considérations de Sécurité
 
-### Stockage des Mots de Passe
+### Stockage des Identifiants
 - **Fichiers de Config Locaux** : Configurations de connexion sauvegardées dans `~/.oxideterm/connections.json` (Windows : `%APPDATA%\OxideTerm`)
 - **Stockage Séparé des Mots de Passe** : Les fichiers de config stockent uniquement les IDs de référence du trousseau (comme `oxideterm-{uuid}`), les mots de passe réels stockés dans le trousseau système (macOS Keychain / Windows Credential Manager / Linux libsecret)
-- **Double Protection** : Même si les fichiers de config fuient, les attaquants ne peuvent pas accéder aux vrais mots de passe
+- **Clés API AI** : Stockées dans le trousseau système sous le service `com.oxideterm.ai` — même protection OS que les mots de passe SSH (depuis v1.6.0)
+- **Double Protection** : Même si les fichiers de config fuient, les attaquants ne peuvent pas accéder aux vrais mots de passe ni aux clés API
 
 ### Clés d'Hôte SSH
 - Vérification d'empreinte d'hôte lors de la première connexion

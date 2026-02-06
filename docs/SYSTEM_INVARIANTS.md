@@ -402,6 +402,7 @@ Disconnected 是终态，必须移除 Session
 
 **不变量**：
 - **密码不得存储在配置文件中**（必须使用 OS keyring）
+- **AI API Key 不得存储在配置文件中**（必须使用 OS keyring，`com.oxideterm.ai` 服务）
 - **私钥文件路径不得记录到日志**（必须脱敏）
 - **WebSocket token 必须有时间限制**（不得永久有效）
 

@@ -1,16 +1,15 @@
-//! AI Vault - Local Encrypted File Storage
+//! AI Vault - Legacy Local Encrypted File Storage (DEPRECATED)
 //!
-//! Stores AI API keys in local encrypted files using XOR cipher with machine fingerprint.
-//! This replaces the system keychain approach which has signing identity issues in dev mode.
+//! ⚠️ **DEPRECATED since v1.6.0**: AI API keys are now stored in OS keychain
+//! (`com.oxideterm.ai` service via `keyring` crate). This module is retained
+//! solely for **one-time migration** of existing vault files to keychain.
 //!
-//! Security notes:
-//! - XOR encryption is used for obfuscation, not cryptographic security
-//! - The goal is to prevent plaintext exposure and accidental leaks
-//! - Machine fingerprint ensures the vault is tied to the specific machine
+//! This code will be removed in a future version once all users have migrated.
 //!
-//! Multi-provider support:
-//! - Legacy: Single key stored in `ai.vault`
-//! - New: Per-provider keys stored in `ai_keys/{provider_id}.vault`
+//! Previous approach:
+//! - XOR encryption was used for obfuscation, not cryptographic security
+//! - Machine fingerprint (hostname + username) was fully predictable
+//! - Per-provider keys stored in `ai_keys/{provider_id}.vault`
 
 use std::fs;
 use std::io::{Read, Write};
