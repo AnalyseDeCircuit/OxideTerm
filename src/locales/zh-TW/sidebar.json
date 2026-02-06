@@ -26,7 +26,9 @@
       "no_connected_sessions": "沒有已連線的工作階段",
       "import_tooltip": "從 .oxide 檔案匯入",
       "export_tooltip": "匯出為 .oxide 檔案",
-      "system_health": "系統健康"
+      "system_health": "系統健康",
+      "session_manager": "工作階段管理器",
+      "open_session_manager": "開啟工作階段管理器"
     },
     "tooltips": {
       "settings": "設定",

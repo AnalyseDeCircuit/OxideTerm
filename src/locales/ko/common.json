@@ -44,7 +44,8 @@
     "connection_matrix": "연결 매트릭스",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "포워딩",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "세션 관리자"
   },
   "ide": {
     "loading_project": "프로젝트 로딩 중...",

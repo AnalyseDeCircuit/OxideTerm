@@ -138,11 +138,11 @@ export const EditConnectionModal: React.FC<EditConnectionModalProps> = ({
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="key" id="auth-key" className="border-theme-border data-[state=checked]:bg-theme-accent" />
-                <Label htmlFor="auth-key" className="text-theme-text">{t('modals.edit_connection.ssh_key')}</Label>
+                <Label htmlFor="auth-key" className="text-theme-text">{t('modals.edit_connection.auth_key')}</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="agent" id="auth-agent" className="border-theme-border data-[state=checked]:bg-theme-accent" />
-                <Label htmlFor="auth-agent" className="text-theme-text">{t('modals.edit_connection.ssh_agent')}</Label>
+                <Label htmlFor="auth-agent" className="text-theme-text">{t('modals.edit_connection.auth_agent')}</Label>
               </div>
             </RadioGroup>
           </div>

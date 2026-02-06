@@ -1,0 +1,94 @@
+{
+  "sessionManager": {
+    "title": "Sitzungsmanager",
+    "toolbar": {
+      "search_placeholder": "Verbindungen suchen...",
+      "new_connection": "Neue Verbindung",
+      "import": "Importieren",
+      "export": "Exportieren",
+      "auto_route": "Auto-Route"
+    },
+    "folder_tree": {
+      "all_connections": "Alle Verbindungen",
+      "ungrouped": "Nicht gruppiert",
+      "recent": "Zuletzt verwendet",
+      "rename_group": "Gruppe umbenennen",
+      "delete_group": "Gruppe löschen",
+      "new_subgroup": "Neue Untergruppe",
+      "confirm_delete_group": "Gruppe \"{{name}}\" löschen? Verbindungen werden in Nicht gruppiert verschoben."
+    },
+    "table": {
+      "name": "Name",
+      "host": "Host",
+      "port": "Port",
+      "username": "Benutzername",
+      "auth_type": "Auth",
+      "group": "Gruppe",
+      "tags": "Tags",
+      "last_used": "Zuletzt verwendet",
+      "actions": "Aktionen",
+      "no_connections": "Keine Verbindungen gefunden",
+      "no_connections_hint": "Erstellen Sie eine neue Verbindung",
+      "no_search_results": "Keine Verbindungen entsprechen Ihrer Suche",
+      "select_all": "Alle auswählen",
+      "selected_count": "{{count}} ausgewählt",
+      "never_used": "Nie"
+    },
+    "time": {
+      "just_now": "Gerade eben",
+      "minutes_ago": "Vor {{count}}Min.",
+      "hours_ago": "Vor {{count}}Std.",
+      "days_ago": "Vor {{count}}T."
+    },
+    "actions": {
+      "connect": "Verbinden",
+      "edit": "Bearbeiten",
+      "duplicate": "Duplizieren",
+      "delete": "Löschen",
+      "manage_tags": "Tags verwalten",
+      "move_to_group": "In Gruppe verschieben",
+      "confirm_delete": "Verbindung \"{{name}}\" löschen?",
+      "confirm_batch_delete": "{{count}} ausgewählte Verbindungen löschen?"
+    },
+    "batch": {
+      "title": "Stapelaktionen",
+      "delete": "Auswahl löschen",
+      "move_to_group": "In Gruppe verschieben",
+      "add_tags": "Tags hinzufügen"
+    },
+    "tags": {
+      "add_tag": "Tag hinzufügen...",
+      "remove_tag": "Tag \"{{tag}}\" entfernen"
+    },
+    "toast": {
+      "connection_deleted": "Verbindung gelöscht",
+      "connections_deleted": "{{count}} Verbindungen gelöscht",
+      "connection_duplicated": "Verbindung dupliziert",
+      "connections_moved": "{{count}} Verbindungen nach \"{{group}}\" verschoben",
+      "tags_updated": "Tags aktualisiert"
+    },
+    "edit_properties": {
+      "title": "Verbindung bearbeiten",
+      "description": "Verbindungseigenschaften ändern.",
+      "name": "Name",
+      "host": "Host",
+      "port": "Port",
+      "username": "Benutzername",
+      "auth_type": "Authentifizierung",
+      "auth_password": "Passwort",
+      "auth_key": "SSH-Schlüssel",
+      "auth_agent": "Agent",
+      "password_hint": "Passwort wird beim Verbinden abgefragt.",
+      "key_path": "Schlüsseldatei-Pfad",
+      "browse": "Durchsuchen",
+      "agent_hint": "System-SSH-Agent zur Authentifizierung verwenden.",
+      "group": "Gruppe",
+      "ungrouped": "Ohne Gruppe",
+      "color": "Farbe",
+      "clear_color": "Löschen",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Speichern..."
+    }
+  }
+}

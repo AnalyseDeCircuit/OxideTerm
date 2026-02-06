@@ -25,7 +25,9 @@
       "no_connected_sessions": "无已连接会话",
       "import_tooltip": "从 .oxide 文件导入",
       "export_tooltip": "导出到 .oxide 文件",
-      "system_health": "系统健康"
+      "system_health": "系统健康",
+      "session_manager": "会话管理器",
+      "open_session_manager": "打开会话管理器"
     },
     "tooltips": {
       "settings": "设置",

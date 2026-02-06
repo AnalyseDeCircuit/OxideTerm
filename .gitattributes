@@ -101,6 +101,26 @@ src/vite-env.d.ts linguist-generated
 # 9. modals 目录 - 表单/对话框 UI（样板代码居多）
 src/components/modals/** linguist-vendored
 
-# 10. 确保 Rust 核心目录始终被检测（最高优先级）
+# 10. sessionManager - 会话管理面板 UI
+src/components/sessionManager/** linguist-vendored
+
+# 11. 其他 UI 重 TS 目录 - settings/connections/forwards/layout/topology
+src/components/settings/** linguist-vendored
+src/components/connections/** linguist-vendored
+src/components/forwards/** linguist-vendored
+src/components/layout/** linguist-vendored
+src/components/topology/** linguist-vendored
+
+# 12. 配置/构建文件不计入语言统计
+vite.config.ts linguist-vendored
+tailwind.config.js linguist-vendored
+postcss.config.js linguist-vendored
+
+# 13. ErrorBoundary、入口文件 - 样板代码
+src/main.tsx linguist-vendored
+src/components/ErrorBoundary.tsx linguist-vendored
+
+# 14. 确保 Rust 核心目录始终被检测（最高优先级）
 src-tauri/src/**/*.rs linguist-detectable=true
 src-tauri/benches/**/*.rs linguist-detectable=true
+src-tauri/build.rs linguist-detectable=true

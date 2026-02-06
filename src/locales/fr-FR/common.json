@@ -44,7 +44,8 @@
     "connection_matrix": "Matrice de connexions",
     "sftp_prefix": "SFTP",
     "forwards_prefix": "Transferts",
-    "ide": "IDE"
+    "ide": "IDE",
+    "session_manager": "Gestionnaire de sessions"
   },
   "ide": {
     "loading_project": "Chargement du projet...",

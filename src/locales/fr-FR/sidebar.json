@@ -26,7 +26,9 @@
       "no_connected_sessions": "Aucune session connectée",
       "import_tooltip": "Importer depuis un fichier .oxide",
       "export_tooltip": "Exporter vers un fichier .oxide",
-      "system_health": "Santé du système"
+      "system_health": "Santé du système",
+      "session_manager": "Gestionnaire de sessions",
+      "open_session_manager": "Ouvrir le gestionnaire de sessions"
     },
     "tooltips": {
       "settings": "Paramètres",
