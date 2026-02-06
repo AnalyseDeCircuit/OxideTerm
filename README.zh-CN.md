@@ -357,10 +357,11 @@ OxideTerm/
 
 ## 🔒 安全考虑
 
-### 密码存储
+### 凭据存储
 - **配置文件本地存储**：连接配置保存在 `~/.oxideterm/connections.json`（Windows: `%APPDATA%\OxideTerm`）
 - **密码分离存储**：配置文件中仅保存 keychain 引用 ID（如 `oxideterm-{uuid}`），真实密码存储在系统钥匙串（macOS Keychain / Windows Credential Manager / Linux libsecret）
-- **双重保护**：即使配置文件泄露，攻击者也无法获取真实密码
+- **AI API Key**：存储在系统钥匙串 `com.oxideterm.ai` 服务下，与 SSH 密码享有同等 OS 级别保护（v1.6.0 起）
+- **双重保护**：即使配置文件泄露，攻击者也无法获取真实密码或 API Key
 
 ### SSH 主机密钥
 - 首次连接验证主机指纹

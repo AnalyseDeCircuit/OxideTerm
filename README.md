@@ -359,10 +359,11 @@ OxideTerm/
 
 ## 🔒 Security Considerations
 
-### Password Storage
+### Credential Storage
 - **Local Config Files**: Connection configs saved in `~/.oxideterm/connections.json` (Windows: `%APPDATA%\OxideTerm`)
 - **Separate Password Storage**: Config files only store keychain reference IDs (like `oxideterm-{uuid}`), actual passwords stored in system keychain (macOS Keychain / Windows Credential Manager / Linux libsecret)
-- **Double Protection**: Even if config files leak, attackers cannot access real passwords
+- **AI API Keys**: Stored in system keychain under `com.oxideterm.ai` service — same OS-level protection as SSH passwords (since v1.6.0)
+- **Double Protection**: Even if config files leak, attackers cannot access real passwords or API keys
 
 ### SSH Host Keys
 - First-connection host fingerprint verification

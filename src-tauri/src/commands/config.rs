@@ -4,18 +4,22 @@
 
 use crate::config::{
     default_ssh_config_path, parse_ssh_config, AiProviderVault, AiVault, ConfigFile, ConfigStorage,
-    Keychain, ProxyHopConfig, SavedAuth, SavedConnection, SshConfigHost,
+    Keychain, KeychainError, ProxyHopConfig, SavedAuth, SavedConnection, SshConfigHost,
 };
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{Manager, State};
 
+/// Service name for AI provider API keys in system keychain
+const AI_KEYCHAIN_SERVICE: &str = "com.oxideterm.ai";
+
 /// Shared config state
 pub struct ConfigState {
     storage: ConfigStorage,
     config: RwLock<ConfigFile>,
     keychain: Keychain,
+    ai_keychain: Keychain,
 }
 
 impl ConfigState {
@@ -28,6 +32,7 @@ impl ConfigState {
             storage,
             config: RwLock::new(config),
             keychain: Keychain::new(),
+            ai_keychain: Keychain::with_service(AI_KEYCHAIN_SERVICE),
         })
     }
 
@@ -987,57 +992,119 @@ pub async fn delete_ai_api_key(
     Ok(())
 }
 
-// ============ AI Multi-Provider API Key Commands ============
+// ============ AI Multi-Provider API Key Commands (OS Keychain) ============
 
-/// Helper to get the AI provider vault instance
-fn get_ai_provider_vault(app_handle: &tauri::AppHandle) -> Result<AiProviderVault, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-    Ok(AiProviderVault::new(app_data_dir))
+/// Attempt to migrate a provider key from legacy XOR vault to OS keychain.
+/// Called lazily on first access. Returns the key if migration succeeded.
+fn try_migrate_vault_to_keychain(
+    app_handle: &tauri::AppHandle,
+    ai_keychain: &Keychain,
+    provider_id: &str,
+) -> Option<String> {
+    let app_data_dir = match app_handle.path().app_data_dir() {
+        Ok(d) => d,
+        Err(_) => return None,
+    };
+    let vault = AiProviderVault::new(app_data_dir);
+
+    if !vault.exists(provider_id) {
+        return None;
+    }
+
+    match vault.load(provider_id) {
+        Ok(key) => {
+            tracing::info!("Migrating AI key for provider {} from vault to keychain", provider_id);
+            // Store in keychain
+            match ai_keychain.store(provider_id, &key) {
+                Ok(()) => {
+                    // Delete vault file after successful migration
+                    if let Err(e) = vault.delete(provider_id) {
+                        tracing::warn!("Failed to delete vault file after migration for {}: {}", provider_id, e);
+                    }
+                    tracing::info!("Successfully migrated AI key for provider {} to keychain", provider_id);
+                    Some(key)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to store provider {} key in keychain: {}", provider_id, e);
+                    // Return the key anyway so the user isn't blocked
+                    Some(key)
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to read vault for provider {} during migration: {}", provider_id, e);
+            None
+        }
+    }
 }
 
-/// Set API key for a specific AI provider
+/// Set API key for a specific AI provider — stored in OS keychain
 #[tauri::command]
 pub async fn set_ai_provider_api_key(
-    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
     provider_id: String,
     api_key: String,
 ) -> Result<(), String> {
-    let vault = get_ai_provider_vault(&app_handle)?;
-
     if api_key.is_empty() {
-        vault.delete(&provider_id).map_err(|e| format!("Failed to delete provider key: {}", e))?;
+        state.ai_keychain.delete(&provider_id).map_err(|e| format!("Failed to delete provider key: {}", e))?;
     } else {
-        vault.save(&provider_id, &api_key).map_err(|e| format!("Failed to save provider key: {}", e))?;
+        state.ai_keychain.store(&provider_id, &api_key)
+            .map_err(|e| format!("Failed to save provider key to keychain: {}", e))?;
     }
-
+    tracing::info!("AI provider key for {} saved to system keychain", provider_id);
     Ok(())
 }
 
-/// Get API key for a specific AI provider
+/// Get API key for a specific AI provider — reads from OS keychain, migrates from vault if needed
 #[tauri::command]
 pub async fn get_ai_provider_api_key(
     app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
     provider_id: String,
 ) -> Result<Option<String>, String> {
-    let vault = get_ai_provider_vault(&app_handle)?;
-
-    match vault.load(&provider_id) {
-        Ok(key) => Ok(Some(key)),
-        Err(crate::config::VaultError::NotFound) => Ok(None),
-        Err(e) => Err(format!("Failed to load provider key: {}", e)),
+    // Step 1: Try keychain first
+    match state.ai_keychain.get(&provider_id) {
+        Ok(key) => {
+            tracing::debug!("AI provider key for {} found in keychain (len={})", provider_id, key.len());
+            return Ok(Some(key));
+        }
+        Err(e) => {
+            // Only continue if it's a "not found" error
+            let is_not_found = matches!(&e, KeychainError::NotFound(_))
+                || e.to_string().to_lowercase().contains("no entry");
+            if !is_not_found {
+                tracing::warn!("Keychain error for provider {}: {}", provider_id, e);
+            }
+        }
     }
+
+    // Step 2: Try lazy migration from vault
+    if let Some(key) = try_migrate_vault_to_keychain(&app_handle, &state.ai_keychain, &provider_id) {
+        return Ok(Some(key));
+    }
+
+    Ok(None)
 }
 
 /// Check if API key exists for a specific AI provider
 #[tauri::command]
 pub async fn has_ai_provider_api_key(
     app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
     provider_id: String,
 ) -> Result<bool, String> {
-    let vault = get_ai_provider_vault(&app_handle)?;
+    // Check keychain
+    match state.ai_keychain.get(&provider_id) {
+        Ok(_) => return Ok(true),
+        Err(_) => {}
+    }
+
+    // Check if vault file exists (pending migration)
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    let vault = AiProviderVault::new(app_data_dir);
     Ok(vault.exists(&provider_id))
 }
 
@@ -1045,18 +1112,57 @@ pub async fn has_ai_provider_api_key(
 #[tauri::command]
 pub async fn delete_ai_provider_api_key(
     app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
     provider_id: String,
 ) -> Result<(), String> {
-    let vault = get_ai_provider_vault(&app_handle)?;
-    vault.delete(&provider_id).map_err(|e| format!("Failed to delete provider key: {}", e))?;
+    // Delete from keychain
+    if let Err(e) = state.ai_keychain.delete(&provider_id) {
+        tracing::debug!("Keychain delete for provider {} (may not exist): {}", provider_id, e);
+    }
+
+    // Also clean up any remaining vault file
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    let vault = AiProviderVault::new(app_data_dir);
+    if let Err(e) = vault.delete(&provider_id) {
+        tracing::debug!("Vault delete for provider {} (may not exist): {}", provider_id, e);
+    }
+
+    tracing::info!("AI provider key for {} deleted from all storage locations", provider_id);
     Ok(())
 }
 
 /// List all provider IDs that have stored API keys
+/// Note: This checks both keychain and legacy vault files
 #[tauri::command]
 pub async fn list_ai_provider_keys(
     app_handle: tauri::AppHandle,
+    state: State<'_, Arc<ConfigState>>,
 ) -> Result<Vec<String>, String> {
-    let vault = get_ai_provider_vault(&app_handle)?;
-    vault.list_providers().map_err(|e| format!("Failed to list provider keys: {}", e))
+    let mut providers = std::collections::HashSet::new();
+
+    // Check legacy vault files (will be migrated on next access)
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    let vault = AiProviderVault::new(app_data_dir);
+    if let Ok(vault_providers) = vault.list_providers() {
+        for p in vault_providers {
+            providers.insert(p);
+        }
+    }
+
+    // Check known provider IDs in keychain
+    // Since keychain doesn't support enumeration, we probe known provider IDs
+    let known_ids = ["openai", "anthropic", "gemini", "ollama"];
+    for id in &known_ids {
+        if state.ai_keychain.get(id).is_ok() {
+            providers.insert(id.to_string());
+        }
+    }
+
+    Ok(providers.into_iter().collect())
 }

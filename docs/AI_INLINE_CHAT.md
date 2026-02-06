@@ -34,7 +34,7 @@ AI 内联助手为您的终端体验带来智能增强：
 ```
 Base URL: https://api.openai.com/v1  (默认)
 Model:    gpt-4o-mini                 (推荐)
-API Key:  sk-...                      (存储在本地加密保险箱)
+API Key:  sk-...                      (存储在系统钥匙串)
 ```
 
 **支持的服务提供商**：
@@ -229,10 +229,12 @@ AI 可以看到整个构建过程，提供更全面的解决方案。
 
 ### API Key 存储
 
-- ✅ **本地加密保险箱**：API Key 存储在本地数据目录的 `ai.vault` 文件中
-  - 使用基于机器指纹（Hostname + Username）的 XOR 混淆加密
-  - 绑定到当前设备，无法直接复制到其他机器使用
-  - 避免了开发模式下系统钥匙串的签名问题
+- ✅ **系统钥匙串**：API Key 存储在 OS 原生安全存储中（v1.6.0 起）
+  - macOS: Keychain Services（`com.oxideterm.ai` 服务）
+  - Windows: Credential Manager
+  - Linux: Secret Service（libsecret / gnome-keyring）
+  - 与 SSH 密码享有同等 OS 级别加密保护
+- ✅ **自动迁移**：旧版本的 XOR vault 文件会在首次访问时自动迁移到系统钥匙串
 - ❌ **绝不落盘**：API Key 不会写入配置文件或 localStorage
 - ❌ **不进入日志**：API Key 不会出现在任何日志中
 
@@ -259,7 +261,7 @@ AI 可以看到整个构建过程，提供更全面的解决方案。
 | **Enable AI** | `false` | 全局开关，首次启用需确认 |
 | **Base URL** | `https://api.openai.com/v1` | API 端点地址 |
 | **Model** | `gpt-4o-mini` | 使用的模型 |
-| **API Key** | (空) | 存储在系统钥匙串 |
+| **API Key** | (空) | 存储在系统钥匙串（`com.oxideterm.ai`） |
 | **Max Characters** | `8000` | 最大上下文字符数 |
 | **Visible Lines** | `120` | 可见缓冲区行数 |
 
@@ -333,10 +335,10 @@ A: 任何兼容 OpenAI Chat Completions API 的模型，包括：
 
 ### Q: API Key 是否安全？
 
-A: 是的。API Key 存储在本地加密保险箱 (`ai.vault`) 中：
-- 使用机器指纹进行加密混淆
-- 防止明文存储在配置文件中
-- 仅限本机读取
+A: 是的。API Key 存储在操作系统原生钥匙串中（v1.6.0 起）：
+- macOS 使用 Keychain Services，Windows 使用 Credential Manager
+- 由操作系统提供硬件级加密保护
+- 不会写入任何配置文件或日志
 
 OxideTerm 自身无法访问其他应用的 API Key，反之亦然。
 

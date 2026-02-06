@@ -76,7 +76,7 @@ AI Chat uses the same settings as the inline AI assistant. Configure in **Settin
 |---------|-------------|
 | `ai.enabled` | Enable/disable AI features |
 | `ai.apiEndpoint` | OpenAI-compatible API endpoint |
-| `ai.apiKey` | Your API key |
+| `ai.apiKey` | Your API key (stored in system keychain) |
 | `ai.model` | Model to use (e.g., `gpt-4o-mini`) |
 | `ai.contextVisibleLines` | Number of terminal lines to capture for context |
 
