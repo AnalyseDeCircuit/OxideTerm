@@ -38,6 +38,7 @@ import {
   // Remote environment detection
   RemoteEnvInfo,
 } from '../types';
+import type { PluginManifest } from '../types/plugin';
 
 // Toggle this for development without a backend
 const USE_MOCK = false;
@@ -1186,6 +1187,34 @@ export const api = {
   }> => {
     if (USE_MOCK) return { stdout: '', stderr: '', exitCode: 0 };
     return invoke('ide_exec_command', { connectionId, command, cwd, timeoutSecs });
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Plugin System
+  // ═══════════════════════════════════════════════════════════════════
+
+  /** List all installed plugins (scans plugins directory) */
+  pluginList: async (): Promise<PluginManifest[]> => {
+    if (USE_MOCK) return [];
+    return invoke('list_plugins');
+  },
+
+  /** Read a file from a plugin's directory (path-traversal protected) */
+  pluginReadFile: async (pluginId: string, relativePath: string): Promise<number[]> => {
+    if (USE_MOCK) return [];
+    return invoke('read_plugin_file', { pluginId, relativePath });
+  },
+
+  /** Save plugin configuration (enabled/disabled state) */
+  pluginSaveConfig: async (config: string): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('save_plugin_config', { config });
+  },
+
+  /** Load plugin configuration */
+  pluginLoadConfig: async (): Promise<string> => {
+    if (USE_MOCK) return '{}';
+    return invoke('load_plugin_config');
   },
 };
 

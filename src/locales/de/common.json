@@ -45,7 +45,8 @@
     "sftp_prefix": "SFTP",
     "forwards_prefix": "Weiterleitungen",
     "ide": "IDE",
-    "session_manager": "Sitzungsmanager"
+    "session_manager": "Sitzungsmanager",
+    "plugin_manager": "Plugins"
   },
   "ide": {
     "loading_project": "Projekt wird geladen...",

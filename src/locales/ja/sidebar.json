@@ -28,7 +28,8 @@
       "export_tooltip": ".oxideファイルにエクスポート",
       "system_health": "システムヘルス",
       "session_manager": "セッションマネージャー",
-      "open_session_manager": "セッションマネージャーを開く"
+      "open_session_manager": "セッションマネージャーを開く",
+      "plugins": "プラグイン"
     },
     "tooltips": {
       "settings": "設定",

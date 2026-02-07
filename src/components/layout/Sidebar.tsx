@@ -20,11 +20,13 @@ import {
   PanelLeft,
   HeartPulse,
   LayoutList,
+  Puzzle,
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
+import { usePluginStore } from '../../store/pluginStore';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -39,6 +41,7 @@ import { api } from '../../lib/api';
 import { connectToSaved } from '../../lib/connectToSaved';
 import { waitForConnectionActive, isConnectionGuardError } from '../../lib/connectionGuard';
 import { SystemHealthPanel } from './SystemHealthPanel';
+import { PluginSidebarRenderer } from '../plugin/PluginSidebarRenderer';
 
 export const Sidebar = () => {
   const { t } = useTranslation();
@@ -601,9 +604,112 @@ export const Sidebar = () => {
     });
   }, [openConnectionEditor, createTab, toast, t]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Data-driven sidebar button definitions
+  // ═══════════════════════════════════════════════════════════════════════════
 
+  type SidebarButtonKind = 'section' | 'tab' | 'toggle' | 'action';
+  type SidebarButtonDef = {
+    kind: SidebarButtonKind;
+    key: string;
+    icon: React.ComponentType<{ className?: string }>;
+    titleKey: string;
+    badge?: number;
+    badgeColor?: string;
+    separator?: boolean;
+    spacer?: boolean;
+    wrapDiv?: boolean;
+  };
 
+  // Plugin-registered sidebar panels (inserted between main buttons and bottom group)
+  const pluginPanelDefs: SidebarButtonDef[] = Array.from(
+    usePluginStore.getState().sidebarPanels.values()
+  ).map(panel => ({
+    kind: 'section' as const,
+    key: `plugin:${panel.pluginId}:${panel.panelId}`,
+    icon: Puzzle,
+    titleKey: panel.title,
+  }));
 
+  const sidebarButtons: SidebarButtonDef[] = [
+    { kind: 'section', key: 'sessions', icon: Link2, titleKey: 'sidebar.panels.sessions', separator: true },
+    { kind: 'section', key: 'saved', icon: Database, titleKey: 'sidebar.panels.saved' },
+    { kind: 'tab', key: 'session_manager', icon: LayoutList, titleKey: 'sidebar.panels.session_manager' },
+    { kind: 'tab', key: 'connection_pool', icon: Terminal, titleKey: 'sidebar.panels.connection_pool', badge: connections.size > 0 ? connections.size : undefined, badgeColor: 'bg-green-500' },
+    { kind: 'tab', key: 'connection_monitor', icon: Activity, titleKey: 'sidebar.panels.connection_monitor' },
+    { kind: 'tab', key: 'topology', icon: Network, titleKey: 'sidebar.panels.connection_matrix' },
+    { kind: 'section', key: 'system_health', icon: HeartPulse, titleKey: 'sidebar.panels.system_health' },
+    { kind: 'toggle', key: 'ai', icon: Sparkles, titleKey: 'sidebar.panels.ai' },
+    // Plugin-registered sidebar panels
+    ...pluginPanelDefs,
+    // Bottom-aligned buttons
+    { kind: 'action', key: 'local_terminal', icon: Square, titleKey: 'sidebar.actions.new_local_terminal', spacer: true, badge: localTerminals.size > 0 ? localTerminals.size : undefined, badgeColor: 'bg-blue-500' },
+    { kind: 'tab', key: 'file_manager', icon: FolderOpen, titleKey: 'sidebar.panels.files' },
+    { kind: 'tab', key: 'settings', icon: Settings, titleKey: 'sidebar.tooltips.settings' },
+    { kind: 'tab', key: 'plugin_manager', icon: Puzzle, titleKey: 'sidebar.panels.plugins' },
+  ];
+
+  const getButtonVariant = (def: SidebarButtonDef): 'secondary' | 'ghost' => {
+    if (def.kind === 'section') {
+      return sidebarActiveSection === def.key ? 'secondary' : 'ghost';
+    }
+    if (def.kind === 'tab') {
+      return tabs.find(tab => tab.id === activeTabId)?.type === def.key ? 'secondary' : 'ghost';
+    }
+    if (def.kind === 'toggle' && def.key === 'ai') {
+      return !aiSidebarCollapsed ? 'secondary' : 'ghost';
+    }
+    return 'ghost';
+  };
+
+  const handleButtonClick = (def: SidebarButtonDef, collapsed: boolean) => {
+    if (def.kind === 'section') {
+      setSidebarSection(def.key as Parameters<typeof setSidebarSection>[0]);
+      if (collapsed) toggleSidebar();
+    } else if (def.kind === 'tab') {
+      createTab(def.key as Parameters<typeof createTab>[0]);
+    } else if (def.kind === 'toggle' && def.key === 'ai') {
+      toggleAiSidebar();
+    } else if (def.kind === 'action' && def.key === 'local_terminal') {
+      handleNewLocalTerminal();
+    }
+  };
+
+  const renderSidebarButton = (def: SidebarButtonDef, collapsed: boolean) => {
+    const Icon = def.icon;
+    const btn = (
+      <Button
+        variant={getButtonVariant(def)}
+        size="icon"
+        onClick={() => handleButtonClick(def, collapsed)}
+        title={t(def.titleKey)}
+        className="rounded-md h-9 w-9"
+      >
+        <Icon className="h-5 w-5" />
+      </Button>
+    );
+
+    if (def.badge !== undefined) {
+      return (
+        <div key={def.key} className="relative">
+          {def.spacer && <div className="flex-1" />}
+          {def.separator && <div className="w-6 h-px bg-theme-border my-1" />}
+          {btn}
+          <span className={`absolute -top-1 -right-1 ${def.badgeColor ?? 'bg-green-500'} text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none`}>
+            {def.badge}
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <React.Fragment key={def.key}>
+        {def.spacer && <div className="flex-1" />}
+        {def.separator && <div className="w-6 h-px bg-theme-border my-1" />}
+        {btn}
+      </React.Fragment>
+    );
+  };
 
   // Collapsed state: only show activity bar
   if (sidebarCollapsed) {
@@ -622,140 +728,7 @@ export const Sidebar = () => {
             <PanelLeft className="h-5 w-5" />
           </Button>
 
-          <div className="w-6 h-px bg-theme-border my-1" />
-
-          <Button
-            variant={sidebarActiveSection === 'sessions' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => { setSidebarSection('sessions'); toggleSidebar(); }}
-            title={t('sidebar.panels.sessions')}
-            className="rounded-md h-9 w-9"
-          >
-            <Link2 className="h-5 w-5" />
-          </Button>
-          <Button
-            variant={sidebarActiveSection === 'saved' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => { setSidebarSection('saved'); toggleSidebar(); }}
-            title={t('sidebar.panels.saved')}
-            className="rounded-md h-9 w-9"
-          >
-            <Database className="h-5 w-5" />
-          </Button>
-
-          {/* Session Manager (Tab) */}
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'session_manager' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('session_manager')}
-            title={t('sidebar.panels.session_manager')}
-            className="rounded-md h-9 w-9"
-          >
-            <LayoutList className="h-5 w-5" />
-          </Button>
-
-          {/* SSH Connection Pool (Tab) */}
-          <div className="relative">
-            <Button
-              variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_pool' ? 'secondary' : 'ghost'}
-              size="icon"
-              onClick={() => createTab('connection_pool')}
-              title={t('sidebar.panels.connection_pool')}
-              className="rounded-md h-9 w-9"
-            >
-              <Terminal className="h-5 w-5" />
-            </Button>
-            {connections.size > 0 && (
-              <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
-                {connections.size}
-              </span>
-            )}
-          </div>
-
-          {/* Connection Monitor (Full Tab) */}
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_monitor' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('connection_monitor')}
-            title={t('sidebar.panels.connection_monitor')}
-            className="rounded-md h-9 w-9"
-          >
-            <Activity className="h-5 w-5" />
-          </Button>
-
-          {/* Topology Button */}
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'topology' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('topology')}
-            title={t('sidebar.panels.connection_matrix')}
-            className="rounded-md h-9 w-9"
-          >
-            <Network className="h-5 w-5" />
-          </Button>
-
-          {/* System Health */}
-          <Button
-            variant={sidebarActiveSection === 'system_health' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => { setSidebarSection('system_health'); toggleSidebar(); }}
-            title={t('sidebar.panels.system_health')}
-            className="rounded-md h-9 w-9"
-          >
-            <HeartPulse className="h-5 w-5" />
-          </Button>
-
-          {/* AI Sidebar Toggle */}
-          <Button
-            variant={!aiSidebarCollapsed ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={toggleAiSidebar}
-            title={t('sidebar.panels.ai')}
-            className="rounded-md h-9 w-9"
-          >
-            <Sparkles className="h-5 w-5" />
-          </Button>
-
-          <div className="flex-1" />
-
-          {/* Local Terminal */}
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleNewLocalTerminal}
-              title={t('sidebar.actions.new_local_terminal')}
-              className="rounded-md h-9 w-9"
-            >
-              <Square className="h-5 w-5" />
-            </Button>
-            {localTerminals.size > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
-                {localTerminals.size}
-              </span>
-            )}
-          </div>
-
-          {/* File Manager */}
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'file_manager' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('file_manager')}
-            title={t('sidebar.panels.files')}
-            className="rounded-md h-9 w-9"
-          >
-            <FolderOpen className="h-5 w-5" />
-          </Button>
-
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'settings' ? 'secondary' : 'ghost'}
-            size="icon"
-            className="rounded-md h-9 w-9"
-            onClick={() => createTab('settings')}
-            title={t('sidebar.tooltips.settings')}
-          >
-            <Settings className="h-5 w-5" />
-          </Button>
+          {sidebarButtons.map(def => renderSidebarButton(def, true))}
         </div>
       </div>
     );
@@ -783,141 +756,7 @@ export const Sidebar = () => {
           <PanelLeftClose className="h-5 w-5" />
         </Button>
 
-        <div className="w-6 h-px bg-theme-border my-1" />
-
-        <Button
-          variant={sidebarActiveSection === 'sessions' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('sessions')}
-          title={t('sidebar.panels.sessions')}
-          className="rounded-md h-9 w-9"
-        >
-          <Link2 className="h-5 w-5" />
-        </Button>
-        <Button
-          variant={sidebarActiveSection === 'saved' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('saved')}
-          title={t('sidebar.panels.saved')}
-          className="rounded-md h-9 w-9"
-        >
-          <Database className="h-5 w-5" />
-        </Button>
-
-        {/* Session Manager (Tab) */}
-        <Button
-          variant={tabs.find(t => t.id === activeTabId)?.type === 'session_manager' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => createTab('session_manager')}
-          title={t('sidebar.panels.session_manager')}
-          className="rounded-md h-9 w-9"
-        >
-          <LayoutList className="h-5 w-5" />
-        </Button>
-
-        {/* SSH Connection Pool (Tab) */}
-        <div className="relative">
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_pool' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('connection_pool')}
-            title={t('sidebar.panels.connection_pool')}
-            className="rounded-md h-9 w-9"
-          >
-            <Terminal className="h-5 w-5" />
-          </Button>
-          {connections.size > 0 && (
-            <span className="absolute -top-1 -right-1 bg-green-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
-              {connections.size}
-            </span>
-          )}
-        </div>
-
-        {/* Connection Monitor (Full Tab) */}
-        <Button
-          variant={tabs.find(t => t.id === activeTabId)?.type === 'connection_monitor' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => createTab('connection_monitor')}
-          title={t('sidebar.panels.connection_monitor')}
-          className="rounded-md h-9 w-9"
-        >
-          <Activity className="h-5 w-5" />
-        </Button>
-
-        {/* Topology Button */}
-        <div className="flex justify-center w-full">
-          <Button
-            variant={tabs.find(t => t.id === activeTabId)?.type === 'topology' ? 'secondary' : 'ghost'}
-            size="icon"
-            onClick={() => createTab('topology')}
-            title={t('sidebar.panels.connection_matrix')}
-            className="rounded-md h-9 w-9"
-          >
-            <Network className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* System Health */}
-        <Button
-          variant={sidebarActiveSection === 'system_health' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => setSidebarSection('system_health')}
-          title={t('sidebar.panels.system_health')}
-          className="rounded-md h-9 w-9"
-        >
-          <HeartPulse className="h-5 w-5" />
-        </Button>
-
-        {/* AI Sidebar Toggle */}
-        <Button
-          variant={!aiSidebarCollapsed ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={toggleAiSidebar}
-          title={t('sidebar.panels.ai')}
-          className="rounded-md h-9 w-9"
-        >
-          <Sparkles className="h-5 w-5" />
-        </Button>
-
-        {/* Local Terminal */}
-        <div className="flex-1" />
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleNewLocalTerminal}
-            title={t('sidebar.actions.new_local_terminal')}
-            className="rounded-md h-9 w-9"
-          >
-            <Square className="h-5 w-5" />
-          </Button>
-          {localTerminals.size > 0 && (
-            <span className="absolute -top-1 -right-1 bg-blue-500 text-[10px] text-white rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 pointer-events-none">
-              {localTerminals.size}
-            </span>
-          )}
-        </div>
-
-        {/* File Manager */}
-        <Button
-          variant={tabs.find(t => t.id === activeTabId)?.type === 'file_manager' ? 'secondary' : 'ghost'}
-          size="icon"
-          onClick={() => createTab('file_manager')}
-          title={t('sidebar.panels.files')}
-          className="rounded-md h-9 w-9"
-        >
-          <FolderOpen className="h-5 w-5" />
-        </Button>
-
-        <Button
-          variant={tabs.find(t => t.id === activeTabId)?.type === 'settings' ? 'secondary' : 'ghost'}
-          size="icon"
-          className="rounded-md h-9 w-9"
-          onClick={() => createTab('settings')}
-          title={t('sidebar.tooltips.settings')}
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
+        {sidebarButtons.map(def => renderSidebarButton(def, false))}
       </div>
 
       {/* Content Area */}
@@ -1110,6 +949,13 @@ export const Sidebar = () => {
                 </span>
               </div>
               <SystemHealthPanel />
+            </div>
+          )}
+
+          {/* Plugin Sidebar Panels */}
+          {typeof sidebarActiveSection === 'string' && sidebarActiveSection.startsWith('plugin:') && (
+            <div className="space-y-4 flex flex-col h-full">
+              <PluginSidebarRenderer panelKey={sidebarActiveSection.replace('plugin:', '')} />
             </div>
           )}
 

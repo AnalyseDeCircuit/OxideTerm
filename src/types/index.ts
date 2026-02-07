@@ -316,7 +316,7 @@ export interface PersistedSessionInfo {
 }
 
 // Tab Types
-export type TabType = 'terminal' | 'sftp' | 'forwards' | 'settings' | 'connection_monitor' | 'connection_pool' | 'topology' | 'local_terminal' | 'ide' | 'file_manager' | 'session_manager';
+export type TabType = 'terminal' | 'sftp' | 'forwards' | 'settings' | 'connection_monitor' | 'connection_pool' | 'topology' | 'local_terminal' | 'ide' | 'file_manager' | 'session_manager' | 'plugin' | 'plugin_manager';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Split Pane Types (Layout Tree)
@@ -375,6 +375,9 @@ export interface Tab {
   
   // Legacy: Direct session binding (backward compatible, used when rootPane is undefined)
   sessionId?: string;
+
+  // Plugin tab identifier (for type === 'plugin')
+  pluginTabId?: string;
 }
 
 // Connection Config Types

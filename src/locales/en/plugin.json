@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "Plugin Manager",
+    "manager_description": "Manage installed plugins",
+    "refresh": "Refresh",
+    "open_plugins_dir": "Open Directory",
+    "empty_title": "No plugins installed",
+    "empty_description": "Place plugin folders in ~/.oxideterm/plugins/ to get started.",
+    "footer": "{{count}} plugin(s) installed",
+    "active_count": "{{count}} active",
+    "by_author": "by {{author}}",
+    "show_details": "Details",
+    "hide_details": "Hide",
+    "reload": "Reload",
+    "disable": "Disable",
+    "enable": "Enable",
+    "detail_version": "Version",
+    "detail_entry": "Entry",
+    "detail_requires": "Requires",
+    "detail_contributes": "Contributes",
+    "contrib_tabs": "{{count}} tab(s)",
+    "contrib_sidebar_panels": "{{count}} sidebar panel(s)",
+    "contrib_settings": "{{count}} setting(s)",
+    "contrib_input_interceptor": "Input interceptor",
+    "contrib_output_processor": "Output processor",
+    "contrib_shortcuts": "{{count}} shortcut(s)",
+    "contrib_connection_hooks": "{{count}} connection hook(s)",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "loading": "Loading...",
+      "error": "Error",
+      "disabled": "Disabled"
+    }
+  }
+}

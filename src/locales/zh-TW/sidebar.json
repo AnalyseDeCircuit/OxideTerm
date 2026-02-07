@@ -28,7 +28,8 @@
       "export_tooltip": "匯出為 .oxide 檔案",
       "system_health": "系統健康",
       "session_manager": "工作階段管理器",
-      "open_session_manager": "開啟工作階段管理器"
+      "open_session_manager": "開啟工作階段管理器",
+      "plugins": "外掛"
     },
     "tooltips": {
       "settings": "設定",

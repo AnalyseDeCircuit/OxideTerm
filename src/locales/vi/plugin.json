@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "Quản lý plugin",
+    "manager_description": "Quản lý các plugin đã cài đặt",
+    "refresh": "Làm mới",
+    "open_plugins_dir": "Mở thư mục",
+    "empty_title": "Chưa có plugin nào được cài đặt",
+    "empty_description": "Đặt thư mục plugin vào ~/.oxideterm/plugins/ để bắt đầu.",
+    "footer": "Đã cài đặt {{count}} plugin",
+    "active_count": "{{count}} đang hoạt động",
+    "by_author": "bởi {{author}}",
+    "show_details": "Chi tiết",
+    "hide_details": "Ẩn",
+    "reload": "Tải lại",
+    "disable": "Tắt",
+    "enable": "Bật",
+    "detail_version": "Phiên bản",
+    "detail_entry": "Điểm vào",
+    "detail_requires": "Yêu cầu",
+    "detail_contributes": "Đóng góp",
+    "contrib_tabs": "{{count}} tab",
+    "contrib_sidebar_panels": "{{count}} bảng bên",
+    "contrib_settings": "{{count}} cài đặt",
+    "contrib_input_interceptor": "Bộ chặn đầu vào",
+    "contrib_output_processor": "Bộ xử lý đầu ra",
+    "contrib_shortcuts": "{{count}} phím tắt",
+    "contrib_connection_hooks": "{{count}} hook kết nối",
+    "status": {
+      "active": "Hoạt động",
+      "inactive": "Không hoạt động",
+      "loading": "Đang tải…",
+      "error": "Lỗi",
+      "disabled": "Đã tắt"
+    }
+  }
+}

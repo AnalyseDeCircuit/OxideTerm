@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "플러그인 관리자",
+    "manager_description": "설치된 플러그인 관리",
+    "refresh": "새로고침",
+    "open_plugins_dir": "디렉토리 열기",
+    "empty_title": "설치된 플러그인이 없습니다",
+    "empty_description": "~/.oxideterm/plugins/에 플러그인 폴더를 넣어 시작하세요.",
+    "footer": "{{count}}개 플러그인 설치됨",
+    "active_count": "{{count}}개 활성",
+    "by_author": "제작: {{author}}",
+    "show_details": "상세",
+    "hide_details": "숨기기",
+    "reload": "다시 로드",
+    "disable": "비활성화",
+    "enable": "활성화",
+    "detail_version": "버전",
+    "detail_entry": "진입점",
+    "detail_requires": "필요 조건",
+    "detail_contributes": "기여",
+    "contrib_tabs": "탭 {{count}}개",
+    "contrib_sidebar_panels": "사이드바 패널 {{count}}개",
+    "contrib_settings": "설정 {{count}}개",
+    "contrib_input_interceptor": "입력 인터셉터",
+    "contrib_output_processor": "출력 프로세서",
+    "contrib_shortcuts": "단축키 {{count}}개",
+    "contrib_connection_hooks": "연결 훅 {{count}}개",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성",
+      "loading": "로딩 중…",
+      "error": "오류",
+      "disabled": "비활성화됨"
+    }
+  }
+}

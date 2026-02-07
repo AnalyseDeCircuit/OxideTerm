@@ -45,7 +45,8 @@
     "sftp_prefix": "SFTP",
     "forwards_prefix": "转发",
     "ide": "IDE",
-    "session_manager": "会话管理器"
+    "session_manager": "会话管理器",
+    "plugin_manager": "插件"
   },
   "ide": {
     "loading_project": "正在加载项目...",

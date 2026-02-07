@@ -71,8 +71,8 @@ export type FontFamily =
 /** Cursor style options */
 export type CursorStyle = 'block' | 'underline' | 'bar';
 
-/** Sidebar section options */
-export type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections' | 'ai' | 'system_health';
+/** Sidebar section options (string allows plugin:* dynamic sections) */
+export type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections' | 'ai' | 'system_health' | (string & {});
 
 /** Language options */
 export type Language = 'zh-CN' | 'en' | 'fr-FR' | 'ja' | 'es-ES' | 'pt-BR' | 'vi' | 'ko' | 'de' | 'it' | 'zh-TW';

@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "外掛管理器",
+    "manager_description": "管理已安裝的外掛",
+    "refresh": "重新整理",
+    "open_plugins_dir": "開啟目錄",
+    "empty_title": "尚無已安裝外掛",
+    "empty_description": "將外掛資料夾放入 ~/.oxideterm/plugins/ 即可開始使用。",
+    "footer": "已安裝 {{count}} 個外掛",
+    "active_count": "{{count}} 個活躍",
+    "by_author": "作者：{{author}}",
+    "show_details": "詳情",
+    "hide_details": "收起",
+    "reload": "重新載入",
+    "disable": "停用",
+    "enable": "啟用",
+    "detail_version": "版本",
+    "detail_entry": "入口",
+    "detail_requires": "需求",
+    "detail_contributes": "貢獻",
+    "contrib_tabs": "{{count}} 個分頁",
+    "contrib_sidebar_panels": "{{count}} 個側邊欄面板",
+    "contrib_settings": "{{count}} 個設定項",
+    "contrib_input_interceptor": "輸入攔截器",
+    "contrib_output_processor": "輸出處理器",
+    "contrib_shortcuts": "{{count}} 個快捷鍵",
+    "contrib_connection_hooks": "{{count}} 個連線鉤子",
+    "status": {
+      "active": "執行中",
+      "inactive": "未啟用",
+      "loading": "載入中…",
+      "error": "錯誤",
+      "disabled": "已停用"
+    }
+  }
+}

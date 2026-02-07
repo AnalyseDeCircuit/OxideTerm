@@ -22,6 +22,8 @@ const ForwardsView = lazy(() => import('../forwards/ForwardsView').then(m => ({ 
 const IdeWorkspace = lazy(() => import('../ide').then(m => ({ default: m.IdeWorkspace })));
 const LocalFileManager = lazy(() => import('../fileManager').then(m => ({ default: m.LocalFileManager })));
 const SessionManagerPanel = lazy(() => import('../sessionManager').then(m => ({ default: m.SessionManagerPanel })));
+const PluginTabRenderer = lazy(() => import('../plugin/PluginTabRenderer').then(m => ({ default: m.PluginTabRenderer })));
+const PluginManagerView = lazy(() => import('../plugin/PluginManagerView').then(m => ({ default: m.PluginManagerView })));
 
 // Loading fallback for lazy components
 const ViewLoader = () => {
@@ -147,6 +149,16 @@ export const AppLayout = () => {
                   {tab.type === 'session_manager' && (
                     <Suspense fallback={<ViewLoader />}>
                       <SessionManagerPanel />
+                    </Suspense>
+                  )}
+                  {tab.type === 'plugin' && tab.pluginTabId && (
+                    <Suspense fallback={<ViewLoader />}>
+                      <PluginTabRenderer pluginTabId={tab.pluginTabId} tab={tab} />
+                    </Suspense>
+                  )}
+                  {tab.type === 'plugin_manager' && (
+                    <Suspense fallback={<ViewLoader />}>
+                      <PluginManagerView />
                     </Suspense>
                   )}
                 </div>

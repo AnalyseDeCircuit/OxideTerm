@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "插件管理器",
+    "manager_description": "管理已安装的插件",
+    "refresh": "刷新",
+    "open_plugins_dir": "打开目录",
+    "empty_title": "暂无已安装插件",
+    "empty_description": "将插件文件夹放入 ~/.oxideterm/plugins/ 即可开始使用。",
+    "footer": "已安装 {{count}} 个插件",
+    "active_count": "{{count}} 个活跃",
+    "by_author": "作者：{{author}}",
+    "show_details": "详情",
+    "hide_details": "收起",
+    "reload": "重新加载",
+    "disable": "禁用",
+    "enable": "启用",
+    "detail_version": "版本",
+    "detail_entry": "入口",
+    "detail_requires": "要求",
+    "detail_contributes": "贡献",
+    "contrib_tabs": "{{count}} 个标签页",
+    "contrib_sidebar_panels": "{{count}} 个侧边栏面板",
+    "contrib_settings": "{{count}} 个设置项",
+    "contrib_input_interceptor": "输入拦截器",
+    "contrib_output_processor": "输出处理器",
+    "contrib_shortcuts": "{{count}} 个快捷键",
+    "contrib_connection_hooks": "{{count}} 个连接钩子",
+    "status": {
+      "active": "运行中",
+      "inactive": "未激活",
+      "loading": "加载中…",
+      "error": "错误",
+      "disabled": "已禁用"
+    }
+  }
+}
