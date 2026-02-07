@@ -1104,7 +1104,7 @@ interface AppState {
 | **User Connect** | `sessionTreeStore.connectNode` | `appStore.refreshConnections()` | 后端生成新 UUID，前端需立即获取以挂载 SFTP |
 | **User Disconnect** | `sessionTreeStore.disconnectNode` | `appStore.refreshConnections()` | 清除过期的 Connection Entry |
 | **State Drift Fix** | `sessionTreeStore.syncDrift` | `appStore.refreshConnections()` | 修复 "UI 显示断开但后端已连接" 的状态不一致 |
-| **Auto Reconnect** | Backend (Event) | `appStore.updateSession` | 响应后端的自动重连事件 |
+| **Auto Reconnect** | `reconnectOrchestratorStore` | `reconnectCascade` → pipeline | 前端统一编排重连与服务恢复 (v1.6.2) |
 | **IDE Mount** | `IdeWorkspace` | `appStore.refreshConnections()` | 确保 IDE 初始化时获取最新连接状态 |
 
 #### 代码范式：强制同步
@@ -1234,6 +1234,23 @@ const connectionKey = `${sessionId}-${connectionId}`; // 复合 Key
     *   **PortForward**: 重新应用转发规则。
 
 此模式比手动编写 `useEffect` 来重置几十个状态变量要健壮得多 (Robustness through Destruction)。
+
+### Reconnect Orchestrator (v1.6.2)
+
+v1.6.2 引入了统一的前端重连编排器 (`reconnectOrchestratorStore`)，替代了 `useConnectionEvents` 中分散的防抖/重试逻辑。
+
+**管道阶段**:
+```
+snapshot → ssh-connect → await-terminal → restore-forwards → resume-transfers → restore-ide → done
+```
+
+**关键设计决策**:
+1. **Snapshot-Before-Reset**: `resetNodeState` 会销毁 forwarding manager，因此必须在调用 `reconnectCascade` 之前捕获 forward 规则快照。
+2. **Terminal 不在管道内**: Key-Driven Reset 自动处理终端重建，orchestrator 只需等待新 `terminalSessionId` 出现。
+3. **Forward 重建而非恢复**: 旧 forward 规则被销毁后，使用 `createPortForward` 从快照重新创建，而非 `restartPortForward`。
+4. **用户意图保护**: 用户手动停止的 forward（`status === 'stopped'`）不会被恢复。
+
+**文件**: `src/store/reconnectOrchestratorStore.ts`
 
 ---
 

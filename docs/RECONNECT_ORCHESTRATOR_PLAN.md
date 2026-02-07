@@ -1,0 +1,233 @@
+# Reconnect Orchestrator Plan (Frontend-Only)
+
+## Summary
+Introduce a frontend-only reconnect orchestrator to replace the current debounce+retry logic in `useConnectionEvents`. The orchestrator owns reconnection state, queues per node, and runs a deterministic recovery pipeline for SSH, port forwards, SFTP transfers, and IDE state. No backend changes. Terminal recovery is handled automatically by React Key-Driven Reset and is NOT part of the pipeline.
+
+## Why This Plan (Review Findings)
+1. Backend auto-reconnect is intentionally removed (`NEUTRALIZED STUB`). Frontend must orchestrate.
+2. `useConnectionEvents` currently debounces and calls `reconnectCascade`, but has no post-reconnect recovery for forwards/SFTP/IDE.
+3. Every reconnect creates a **new connectionId** (UUID). The old connection is abandoned.
+4. `resetNodeState` is a scorched-earth reset: it closes terminals (destroying forwarding managers + persisted rules), clears all session IDs, and resets node status to `pending`.
+5. Terminal restoration happens automatically via Key-Driven Reset (`key={sessionId-connectionId}`). The orchestrator should NOT manage terminal lifecycle.
+6. Port forwards and SFTP transfers need explicit recovery after reconnection succeeds.
+
+## Goals
+1. A single reconnect brain: queueing, throttling, retries, and observability live in one store.
+2. Idempotent, cancellable pipeline: one node → one job, no duplicate work.
+3. Deterministic recovery sequence: **Snapshot → SSH → Forwards → SFTP → IDE**.
+4. Preserve user intent: do not restart user-stopped forwards; do not restore unsaved file contents.
+
+## Non-Goals
+1. No backend changes or new Tauri commands.
+2. No automatic recovery for "disconnected" (hard close) events — only "link_down".
+3. No content-level IDE restore (only reopen file tabs).
+4. No terminal session management (handled by Key-Driven Reset).
+
+## Constraints (From Code Verification)
+1. `resetNodeState` closes terminals via `api.closeTerminal()`, which triggers `forwarding_registry.remove()` on the backend, **permanently destroying forwarding rules and persisted data**. Snapshots MUST be captured before `reconnectCascade` is called.
+2. `recreate_terminal_pty` reuses the existing session on the same connection — but since reconnect always creates a new connectionId, old sessions become orphaned and new ones must be created fresh.
+3. `sftp_list_incomplete_transfers` queries by old session_id. Progress data survives `close_terminal` (separate storage). Can resume on a new session by passing new session_id.
+4. Backend `pause_forwards`/`restore_forwards` exist but are not exposed to frontend API layer. Use `listPortForwards` + `createPortForward` instead.
+5. `connectNodeWithAncestors` calls `resetNodeState` internally — no hook between them. Snapshot must happen BEFORE entering `reconnectCascade`.
+
+## Proposed Architecture
+
+### New Store
+Create `src/store/reconnectOrchestratorStore.ts` (Zustand).
+
+```typescript
+type ReconnectPhase =
+  | 'queued'
+  | 'snapshot'        // Capture pre-reset data
+  | 'ssh-connect'     // reconnectCascade
+  | 'await-terminal'  // Wait for Key-Driven Reset to recreate terminals
+  | 'restore-forwards'
+  | 'resume-transfers'
+  | 'restore-ide'
+  | 'done'
+  | 'failed'
+  | 'cancelled';
+
+type ReconnectJob = {
+  nodeId: string;
+  status: ReconnectPhase;
+  attempt: number;
+  maxAttempts: number;        // 3
+  startedAt: number;
+  endedAt?: number;
+  error?: string;
+  snapshot: ReconnectSnapshot;
+  abortController: AbortController;
+  restoredCount: number;      // Number of services restored (for toast)
+};
+
+type ReconnectSnapshot = {
+  nodeId: string;
+  // Forward rules captured BEFORE resetNodeState destroys them
+  forwardRules: Array<{
+    sessionId: string;         // Old session ID
+    rules: ForwardRule[];      // Only active/suspended rules, NOT stopped ones
+  }>;
+  // Old terminal session IDs for querying incomplete transfers
+  oldTerminalSessionIds: string[];
+  // IDE state (if IDE tab was open for this node)
+  ideSnapshot?: {
+    projectPath: string;
+    tabPaths: string[];
+  };
+};
+```
+
+Core state:
+- `jobs: Map<string, ReconnectJob>` keyed by nodeId.
+- `isRunning: boolean` — single worker guard.
+
+Core methods:
+- `scheduleReconnect(nodeId: string)` — 500ms debounce, collapse to shallowest root.
+- `cancel(nodeId: string)` — Cancel job + all descendant jobs, call `abortController.abort()`.
+- `cancelAll()` — Cancel everything.
+- `clearCompleted()` — Remove done/failed/cancelled jobs from map.
+
+### Queueing
+- Debounce: 500ms window collects multiple link_down nodes, then picks shallowest root.
+- Idempotent: if `jobs.has(nodeId)` and status not terminal (`done`/`failed`/`cancelled`), skip.
+- Concurrency: 1 (reuse existing `chainLock` mechanism).
+- Retry: Only on `CHAIN_LOCK_BUSY`/`NODE_LOCK_BUSY`, max 3 attempts, 2s backoff.
+
+## Pipeline Details
+
+### Phase 0: `snapshot` (NEW — Critical Fix)
+
+**MUST execute before `reconnectCascade` to capture data that resetNodeState destroys.**
+
+1. Collect `oldTerminalSessionIds` from `nodeTerminalMap.get(nodeId)` and descendants.
+2. For each old session ID:
+   a. Call `api.listPortForwards(sessionId)` to snapshot forward rules.
+   b. Filter: keep only rules with `status !== 'stopped'` (respect user intent).
+3. Check `ideStore`: if current project's nodeId matches, save `{ projectPath, tabPaths }`.
+4. Store snapshot in job.
+
+**Why this works**: `listPortForwards` queries the backend forwarding manager which still exists at this point. `resetNodeState` hasn't been called yet.
+
+### Phase 1: `ssh-connect`
+
+1. Call `reconnectCascade(rootNodeId)` — this internally:
+   - `resetNodeState()` per node (destroys terminals, forwards, sessions)
+   - `connectNodeInternal()` per node (creates new SSH connection with new UUID)
+   - Reconnects descendants
+   - `fetchTree()`
+2. On success: new `connectionId` is set on each node in `rawNodes`.
+3. On failure: mark job `failed`, show error toast.
+
+### Phase 2: `await-terminal`
+
+React Key-Driven Reset handles terminal creation automatically:
+- `AppLayout` renders `TerminalView` with `key={sessionId-connectionId}`.
+- `connectionId` changed → old component unmounts → new component mounts → calls `createTerminalForNode`.
+
+Orchestrator waits for the new `terminalSessionId` to appear:
+1. Poll `rawNodes[nodeId].terminalSessionId` every 500ms, timeout 10s.
+2. If no terminal tab is open for this node, skip (no terminal to wait for).
+3. Build `oldSessionId → newSessionId` mapping from snapshot + current state.
+
+### Phase 3: `restore-forwards`
+
+1. For each entry in `snapshot.forwardRules`:
+   a. Look up new sessionId from old→new mapping.
+   b. If no new session exists for this node, skip.
+   c. For each rule (excluding `stopped`):
+      - Call `api.createPortForward({ sessionId: newSessionId, ...rule })`.
+      - On failure: log warning, continue with next rule.
+      - On success: increment `restoredCount`.
+2. Check `abortController.signal` between each rule.
+
+### Phase 4: `resume-transfers`
+
+1. For each old session ID in snapshot:
+   a. Call `api.sftpListIncompleteTransfers(oldSessionId)`.
+   b. Look up new sessionId from mapping.
+   c. For each incomplete transfer:
+      - Call `api.sftpResumeTransferWithRetry(newSessionId, transferId)`.
+      - On failure: log warning, continue.
+      - On success: update `transferStore`, increment `restoredCount`.
+2. Check `abortController.signal` between each transfer.
+
+### Phase 5: `restore-ide`
+
+1. If `snapshot.ideSnapshot` exists:
+   a. Look up new `connectionId` and `sftpSessionId` from current node state.
+   b. Call `ideStore.openProject(connectionId, sftpSessionId, projectPath)`.
+   c. For each cached tab path: call `ideStore.openFile(path)`.
+   d. Do NOT restore `content`/`originalContent` (files will be re-fetched from remote).
+2. To enable this, enhance `ideStore.partialize` to persist `cachedProjectPath` and `cachedTabPaths`.
+
+## Integration Points
+
+### `useConnectionEvents` (simplify)
+Remove from this hook:
+- `pendingReconnectNodes` Set
+- `reconnectDebounceTimer` ref
+- `isReconnecting` flag
+- `reconnectRetryCount` counter
+- `scheduleReconnect` / `attemptReconnect` / `cancelPendingReconnect` / `clearAllPendingReconnects` functions
+
+Keep:
+- `link_down` handler: `updateConnectionState()` → `markLinkDownBatch()` → **`orchestrator.scheduleReconnect(nodeId)`** → `interruptTransfersBySession()`
+- `connected` handler: `clearLinkDown()`, `setReconnectProgress(null)` (orchestrator handles the rest)
+- `disconnected` handler: unchanged (hard disconnect, not orchestrator's concern)
+
+### `TabBar`
+- Replace `session?.state === 'reconnecting'` check with `orchestratorStore.jobs.get(nodeId)?.status`.
+- Manual reconnect button: call `orchestrator.scheduleReconnect(nodeId)`.
+- Cancel button: call `orchestrator.cancel(nodeId)`.
+
+### `sessionTreeStore`
+- `cancelPendingReconnect(nodeId)` usage sites → `orchestrator.cancel(nodeId)`.
+- `reconnectCascade` remains unchanged (orchestrator calls it as-is).
+
+### `appStore`
+- Remove `cancelReconnect()` action (dead code — backend auto-reconnect disabled).
+
+### `ideStore`
+- Add to `partialize`: `cachedProjectPath`, `cachedTabPaths`, `cachedNodeId`.
+- On `openProject`: save these cached fields.
+- On `closeProject`: clear cached fields.
+
+## Observability
+
+Toast notifications via `useToastStore`:
+
+| Event | Variant | Message Key |
+|-------|---------|-------------|
+| Job start | `info` | `connections.reconnect.starting` — "{nodeName} 正在恢复连接..." |
+| SSH success | `info` | `connections.reconnect.ssh_restored` — "SSH 连接已恢复" |
+| All done | `success` | `connections.reconnect.completed` — "连接已恢复，{count} 个服务已重建" |
+| Failed | `error` | `connections.reconnect.failed` — "连接恢复失败: {error}"（附重试按钮） |
+| Cancelled | `info` | `connections.reconnect.cancelled` — "已取消重连" |
+
+Add keys to `connections.json` in all 11 locales. Do NOT create a new locale namespace.
+
+## Files To Change
+
+| File | Action | Scope |
+|------|--------|-------|
+| `src/store/reconnectOrchestratorStore.ts` | **New** | Core orchestrator (≈300 lines) |
+| `src/hooks/useConnectionEvents.ts` | **Simplify** | Remove debounce/retry logic, delegate to orchestrator |
+| `src/store/appStore.ts` | **Minor** | Remove dead `cancelReconnect()` |
+| `src/store/ideStore.ts` | **Minor** | Add cached fields to `partialize` |
+| `src/components/layout/TabBar.tsx` | **Minor** | Read job state from orchestrator |
+| `src/locales/*/connections.json` | **Minor** | Add 5 reconnect toast keys × 11 locales |
+| `docs/ARCHITECTURE.md` | **Update** | Remove stale backend auto-reconnect docs |
+| `docs/SYSTEM_INVARIANTS.md` | **Update** | Add orchestrator invariants |
+
+## Verification Checklist
+- [ ] Link down → job enqueued with snapshot → SSH reconnect → services restored → toast
+- [ ] Cancel mid-run → job cancelled, later phases skipped, toast
+- [ ] Multiple link_down events within 500ms → debounce to shallowest root
+- [ ] Idempotent: same nodeId enqueued twice → second is skipped
+- [ ] Suspended forwards restored on new session; user-stopped forwards NOT restored
+- [ ] SFTP incomplete transfers resume on new session using old session query
+- [ ] IDE project reopens with file tabs (content re-fetched, not from cache)
+- [ ] Terminal restored automatically via Key-Driven Reset (no orchestrator involvement)
+- [ ] `npm run i18n:check` passes with all new keys
+

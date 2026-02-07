@@ -62,6 +62,13 @@
       "reconnecting_wait": "La conexión se está restaurando. Por favor espere e intente de nuevo.",
       "reconnect_unstable": "Conexión inestable",
       "try_again_later": "La conexión aún no se ha estabilizado. Por favor intente más tarde."
+    },
+    "reconnect": {
+      "starting": "{{name}} se está reconectando...",
+      "ssh_restored": "Conexión SSH restaurada",
+      "completed": "Conexión restaurada, {{count}} servicio(s) recuperado(s)",
+      "failed": "Error de reconexión: {{error}}",
+      "cancelled": "Reconexión cancelada"
     }
   }
 }

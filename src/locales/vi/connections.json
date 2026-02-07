@@ -62,6 +62,13 @@
       "reconnecting_wait": "Kết nối đang được khôi phục. Vui lòng đợi và thử lại.",
       "reconnect_unstable": "Kết nối không ổn định",
       "try_again_later": "Kết nối chưa ổn định. Vui lòng thử lại sau."
+    },
+    "reconnect": {
+      "starting": "{{name}} đang kết nối lại...",
+      "ssh_restored": "Kết nối SSH đã được khôi phục",
+      "completed": "Kết nối đã được khôi phục, {{count}} dịch vụ đã phục hồi",
+      "failed": "Kết nối lại thất bại: {{error}}",
+      "cancelled": "Đã hủy kết nối lại"
     }
   }
 }

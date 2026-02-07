@@ -62,6 +62,13 @@
       "reconnecting_wait": "连接正在恢复中，请稍后重试。",
       "reconnect_unstable": "连接不稳定",
       "try_again_later": "连接尚未稳定，请稍后再试。"
+    },
+    "reconnect": {
+      "starting": "{{name}} 正在恢复连接...",
+      "ssh_restored": "SSH 连接已恢复",
+      "completed": "连接已恢复，{{count}} 个服务已重建",
+      "failed": "连接恢复失败: {{error}}",
+      "cancelled": "已取消重连"
     }
   }
 }

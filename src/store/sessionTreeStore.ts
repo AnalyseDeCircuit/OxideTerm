@@ -13,7 +13,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { api } from '../lib/api';
 import { guardSessionConnection, isConnectionGuardError } from '../lib/connectionGuard';
-import { cancelPendingReconnect } from '../hooks/useConnectionEvents';
+import { useReconnectOrchestratorStore } from './reconnectOrchestratorStore';
 import { topologyResolver } from '../lib/topologyResolver';
 import { useSettingsStore } from './settingsStore';
 import { useAppStore } from './appStore';
@@ -643,8 +643,9 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
       const allAffectedNodes = [node, ...descendants];
       
       // 1.5 取消待重连队列中的节点（防止诈尸重连）
+      const orchestrator = useReconnectOrchestratorStore.getState();
       for (const n of allAffectedNodes) {
-        cancelPendingReconnect(n.id);
+        orchestrator.cancel(n.id);
       }
       
       // 2. 保存断开前的终端数量（用于重连时恢复）
@@ -847,20 +848,23 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         
         // ========== Step 3: 跳过已连接的前缀节点 ==========
         // 找到第一个需要连接的节点（状态非 connected/active）
+        // 注意: link-down 节点虽然仍有 sshConnectionId，但连接已不可用，不能跳过
         let startIndex = 0;
+        const { linkDownNodeIds } = get();
         for (let i = 0; i < pathNodes.length; i++) {
           const node = get().getRawNode(pathNodes[i].id);
           if (!node) continue;
           
           const isConnected = node.state.status === 'connected';
           const hasConnectionId = !!node.sshConnectionId;
+          const isLinkDown = linkDownNodeIds.has(pathNodes[i].id);
           
-          if (isConnected && hasConnectionId) {
-            // 该节点已连接，跳过
+          if (isConnected && hasConnectionId && !isLinkDown) {
+            // 该节点已连接且未标记为 link-down，跳过
             startIndex = i + 1;
             console.debug(`[connectNodeWithAncestors] Skipping already connected node ${pathNodes[i].id}`);
           } else {
-            // 遇到第一个未连接节点，停止跳过
+            // 遇到第一个未连接或 link-down 节点，停止跳过
             break;
           }
         }
