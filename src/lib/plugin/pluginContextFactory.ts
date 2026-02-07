@@ -206,7 +206,7 @@ export function buildPluginContext(manifest: PluginManifest): PluginContext {
           id: crypto.randomUUID(),
           type: 'plugin' as const,
           title: tabDef?.title ?? tabId,
-          icon: '🧩',
+          icon: tabDef?.icon ?? 'Puzzle',
           pluginTabId: compositeKey,
         };
         useAppStore.setState((state) => ({

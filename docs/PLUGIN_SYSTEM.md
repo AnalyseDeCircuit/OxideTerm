@@ -1,8 +1,8 @@
 # OxideTerm 运行时动态插件系统设计文档
 
-> **状态**: 设计完成，待实施  
-> **版本**: v1.0  
-> **日期**: 2026-02-08  
+> **状态**: 已实施  
+> **版本**: v1.1  
+> **日期**: 2026-02-09  
 > **前置依赖**: OxideTerm v1.6.2+
 
 ---
@@ -85,7 +85,7 @@ OxideTerm 当前所有功能模块（AI、IDE、SFTP、端口转发等）都是�
       "outputProcessor": true,
       "shortcuts": [{ "key": "Ctrl+Shift+A", "command": "sshAudit.scan" }]
     },
-    "connectionHooks": ["onConnect", "onDisconnect", "onReconnect", "onLinkDown"],
+    "connectionHooks": ["onConnect", "onDisconnect", "onReconnect", "onLinkDown", "onIdle"],
     "apiCommands": []
   },
 
@@ -143,6 +143,7 @@ interface PluginEventsAPI {
   onDisconnect(handler: (snapshot: ConnectionSnapshot) => void): Disposable;
   onLinkDown(handler: (snapshot: ConnectionSnapshot) => void): Disposable;
   onReconnect(handler: (snapshot: ConnectionSnapshot) => void): Disposable;
+  onIdle(handler: (snapshot: ConnectionSnapshot) => void): Disposable;
   onSessionCreated(handler: (info: { sessionId: string; connectionId: string }) => void): Disposable;
   onSessionClosed(handler: (info: { sessionId: string }) => void): Disposable;
   // 插件间通信（命名空间自动隔离为 plugin:{pluginId}:{name}）
@@ -338,7 +339,7 @@ import ReactDOM from 'react-dom/client';
 import { create } from 'zustand';
 import * as lucideReact from 'lucide-react';
 
-window.__OXIDE__ = { React, ReactDOM: { createRoot: ReactDOM.createRoot }, zustand: { create }, lucideReact };
+window.__OXIDE__ = { React, ReactDOM: { createRoot: ReactDOM.createRoot }, zustand: { create }, lucideReact, ui: pluginUIKit };
 ```
 
 插件构建时将 `react`, `react-dom`, `zustand`, `lucide-react` 标记为 external，运行时从 `window.__OXIDE__` 解析。
@@ -518,57 +519,40 @@ ws.onmessage = (e) => handleWsMessage(e, ws);
 
 **问题**：折叠态（L612-L760）和展开态（L786-L920）各有一套硬编码按钮列表，~200 行几乎完全重复。
 
-**重构**：
+**实际实现（v1.6.2）**：
 
-1. 定义按钮配置类型和常量数组：
-```typescript
-type SidebarButtonKind = 'section' | 'tab' | 'toggle' | 'action';
+Sidebar 按钮已重构为三区结构（`topButtons` + 分隔线 + `bottomButtons`）：
 
-type SidebarButtonDef = {
-  kind: SidebarButtonKind;
-  key: string;         // sidebarSection name 或 tabType
-  icon: LucideIcon;
-  titleKey: string;    // i18n key
-  badge?: () => number;
-  separator?: boolean; // 前面加分隔线
-};
-
-const SIDEBAR_BUTTONS: SidebarButtonDef[] = [
-  { kind: 'section', key: 'sessions', icon: Link2, titleKey: 'sidebar.panels.sessions', separator: true },
-  { kind: 'section', key: 'saved', icon: Database, titleKey: 'sidebar.panels.saved' },
-  { kind: 'tab', key: 'session_manager', icon: LayoutList, titleKey: 'sidebar.panels.session_manager' },
-  // ... 等等
-];
+```
+┌─────────────────────┐
+│  展开/折叠按钮       │  ← 顶部固定
+├─────────────────────┤
+│  topButtons          │  ← 可滚动区域 (overflow-y-auto scrollbar-none)
+│  ├─ Sessions         │
+│  ├─ Saved            │
+│  ├─ Session Manager  │
+│  ├─ Terminal (local) │
+│  ├─ Forwards         │
+│  ├─ Plugin Manager   │
+│  └─ 插件侧边栏面板   │  ← pluginStore.sidebarPanels 动态注入
+├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤  ← 分隔线 (w-6 h-px bg-theme-border)
+│  bottomButtons       │  ← 固定底部 (shrink-0)
+│  ├─ Network          │
+│  ├─ AI Chat          │
+│  ├─ Settings         │
+│  └─ Theme Toggle     │
+└─────────────────────┘
 ```
 
-2. 折叠/展开态共用同一数组渲染，差异通过参数控制：
-```typescript
-function renderButton(def: SidebarButtonDef, collapsed: boolean) {
-  const onClick = () => {
-    if (def.kind === 'section') {
-      setSidebarSection(def.key);
-      if (collapsed) toggleSidebar(); // 唯一差异
-    } else if (def.kind === 'tab') {
-      createTab(def.key);
-    }
-    // ...
-  };
-  return <Button variant={...} onClick={onClick}>...</Button>;
-}
-```
-
-3. **末尾预留插件按钮注入点**：
-```typescript
-{pluginStore.sidebarPanels.map(([id, panel]) => 
-  renderButton({ kind: 'section', key: `plugin:${id}`, icon: panel.icon, titleKey: panel.title }, collapsed)
-)}
-```
+- 插件图标通过 `resolvePluginIcon(panel.icon)` 解析 Lucide 组件名
+- 当插件数量超出可视区域时，中间区域自动出现滚动
+- 折叠/展开两种模式共享同一结构
 
 ---
 
 ## 10. 文件清单
 
-### 10.1 需要创建的文件（13 个）
+### 10.1 需要创建的文件（15 个）
 
 | 文件 | Phase | 用途 | 预估行数 |
 |------|-------|------|---------|
@@ -581,23 +565,26 @@ function renderButton(def: SidebarButtonDef, collapsed: boolean) {
 | `src/lib/plugin/pluginSettingsManager.ts` | 4 | 插件设置读写与持久化 | ~80 |
 | `src/lib/plugin/pluginI18nManager.ts` | 4 | 插件 i18n 命名空间注册 | ~60 |
 | `src/lib/plugin/pluginStorage.ts` | 3 | 插件作用域 localStorage 封装 | ~40 |
+| `src/lib/plugin/pluginUIKit.tsx` | 6 | 插件专用 React UI 组件库（24 个组件） | ~1072 |
+| `src/lib/plugin/pluginIconResolver.ts` | 6 | Lucide 图标名 → React 组件动态解析 | ~35 |
 | `src/components/plugin/PluginTabRenderer.tsx` | 6 | 插件 Tab 视图渲染器 | ~50 |
 | `src/components/plugin/PluginSidebarRenderer.tsx` | 6 | 插件侧边栏面板渲染器 | ~50 |
 | `src/components/plugin/PluginManagerView.tsx` | 7 | 插件管理 UI | ~300 |
 | `src-tauri/src/commands/plugin.rs` | 2 | 后端：扫描目录、读文件、配置读写 | ~120 |
 
-### 10.2 需要修改的文件（10 个）
+### 10.2 需要修改的文件（11 个）
 
 | 文件 | Phase | 修改内容 |
 |------|-------|----------|
 | `src/components/terminal/TerminalView.tsx` | 0, 5 | 提取 `handleWsMessage`；注入输入/输出管道 |
-| `src/components/layout/Sidebar.tsx` | 0, 6 | data-driven 重构；插件按钮/面板注入 |
+| `src/components/layout/Sidebar.tsx` | 0, 6 | 三区布局重构（topButtons/bottomButtons + 分隔线）；插件面板注入 |
+| `src/components/layout/TabBar.tsx` | 6 | 插件 Tab 图标渲染（`PluginTabIcon` + `resolvePluginIcon`） |
 | `src/types/index.ts` | 1 | `TabType` 添加 `'plugin'`，`Tab` 添加 `pluginTabId?` |
 | `src/store/appStore.ts` | 6 | `createTab` 添加 plugin 分支 |
 | `src/store/settingsStore.ts` | 6 | `SidebarSection` 扩展支持 plugin 格式 |
 | `src/components/layout/AppLayout.tsx` | 6 | Tab 渲染添加 plugin 分支 |
 | `src/hooks/useTerminalKeyboard.ts` | 5 | 添加插件快捷键查找 |
-| `src/main.tsx` | 3 | 暴露 `window.__OXIDE__` 共享模块 |
+| `src/main.tsx` | 3 | 暴露 `window.__OXIDE__`（含 `ui: pluginUIKit`） |
 | `src/App.tsx` | 7 | 启动时初始化插件系统 |
 | `src-tauri/src/commands/mod.rs` + `lib.rs` | 2 | 注册 plugin 命令模块 |
 
@@ -681,4 +668,4 @@ Phase 7 — 管理界面与初始化
 
 ---
 
-*文档版本: v1.0 | 最后更新: 2026-02-08*
+*文档版本: v1.1 | 最后更新: 2026-02-09*

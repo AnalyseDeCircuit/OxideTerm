@@ -8,6 +8,7 @@ import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { cn } from '../../lib/utils';
 import { Tab, PaneNode } from '../../types';
 import { topologyResolver } from '../../lib/topologyResolver';
+import { resolvePluginIcon } from '../../lib/plugin/pluginIconResolver';
 import { ReconnectTimeline } from '../connections/ReconnectTimeline';
 
 /** Count leaf panes in a pane tree */
@@ -40,11 +41,18 @@ const TabIcon = ({ type }: { type: string }) => {
     case 'session_manager':
       return <LayoutList className={iconClass} />;
     case 'plugin_manager':
-    case 'plugin':
       return <Puzzle className={iconClass} />;
+    case 'plugin':
+      return null; // handled by PluginTabIcon
     default:
       return null;
   }
+};
+
+/** Resolve plugin tab icon from manifest icon name */
+const PluginTabIcon = ({ iconName }: { iconName: string }) => {
+  const Icon = resolvePluginIcon(iconName);
+  return <Icon className="h-3.5 w-3.5 opacity-70" />;
 };
 
 // Get dynamic tab title (non-hook version for use in render)
@@ -313,7 +321,7 @@ export const TabBar = () => {
                   showReconnectProgress && "border-t-amber-500"
                 )}
               >
-                <TabIcon type={tab.type} />
+                {tab.type === 'plugin' && tab.icon ? <PluginTabIcon iconName={tab.icon} /> : <TabIcon type={tab.type} />}
                 <span className="truncate flex-1">{getTabTitle(tab, sessions, t)}</span>
 
                 {/* Reconnect progress indicator with hover timeline */}

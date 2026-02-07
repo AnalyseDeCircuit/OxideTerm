@@ -1,7 +1,7 @@
-# OxideTerm 架构设计 (v1.4.0)
+# OxideTerm 架构设计 (v1.6.2)
 
-> **版本**: v1.4.0 (2026-02-04)
-> **上次更新**: 2026-02-04
+> **版本**: v1.6.2 (2026-02-09)
+> **上次更新**: 2026-02-09
 > 本文档描述 OxideTerm 的系统架构、设计决策和核心组件。
 
 ## 目录
@@ -16,15 +16,16 @@
 8. **[搜索架构](#搜索架构)**
 9. **[Oxide 文件加密格式](#oxide-文件加密格式)**
 10. [前端架构](#前端架构-react)
-11. **[多 Store 架构 (v1.4.0)](#多-store-架构)**
-12. **[异常链路架构 (v1.4.0)](#异常链路架构)**
-13. [AI 侧边栏聊天 (v1.3.0)](#ai-侧边栏聊天-v130)
-14. [SSH 连接池](#ssh-连接池)
-15. [数据流与协议](#数据流与协议)
-16. [会话生命周期](#会话生命周期)
-17. [重连机制](#重连机制)
-18. [安全设计](#安全设计)
-19. [性能优化](#性能优化)
+11. **[运行时插件系统 (v1.6.2)](#运行时插件系统-v162)**
+12. **[多 Store 架构 (v1.4.0)](#多-store-架构)**
+13. **[异常链路架构 (v1.4.0)](#异常链路架构)**
+14. [AI 侧边栏聊天 (v1.3.0)](#ai-侧边栏聊天-v130)
+15. [SSH 连接池](#ssh-连接池)
+16. [数据流与协议](#数据流与协议)
+17. [会话生命周期](#会话生命周期)
+18. [重连机制](#重连机制)
+19. [安全设计](#安全设计)
+20. [性能优化](#性能优化)
 
 ---
 
@@ -60,12 +61,14 @@ flowchart TB
             RemoteStore["AppStore (Fact)<br/>Connection State"]
             IdeStore["IdeStore (Context)<br/>Project State"]
             LocalStore["LocalTerminalStore<br/>Local PTY"]
+            PluginStore["PluginStore<br/>UI Registry"]
         end
 
         Terminal["xterm.js + WebGL"]
 
         UI --> TreeStore
         UI --> RemoteStore
+        UI --> PluginStore
         
         TreeStore -- "Sync (refreshConnections)" --> RemoteStore
         RemoteStore --> Terminal
@@ -938,6 +941,11 @@ src/
 │   │   ├── ChatMessage.tsx      # 消息气泡（支持代码块）
 │   │   └── ChatInput.tsx        # 输入区域（支持上下文捕获）
 │   │
+│   ├── plugin/             # 插件 UI 组件 (v1.6.2)
+│   │   ├── PluginManagerView.tsx
+│   │   ├── PluginTabRenderer.tsx
+│   │   └── PluginSidebarRenderer.tsx
+│   │
 │   └── modals/             # 弹窗组件
 │       ├── NewConnectionModal.tsx
 │       └── SettingsModal.tsx
@@ -949,11 +957,13 @@ src/
 │   ├── sessionTreeStore.ts    # 会话树状态
 │   ├── settingsStore.ts       # 统一设置存储
 │   ├── transferStore.ts       # SFTP传输队列状态
-│   └── aiChatStore.ts         # AI聊天状态 (v1.3.0)
+│   ├── aiChatStore.ts         # AI聊天状态 (v1.3.0)
+│   └── pluginStore.ts         # 插件运行时状态 (v1.6.2)
 │
 ├── lib/                    # 工具库
 │   ├── api.ts              # Tauri API 封装
 │   ├── terminalRegistry.ts # 终端缓冲区注册表 (v1.3.0)
+│   ├── plugin/              # 插件运行时与 UI Kit (v1.6.2)
 │   └── utils.ts            # 通用工具函数
 │
 ├── hooks/                  # 自定义 Hooks
@@ -1033,6 +1043,26 @@ const TerminalView = ({ sessionId, wsUrl }: Props) => {
 
 ---
 
+## 运行时插件系统 (v1.6.2)
+
+插件系统允许第三方在运行时加载 UI 与行为扩展，核心由前端负责，后端仅提供文件读写与配置存储。
+
+**关键组件**：
+- `pluginStore.ts`：插件清单、运行状态、UI 注册表（Tab/Sidebar）
+- `pluginLoader.ts`：发现、校验、加载、卸载生命周期
+- `pluginContextFactory.ts`：Membrane API（`Object.freeze()` + `Proxy`）
+- `pluginUIKit.tsx`：插件 UI Kit（共享宿主主题变量）
+- `pluginIconResolver.ts`：Lucide 图标名动态解析
+
+**宿主共享模块**：
+`window.__OXIDE__ = { React, ReactDOM, zustand, lucideReact, ui }`，避免双实例 hooks 崩溃。
+
+**UI 接入点**：
+- Tab 渲染：`PluginTabRenderer` + `TabBar` 的 `PluginTabIcon`
+- 侧边栏：`Sidebar` 在 `topButtons` 区域注入插件面板入口
+
+---
+
 ## 多 Store 架构 (v1.4.0)
 
 ### 架构概览
@@ -1045,10 +1075,12 @@ flowchart TB
         
         IdeStore["ideStore.ts<br/>(Context)<br/>Uses connectionId"]
         Transfer["transferStore.ts<br/>(Task)<br/>Uses connectionId"]
+        PluginStore["pluginStore.ts<br/>(UI Registry)<br/>Tabs & Panels"]
         
         SessionTree -- "3. Refresh Signal" --> AppStore
         AppStore -- "Fact: ConnectionId" --> IdeStore
         AppStore -- "Fact: ConnectionId" --> Transfer
+        AppStore -- "Read-only snapshots" --> PluginStore
     end
 
     subgraph Backend ["Backend Layer"]
@@ -1063,6 +1095,7 @@ flowchart TB
     style AppStore fill:#fce4ec,stroke:#c2185b,stroke-width:2px
     style SessionTree fill:#fff3cd,stroke:#fbc02d,stroke-width:2px
     style IdeStore fill:#f3e5f5
+    style PluginStore fill:#e8f5e9
     style Backend fill:#fff3e0
 ```
 

@@ -286,14 +286,17 @@ OxideTerm/
 │   │   ├── sftp/               # SFTP 文件浏览器
 │   │   ├── ide/                # IDE 模式组件
 │   │   ├── ai/                 # AI 聊天组件
+│   │   ├── plugin/             # 插件 UI 视图
 │   │   └── modals/             # 弹窗组件
 │   ├── store/                  # Zustand 状态管理
 │   │   ├── appStore.ts         # 远程会话状态
 │   │   ├── ideStore.ts         # IDE 模式状态
 │   │   ├── localTerminalStore.ts  # 本地 PTY 状态
+│   │   ├── pluginStore.ts      # 插件运行时状态
 │   │   ├── settingsStore.ts    # 统一设置存储
 │   │   └── aiChatStore.ts      # AI 聊天状态
 │   └── lib/                    # API 封装与工具
+│       └── plugin/             # 插件运行时与 UI Kit
 │
 ├── src-tauri/                  # 后端 (Rust)
 │   └── src/
@@ -321,6 +324,8 @@ OxideTerm/
 │
 └── docs/                       # 文档
     ├── ARCHITECTURE.md         # 架构设计
+  ├── PLUGIN_DEVELOPMENT.md   # 插件开发指南
+  ├── PLUGIN_SYSTEM.md        # 插件系统设计
     └── PROTOCOL.md             # 协议规范
 ```
 
@@ -328,7 +333,7 @@ OxideTerm/
 
 ## 🗺️ 路线图
 
-### ✅ 已完成（v1.3.0）
+### ✅ 已完成（v1.6.2）
 - [x] 本地终端支持（PTY）
 - [x] SSH 连接池与多路复用
 - [x] 自动重连机制
@@ -340,7 +345,10 @@ OxideTerm/
 - [x] AI 终端助手（内联 + 侧边栏聊天）
 - [x] Keyboard-Interactive 认证（实验性）
 - [x] 终端上下文捕获（AI 集成）
-- [x] 国际化支持（9 种语言）
+- [x] 国际化支持（11 种语言）
+- [x] 运行时插件系统（PluginContext + UI Kit）
+- [x] AI API Key 系统钥匙串存储
+- [x] AI 远程环境检测
 
 ### 🚧 进行中
 - [ ] 命令面板 (`⌘K`)

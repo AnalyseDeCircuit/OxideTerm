@@ -288,14 +288,17 @@ OxideTerm/
 │   │   ├── sftp/               # SFTP file browser
 │   │   ├── ide/                # IDE mode components
 │   │   ├── ai/                 # AI chat components
+│   │   ├── plugin/             # Plugin UI surfaces
 │   │   └── modals/             # Modal dialogs
 │   ├── store/                  # Zustand state management
 │   │   ├── appStore.ts         # Remote session state
 │   │   ├── ideStore.ts         # IDE mode state
 │   │   ├── localTerminalStore.ts  # Local PTY state
+│   │   ├── pluginStore.ts      # Plugin runtime state
 │   │   ├── settingsStore.ts    # Unified settings
 │   │   └── aiChatStore.ts      # AI chat state
 │   └── lib/                    # API wrappers & utilities
+│       └── plugin/             # Plugin runtime & UI kit
 │
 ├── src-tauri/                  # Backend (Rust)
 │   └── src/
@@ -323,6 +326,8 @@ OxideTerm/
 │
 └── docs/                       # Documentation
     ├── ARCHITECTURE.md         # Architecture design
+  ├── PLUGIN_DEVELOPMENT.md   # Plugin development guide
+  ├── PLUGIN_SYSTEM.md        # Plugin system design
     └── PROTOCOL.md             # Protocol specs
 ```
 
@@ -330,7 +335,7 @@ OxideTerm/
 
 ## 🗺️ Roadmap
 
-### ✅ Completed (v1.3.0)
+### ✅ Completed (v1.6.2)
 - [x] Local terminal support (PTY)
 - [x] SSH connection pool & multiplexing
 - [x] Auto-reconnect mechanism
@@ -342,7 +347,10 @@ OxideTerm/
 - [x] AI terminal assistant (inline + sidebar chat)
 - [x] Keyboard-Interactive auth (experimental)
 - [x] Terminal context capture for AI
-- [x] i18n support (9 languages)
+- [x] i18n support (11 languages)
+- [x] Runtime plugin system (PluginContext + UI kit)
+- [x] AI API keys in OS keychain
+- [x] Remote environment detection for AI
 
 ### 🚧 In Progress
 - [ ] Command palette (`⌘K`)
