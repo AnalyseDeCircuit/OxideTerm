@@ -114,9 +114,12 @@ OxideTerm/
 │   └── icons/              # 应用图标
 ├── src/                    # 前端源码
 │   ├── components/         # React 组件
+│   │   └── plugin/          # 插件 UI 视图
 │   ├── hooks/              # 自定义 Hooks
 │   ├── lib/                # 工具函数
+│   │   └── plugin/          # 插件运行时与 UI Kit
 │   ├── store/              # Zustand 状态
+│   │   └── pluginStore.ts   # 插件运行时状态
 │   ├── styles/             # CSS 样式
 │   └── types/              # TypeScript 类型
 ├── src-tauri/              # 后端源码
@@ -128,6 +131,13 @@ OxideTerm/
 ├── tsconfig.json           # TypeScript 配置
 └── vite.config.ts          # Vite 配置
 ```
+
+---
+
+## 插件开发
+
+- 插件 API 与生命周期说明见 [docs/PLUGIN_SYSTEM.md](PLUGIN_SYSTEM.md)
+- 插件开发规范与 UI Kit 组件清单见 [docs/PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md)
 
 ---
 

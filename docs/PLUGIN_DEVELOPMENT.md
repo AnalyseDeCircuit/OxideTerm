@@ -408,6 +408,10 @@ Rust read_plugin_file(id, "main.js")
 | `icon` | `string` | [Lucide React](https://lucide.dev/icons/) 图标名称 |
 
 > 声明后需在 `activate()` 中调用 `ctx.ui.registerTabView(id, Component)` 注册组件。
+>
+> `icon` 字段直接用于标签栏（Tab Bar）的图标渲染。使用 PascalCase 的 Lucide 图标名，例如 `"LayoutDashboard"`、`"Server"`、`"Activity"`。如果名称无效或缺失，默认显示 `Puzzle` 图标。
+>
+> 完整图标列表见: https://lucide.dev/icons/
 
 ### 4.3 contributes.sidebarPanels
 
@@ -430,6 +434,10 @@ Rust read_plugin_file(id, "main.js")
 | `title` | `string` | 面板标题 |
 | `icon` | `string` | Lucide React 图标名称 |
 | `position` | `"top" \| "bottom"` | 在侧边栏中的位置。默认 `"bottom"` |
+
+> `icon` 字段直接用于侧边栏活动栏（Activity Bar）的图标渲染。使用 PascalCase 的 Lucide 图标名，例如 `"Info"`、`"Database"`、`"BarChart"`。如果名称无效或缺失，默认显示 `Puzzle` 图标。
+>
+> 当插件面板较多时，活动栏中部区域会自动支持滚动，底部的固定按钮（本地终端、文件管理、设置、插件管理）始终可见。
 
 ### 4.4 contributes.settings
 
@@ -1283,6 +1291,8 @@ function MyIcon() {
 ```
 
 完整图标列表见: https://lucide.dev/icons/
+
+> **Manifest 图标解析**：`plugin.json` 中 `contributes.tabs[].icon` 和 `contributes.sidebarPanels[].icon` 字段使用图标名称字符串（如 `"LayoutDashboard"`），系统会通过 `resolvePluginIcon()` 自动将其解析为对应的 Lucide React 组件，用于标签栏和侧边栏活动栏的图标渲染。插件组件内部仍然通过解构 `lucideReact` 直接使用图标组件。
 
 ### 7.5 使用 UI Kit（推荐）
 

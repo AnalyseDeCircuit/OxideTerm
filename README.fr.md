@@ -279,7 +279,7 @@ cargo build --no-default-features --release
 
 ## 🗺️ Feuille de Route
 
-### ✅ Complété (v1.3.0)
+### ✅ Complété (v1.6.2)
 - [x] Support de terminal local (PTY)
 - [x] Pool de connexions SSH & multiplexage
 - [x] Mécanisme de reconnexion auto
@@ -291,7 +291,10 @@ cargo build --no-default-features --release
 - [x] Assistant terminal AI (inline + chat latéral)
 - [x] Auth Keyboard-Interactive (expérimental)
 - [x] Capture de contexte terminal pour AI
-- [x] Support i18n (9 langues)
+- [x] Support i18n (11 langues)
+- [x] Système de plugins runtime (PluginContext + UI Kit)
+- [x] Clés API AI stockées dans le trousseau système
+- [x] Détection d'environnement distant pour l'IA
 
 ### 🚧 En Cours
 - [ ] Palette de commandes (`⌘K`)

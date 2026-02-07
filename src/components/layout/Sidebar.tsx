@@ -27,6 +27,7 @@ import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { usePluginStore } from '../../store/pluginStore';
+import { resolvePluginIcon } from '../../lib/plugin/pluginIconResolver';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -617,8 +618,6 @@ export const Sidebar = () => {
     badge?: number;
     badgeColor?: string;
     separator?: boolean;
-    spacer?: boolean;
-    wrapDiv?: boolean;
   };
 
   // Plugin-registered sidebar panels (inserted between main buttons and bottom group)
@@ -627,11 +626,11 @@ export const Sidebar = () => {
   ).map(panel => ({
     kind: 'section' as const,
     key: `plugin:${panel.pluginId}:${panel.panelId}`,
-    icon: Puzzle,
+    icon: resolvePluginIcon(panel.icon),
     titleKey: panel.title,
   }));
 
-  const sidebarButtons: SidebarButtonDef[] = [
+  const topButtons: SidebarButtonDef[] = [
     { kind: 'section', key: 'sessions', icon: Link2, titleKey: 'sidebar.panels.sessions', separator: true },
     { kind: 'section', key: 'saved', icon: Database, titleKey: 'sidebar.panels.saved' },
     { kind: 'tab', key: 'session_manager', icon: LayoutList, titleKey: 'sidebar.panels.session_manager' },
@@ -642,12 +641,17 @@ export const Sidebar = () => {
     { kind: 'toggle', key: 'ai', icon: Sparkles, titleKey: 'sidebar.panels.ai' },
     // Plugin-registered sidebar panels
     ...pluginPanelDefs,
-    // Bottom-aligned buttons
-    { kind: 'action', key: 'local_terminal', icon: Square, titleKey: 'sidebar.actions.new_local_terminal', spacer: true, badge: localTerminals.size > 0 ? localTerminals.size : undefined, badgeColor: 'bg-blue-500' },
+  ];
+
+  const bottomButtons: SidebarButtonDef[] = [
+    { kind: 'action', key: 'local_terminal', icon: Square, titleKey: 'sidebar.actions.new_local_terminal', badge: localTerminals.size > 0 ? localTerminals.size : undefined, badgeColor: 'bg-blue-500' },
     { kind: 'tab', key: 'file_manager', icon: FolderOpen, titleKey: 'sidebar.panels.files' },
     { kind: 'tab', key: 'settings', icon: Settings, titleKey: 'sidebar.tooltips.settings' },
     { kind: 'tab', key: 'plugin_manager', icon: Puzzle, titleKey: 'sidebar.panels.plugins' },
   ];
+
+  // Flat list for legacy compat (handler lookup)
+  const sidebarButtons = [...topButtons, ...bottomButtons];
 
   const getButtonVariant = (def: SidebarButtonDef): 'secondary' | 'ghost' => {
     if (def.kind === 'section') {
@@ -692,7 +696,6 @@ export const Sidebar = () => {
     if (def.badge !== undefined) {
       return (
         <React.Fragment key={def.key}>
-          {def.spacer && <div className="flex-1" />}
           {def.separator && <div className="w-6 h-px bg-theme-border my-1" />}
           <div className="relative">
             {btn}
@@ -706,7 +709,6 @@ export const Sidebar = () => {
 
     return (
       <React.Fragment key={def.key}>
-        {def.spacer && <div className="flex-1" />}
         {def.separator && <div className="w-6 h-px bg-theme-border my-1" />}
         {btn}
       </React.Fragment>
@@ -730,7 +732,16 @@ export const Sidebar = () => {
             <PanelLeft className="h-5 w-5" />
           </Button>
 
-          {sidebarButtons.map(def => renderSidebarButton(def, true))}
+          {/* Top + middle: scrollable when plugins overflow */}
+          <div className="flex-1 flex flex-col items-center gap-2 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-none">
+            {topButtons.map(def => renderSidebarButton(def, true))}
+          </div>
+
+          {/* Bottom: fixed */}
+          <div className="flex flex-col items-center gap-2 shrink-0">
+            <div className="w-6 h-px bg-theme-border" />
+            {bottomButtons.map(def => renderSidebarButton(def, true))}
+          </div>
         </div>
       </div>
     );
@@ -758,7 +769,16 @@ export const Sidebar = () => {
           <PanelLeftClose className="h-5 w-5" />
         </Button>
 
-        {sidebarButtons.map(def => renderSidebarButton(def, false))}
+        {/* Top + middle: scrollable when plugins overflow */}
+        <div className="flex-1 flex flex-col items-center gap-2 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-none">
+          {topButtons.map(def => renderSidebarButton(def, false))}
+        </div>
+
+        {/* Bottom: fixed */}
+        <div className="flex flex-col items-center gap-2 shrink-0">
+          <div className="w-6 h-px bg-theme-border" />
+          {bottomButtons.map(def => renderSidebarButton(def, false))}
+        </div>
       </div>
 
       {/* Content Area */}
