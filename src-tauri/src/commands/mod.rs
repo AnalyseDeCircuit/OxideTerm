@@ -15,6 +15,7 @@ pub mod local;
 pub mod network;
 pub mod oxide_export;
 pub mod oxide_import;
+pub mod plugin;
 pub mod scroll;
 pub mod session_tree;
 pub mod sftp;
@@ -30,6 +31,7 @@ pub use kbi::*;
 #[cfg(feature = "local-terminal")]
 pub use local::*;
 pub use network::*;
+pub use plugin::*;
 pub use scroll::*;
 pub use session_tree::*;
 pub use sftp::*;

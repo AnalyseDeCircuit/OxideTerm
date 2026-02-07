@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from 'react';
 import { platform } from '../lib/platform';
+import { matchPluginShortcut } from '../lib/plugin/pluginTerminalHooks';
 
 /**
  * 快捷键定义
@@ -108,6 +109,7 @@ export function useAppShortcuts(
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Built-in shortcuts take priority
       for (const shortcut of shortcuts) {
         if (matchesShortcut(e, shortcut)) {
           if (shouldExecuteShortcut(shortcut, contextRef.current)) {
@@ -118,6 +120,15 @@ export function useAppShortcuts(
           // 即使不执行也要退出循环，避免重复匹配
           return;
         }
+      }
+
+      // Plugin shortcuts (lower priority than built-in)
+      const pluginHandler = matchPluginShortcut(e);
+      if (pluginHandler) {
+        e.preventDefault();
+        e.stopPropagation();
+        pluginHandler();
+        return;
       }
     };
     

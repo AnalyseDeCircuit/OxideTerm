@@ -45,7 +45,8 @@
     "sftp_prefix": "SFTP",
     "forwards_prefix": "転送",
     "ide": "IDE",
-    "session_manager": "セッションマネージャー"
+    "session_manager": "セッションマネージャー",
+    "plugin_manager": "プラグイン"
   },
   "ide": {
     "loading_project": "プロジェクトを読み込み中...",

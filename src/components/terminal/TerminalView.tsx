@@ -30,6 +30,7 @@ import {
   touchTerminalEntry 
 } from '../../lib/terminalRegistry';
 import { onMapleRegularLoaded, ensureCJKFallback } from '../../lib/fontLoader';
+import { runInputPipeline, runOutputPipeline } from '../../lib/plugin/pluginTerminalHooks';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -166,6 +167,99 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       ws.close(1000, reason);
     } catch {
       // Ignore close errors
+    }
+  }, []);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Unified WebSocket message handler
+  // Shared by both initial connection and reconnection paths.
+  // Handles Wire Protocol v1 frames: DATA (0x00), HEARTBEAT (0x02), ERROR (0x03)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleWsMessage = useCallback((event: MessageEvent, ws: WebSocket) => {
+    if (!isMountedRef.current || wsRef.current !== ws) return;
+
+    const raw = event.data;
+    const data = raw instanceof ArrayBuffer ? new Uint8Array(raw) : new Uint8Array(raw);
+    if (data.length < HEADER_SIZE) return;
+
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const msgType = view.getUint8(0);
+    const length = view.getUint32(1, false);
+
+    if (data.length < HEADER_SIZE + length) return;
+
+    switch (msgType) {
+      case MSG_TYPE_DATA: {
+        // CRITICAL: Use slice() to create a copy, not a view!
+        // Views keep the entire original ArrayBuffer alive until GC
+        let payloadCopy = data.slice(HEADER_SIZE, HEADER_SIZE + length);
+
+        // Plugin output pipeline (fail-open: exceptions pass original data through)
+        payloadCopy = runOutputPipeline(payloadCopy, sessionId);
+
+        if (platform.isWindows) {
+          // Windows: branch on IME composition state
+          if (isComposingRef.current) {
+            // IME composing: use RAF buffering to avoid candidate window flicker
+            pendingDataRef.current.push(payloadCopy);
+            if (rafIdRef.current === null) {
+              rafIdRef.current = requestAnimationFrame(() => {
+                if (pendingDataRef.current.length > 0 && terminalRef.current) {
+                  const combined = new Uint8Array(
+                    pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
+                  );
+                  let offset = 0;
+                  for (const chunk of pendingDataRef.current) {
+                    combined.set(chunk, offset);
+                    offset += chunk.length;
+                  }
+                  pendingDataRef.current = [];
+                  terminalRef.current.write(combined);
+                }
+                rafIdRef.current = null;
+              });
+            }
+          } else {
+            // Not composing: write directly for minimal latency
+            if (terminalRef.current) {
+              terminalRef.current.write(payloadCopy);
+            }
+          }
+        } else {
+          // macOS/Linux: RAF batch processing for performance
+          pendingDataRef.current.push(payloadCopy);
+          if (rafIdRef.current === null) {
+            rafIdRef.current = requestAnimationFrame(() => {
+              if (pendingDataRef.current.length > 0 && terminalRef.current) {
+                const combined = new Uint8Array(
+                  pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
+                );
+                let offset = 0;
+                for (const chunk of pendingDataRef.current) {
+                  combined.set(chunk, offset);
+                  offset += chunk.length;
+                }
+                pendingDataRef.current = [];
+                terminalRef.current.write(combined);
+              }
+              rafIdRef.current = null;
+            });
+          }
+        }
+        break;
+      }
+      case MSG_TYPE_HEARTBEAT:
+        if (length >= 4) {
+          const seq = view.getUint32(HEADER_SIZE, false);
+          ws.send(encodeHeartbeatFrame(seq));
+        }
+        break;
+      case MSG_TYPE_ERROR: {
+        const errorPayload = data.slice(HEADER_SIZE, HEADER_SIZE + length);
+        const errorMsg = new TextDecoder().decode(errorPayload);
+        terminalRef.current?.writeln(`\r\n\x1b[31m${i18n.t('terminal.ssh.server_error', { error: errorMsg })}\x1b[0m`);
+        break;
+      }
     }
   }, []);
 
@@ -502,88 +596,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         }
       };
 
-      ws.onmessage = (event) => {
-        if (!isMountedRef.current || wsRef.current !== ws) return;
-        
-        const data = new Uint8Array(event.data);
-        if (data.length < HEADER_SIZE) return;
-        
-        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-        const msgType = view.getUint8(0);
-        const length = view.getUint32(1, false);
-        
-        if (data.length < HEADER_SIZE + length) return;
-        
-        const payload = data.slice(HEADER_SIZE, HEADER_SIZE + length);
-        
-        // CRITICAL: Use slice() to create a copy, not a view!
-        // Views keep the entire original ArrayBuffer alive until GC
-        const payloadCopy = payload.slice();
-        
-        switch (msgType) {
-          case MSG_TYPE_DATA:
-            if (platform.isWindows) {
-              // Windows: 根据是否在 IME 合成中决定策略
-              if (isComposingRef.current) {
-                // IME 合成期间：使用 RAF 缓冲，避免候选框抖动
-                pendingDataRef.current.push(payloadCopy);
-                if (rafIdRef.current === null) {
-                  rafIdRef.current = requestAnimationFrame(() => {
-                    if (pendingDataRef.current.length > 0 && terminalRef.current) {
-                      const combined = new Uint8Array(
-                        pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
-                      );
-                      let offset = 0;
-                      for (const chunk of pendingDataRef.current) {
-                        combined.set(chunk, offset);
-                        offset += chunk.length;
-                      }
-                      pendingDataRef.current = [];
-                      terminalRef.current.write(combined);
-                    }
-                    rafIdRef.current = null;
-                  });
-                }
-              } else {
-                // 非合成期间：直接写入，最小化延迟
-                if (terminalRef.current) {
-                  terminalRef.current.write(payloadCopy);
-                }
-              }
-            } else {
-              // macOS/Linux: 继续使用 RAF 批处理以提升性能
-              pendingDataRef.current.push(payloadCopy);
-              if (rafIdRef.current === null) {
-                rafIdRef.current = requestAnimationFrame(() => {
-                  if (pendingDataRef.current.length > 0 && terminalRef.current) {
-                    const combined = new Uint8Array(
-                      pendingDataRef.current.reduce((acc, arr) => acc + arr.length, 0)
-                    );
-                    let offset = 0;
-                    for (const chunk of pendingDataRef.current) {
-                      combined.set(chunk, offset);
-                      offset += chunk.length;
-                    }
-                    pendingDataRef.current = [];
-                    terminalRef.current.write(combined);
-                  }
-                  rafIdRef.current = null;
-                });
-              }
-            }
-            break;
-          case MSG_TYPE_HEARTBEAT:
-            if (payload.length >= 4) {
-              const seq = view.getUint32(HEADER_SIZE, false);
-              ws.send(encodeHeartbeatFrame(seq));
-            }
-            break;
-          case MSG_TYPE_ERROR:
-            const errorMsg = new TextDecoder().decode(payload);
-            term.writeln(`\r\n\x1b[31m${i18n.t('terminal.ssh.server_error', { error: errorMsg })}\x1b[0m`);
-            break;
-        }
-      };
+      ws.onmessage = (e) => handleWsMessage(e, ws);
 
       ws.onerror = (error) => {
         if (!isMountedRef.current || wsRef.current !== ws) return;
@@ -1002,66 +1015,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
                   resolve();
               };
 
-              ws.onmessage = (event) => {
-                if (!isMountedRef.current || wsRef.current !== ws) return;
-                const data = event.data;
-                if (data instanceof ArrayBuffer) {
-                    // Parse Wire Protocol v1 frame: [Type: 1][Length: 4][Payload: n]
-                    const view = new DataView(data);
-                    if (data.byteLength < HEADER_SIZE) return;
-
-                    const type = view.getUint8(0);
-                    const length = view.getUint32(1, false); // big-endian
-
-                    if (data.byteLength < HEADER_SIZE + length) return;
-
-                    if (type === MSG_TYPE_DATA) {
-                        // CRITICAL: Use slice() to create a copy, not a view!
-                        // Views keep the entire original ArrayBuffer alive until GC
-                        const payload = new Uint8Array(data, HEADER_SIZE, length).slice();
-                        // P3: Queue data and batch writes with RAF for backpressure handling
-                        pendingDataRef.current.push(payload);
-
-                        // Schedule RAF flush if not already scheduled
-                        if (rafIdRef.current === null) {
-                            rafIdRef.current = requestAnimationFrame(() => {
-                                rafIdRef.current = null;
-                                if (!isMountedRef.current || !terminalRef.current) return;
-
-                                // Flush all pending data in one batch
-                                const pending = pendingDataRef.current;
-                                if (pending.length === 0) return;
-
-                                // Concatenate all chunks for single write
-                                const totalLength = pending.reduce((sum, chunk) => sum + chunk.length, 0);
-                                const combined = new Uint8Array(totalLength);
-                                let offset = 0;
-                                for (const chunk of pending) {
-                                    combined.set(chunk, offset);
-                                    offset += chunk.length;
-                                }
-
-                                pendingDataRef.current = [];
-                                terminalRef.current.write(combined);
-                            });
-                        }
-                    } else if (type === MSG_TYPE_HEARTBEAT) {
-                        // Heartbeat ping from server - respond with pong
-                        if (length === 4) {
-                            const seq = view.getUint32(HEADER_SIZE, false); // big-endian
-                            const response = encodeHeartbeatFrame(seq);
-                            ws.send(response);
-                        }
-                    } else if (type === MSG_TYPE_ERROR) {
-                        // Error message from backend - display in terminal
-                        // Use .slice() to create a copy, ensuring consistent memory handling
-                        const payload = new Uint8Array(data, HEADER_SIZE, length).slice();
-                        const decoder = new TextDecoder('utf-8');
-                        const errorMsg = decoder.decode(payload);
-                        term.writeln(`\r\n\x1b[31m${i18n.t('terminal.ssh.server_error', { error: errorMsg })}\x1b[0m`);
-                    }
-                }
-              };
+              ws.onmessage = (e) => handleWsMessage(e, ws);
             });
         };
 
@@ -1116,11 +1070,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
           return; // Discard input silently
         }
         
+        // Plugin input pipeline (fail-open, null = suppress)
+        const processed = runInputPipeline(data, sessionId);
+        if (processed === null) return;
+
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
             // Encode as Wire Protocol v1 Data frame
             const encoder = new TextEncoder();
-            const payload = encoder.encode(data);
+            const payload = encoder.encode(processed);
             const frame = encodeDataFrame(payload);
             ws.send(frame);
             

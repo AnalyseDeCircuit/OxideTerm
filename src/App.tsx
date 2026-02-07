@@ -13,6 +13,8 @@ import { useSettingsStore } from './store/settingsStore';
 import { useAppShortcuts, ShortcutDefinition, isTerminalReservedKey } from './hooks/useTerminalKeyboard';
 import { useSplitPaneShortcuts } from './hooks/useSplitPaneShortcuts';
 import { preloadTerminalFonts } from './lib/fontLoader';
+import { initializePluginSystem } from './lib/plugin/pluginLoader';
+import { setupConnectionBridge } from './lib/plugin/pluginEventBridge';
 
 function App() {
   // Initialize global event listeners
@@ -48,6 +50,15 @@ function App() {
     }, 500);
     
     return () => clearTimeout(timer);
+  }, []);
+
+  // Initialize plugin system (discover + load enabled plugins)
+  useEffect(() => {
+    const bridgeCleanup = setupConnectionBridge(useAppStore);
+    initializePluginSystem().catch(err => {
+      console.error('Failed to initialize plugin system:', err);
+    });
+    return bridgeCleanup;
   }, []);
 
   // Sync SFTP settings to backend on app startup

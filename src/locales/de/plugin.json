@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "Plugin-Verwaltung",
+    "manager_description": "Installierte Plugins verwalten",
+    "refresh": "Aktualisieren",
+    "open_plugins_dir": "Verzeichnis öffnen",
+    "empty_title": "Keine Plugins installiert",
+    "empty_description": "Legen Sie Plugin-Ordner in ~/.oxideterm/plugins/ ab, um loszulegen.",
+    "footer": "{{count}} Plugin(s) installiert",
+    "active_count": "{{count}} aktiv",
+    "by_author": "von {{author}}",
+    "show_details": "Details",
+    "hide_details": "Ausblenden",
+    "reload": "Neu laden",
+    "disable": "Deaktivieren",
+    "enable": "Aktivieren",
+    "detail_version": "Version",
+    "detail_entry": "Einstiegspunkt",
+    "detail_requires": "Erfordert",
+    "detail_contributes": "Beiträge",
+    "contrib_tabs": "{{count}} Tab(s)",
+    "contrib_sidebar_panels": "{{count}} Seitenleisten-Panel(s)",
+    "contrib_settings": "{{count}} Einstellung(en)",
+    "contrib_input_interceptor": "Eingabe-Interceptor",
+    "contrib_output_processor": "Ausgabe-Prozessor",
+    "contrib_shortcuts": "{{count}} Tastenkürzel",
+    "contrib_connection_hooks": "{{count}} Verbindungs-Hook(s)",
+    "status": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "loading": "Laden…",
+      "error": "Fehler",
+      "disabled": "Deaktiviert"
+    }
+  }
+}

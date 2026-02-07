@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network, Plug, Square, HardDrive, LayoutList } from 'lucide-react';
+import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network, Plug, Square, HardDrive, LayoutList, Puzzle } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import { useReconnectOrchestratorStore } from '../../store/reconnectOrchestratorStore';
@@ -39,6 +39,9 @@ const TabIcon = ({ type }: { type: string }) => {
       return <HardDrive className={iconClass} />;
     case 'session_manager':
       return <LayoutList className={iconClass} />;
+    case 'plugin_manager':
+    case 'plugin':
+      return <Puzzle className={iconClass} />;
     default:
       return null;
   }

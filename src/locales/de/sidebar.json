@@ -28,7 +28,8 @@
       "export_tooltip": "In .oxide-Datei exportieren",
       "system_health": "Systemzustand",
       "session_manager": "Sitzungsmanager",
-      "open_session_manager": "Sitzungsmanager öffnen"
+      "open_session_manager": "Sitzungsmanager öffnen",
+      "plugins": "Plugins"
     },
     "tooltips": {
       "settings": "Einstellungen",

@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "Gestore plugin",
+    "manager_description": "Gestisci i plugin installati",
+    "refresh": "Aggiorna",
+    "open_plugins_dir": "Apri cartella",
+    "empty_title": "Nessun plugin installato",
+    "empty_description": "Posiziona le cartelle dei plugin in ~/.oxideterm/plugins/ per iniziare.",
+    "footer": "{{count}} plugin installato/i",
+    "active_count": "{{count}} attivo/i",
+    "by_author": "di {{author}}",
+    "show_details": "Dettagli",
+    "hide_details": "Nascondi",
+    "reload": "Ricarica",
+    "disable": "Disattiva",
+    "enable": "Attiva",
+    "detail_version": "Versione",
+    "detail_entry": "Punto di ingresso",
+    "detail_requires": "Richiede",
+    "detail_contributes": "Contributi",
+    "contrib_tabs": "{{count}} scheda/e",
+    "contrib_sidebar_panels": "{{count}} pannello/i laterale/i",
+    "contrib_settings": "{{count}} impostazione/i",
+    "contrib_input_interceptor": "Intercettore di input",
+    "contrib_output_processor": "Processore di output",
+    "contrib_shortcuts": "{{count}} scorciatoia/e",
+    "contrib_connection_hooks": "{{count}} hook di connessione",
+    "status": {
+      "active": "Attivo",
+      "inactive": "Inattivo",
+      "loading": "Caricamento…",
+      "error": "Errore",
+      "disabled": "Disattivato"
+    }
+  }
+}

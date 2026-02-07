@@ -543,6 +543,11 @@ pub fn run() {
             commands::ai_chat_delete_messages_after,
             commands::ai_chat_clear_all,
             commands::ai_chat_get_stats,
+            // Plugin system commands
+            commands::list_plugins,
+            commands::read_plugin_file,
+            commands::save_plugin_config,
+            commands::load_plugin_config,
         ]);
 
     #[cfg(not(feature = "local-terminal"))]
@@ -728,6 +733,11 @@ pub fn run() {
             commands::ai_chat_delete_messages_after,
             commands::ai_chat_clear_all,
             commands::ai_chat_get_stats,
+            // Plugin system commands
+            commands::list_plugins,
+            commands::read_plugin_file,
+            commands::save_plugin_config,
+            commands::load_plugin_config,
         ]);
 
     builder

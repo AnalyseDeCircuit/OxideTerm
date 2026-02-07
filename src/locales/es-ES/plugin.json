@@ -1,0 +1,36 @@
+{
+  "plugin": {
+    "manager_title": "Gestor de complementos",
+    "manager_description": "Gestionar complementos instalados",
+    "refresh": "Actualizar",
+    "open_plugins_dir": "Abrir directorio",
+    "empty_title": "No hay complementos instalados",
+    "empty_description": "Coloque carpetas de complementos en ~/.oxideterm/plugins/ para comenzar.",
+    "footer": "{{count}} complemento(s) instalado(s)",
+    "active_count": "{{count}} activo(s)",
+    "by_author": "por {{author}}",
+    "show_details": "Detalles",
+    "hide_details": "Ocultar",
+    "reload": "Recargar",
+    "disable": "Desactivar",
+    "enable": "Activar",
+    "detail_version": "Versión",
+    "detail_entry": "Entrada",
+    "detail_requires": "Requiere",
+    "detail_contributes": "Contribuciones",
+    "contrib_tabs": "{{count}} pestaña(s)",
+    "contrib_sidebar_panels": "{{count}} panel(es) lateral(es)",
+    "contrib_settings": "{{count}} ajuste(s)",
+    "contrib_input_interceptor": "Interceptor de entrada",
+    "contrib_output_processor": "Procesador de salida",
+    "contrib_shortcuts": "{{count}} atajo(s)",
+    "contrib_connection_hooks": "{{count}} hook(s) de conexión",
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "loading": "Cargando…",
+      "error": "Error",
+      "disabled": "Desactivado"
+    }
+  }
+}

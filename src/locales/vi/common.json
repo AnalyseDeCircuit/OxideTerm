@@ -45,7 +45,8 @@
     "sftp_prefix": "SFTP",
     "forwards_prefix": "Chuyển tiếp",
     "ide": "IDE",
-    "session_manager": "Quản lý phiên"
+    "session_manager": "Quản lý phiên",
+    "plugin_manager": "Plugin"
   },
   "ide": {
     "loading_project": "Đang tải dự án...",
