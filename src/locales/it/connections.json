@@ -62,6 +62,13 @@
       "reconnecting_wait": "La connessione è in fase di ripristino. Attendi e riprova.",
       "reconnect_unstable": "Connessione instabile",
       "try_again_later": "La connessione non si è ancora stabilizzata. Riprova più tardi."
+    },
+    "reconnect": {
+      "starting": "{{name}} si sta riconnettendo...",
+      "ssh_restored": "Connessione SSH ripristinata",
+      "completed": "Connessione ripristinata, {{count}} servizio/i recuperato/i",
+      "failed": "Riconnessione fallita: {{error}}",
+      "cancelled": "Riconnessione annullata"
     }
   }
 }

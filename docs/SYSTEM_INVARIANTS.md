@@ -317,15 +317,24 @@ fn good_example() {
 **不变量**：
 - **只有网络错误才触发自动重连**（认证失败不重连）
 - **重连必须使用原始配置**（不得修改用户输入）
-- **重连失败 5 次后必须停止**（不得无限重试）
+- **重连失败 3 次后必须停止**（不得无限重试）
 - **用户主动断开不触发重连**（区分 disconnect 和 network error）
 - **v1.4.0**: 重连成功后必须生成新的 `connectionId`，触发 Key-Driven Reset
+- **v1.6.2**: 所有重连逻辑由 `reconnectOrchestratorStore` 统一管理
+
+**Orchestrator 管道阶段**（v1.6.2）：
+```
+snapshot → ssh-connect → await-terminal → restore-forwards → resume-transfers → restore-ide → done
+```
+- Snapshot 必须在 `reconnectCascade` 之前执行（`resetNodeState` 会销毁 forward 规则）
+- Terminal 恢复由 Key-Driven Reset 自动处理，不在管道内
+- 用户手动停止的 forward（status === 'stopped'）不会被恢复
 
 **禁止的行为**：
 - ❌ 重连时自动更改端口或用户名
-- ❌ 重连成功后不恢复端口转发状态
 - ❌ 重连期间阻塞 UI（必须显示进度）
 - ❌ **v1.4.0**: 重连成功后复用旧 `connectionId`
+- ❌ **v1.6.2**: 在 `useConnectionEvents` 中直接执行重连逻辑（必须委托给 orchestrator）
 
 ### 3.4 状态机转换约束
 

@@ -95,6 +95,15 @@ interface IdeState {
     localMtime: number;
     remoteMtime: number;
   } | null;
+
+  // ─── 重连恢复缓存 ───
+  cachedProjectPath: string | null;
+  cachedTabPaths: string[];
+  cachedNodeId: string | null;
+
+  // ─── 重连用户意图追踪 ───
+  /** Timestamp of the last user-initiated closeProject, used by reconnect orchestrator */
+  lastClosedAt: number | null;
 }
 
 interface IdeActions {
@@ -169,6 +178,10 @@ export const useIdeStore = create<IdeState & IdeActions>()(
         expandedPaths: new Set<string>(),
         treeRefreshSignal: {},
         conflictState: null,
+        cachedProjectPath: null,
+        cachedTabPaths: [],
+        cachedNodeId: null,
+        lastClosedAt: null,
 
         // ─── Project Actions ───
         openProject: async (connectionId, sftpSessionId, rootPath) => {
@@ -209,6 +222,8 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             tabs: [],
             activeTabId: null,
             expandedPaths: new Set([projectInfo.rootPath]), // 默认展开根目录
+            cachedProjectPath: projectInfo.rootPath,
+            cachedTabPaths: [],
           });
         },
 
@@ -230,6 +245,10 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             activeTabId: null,
             expandedPaths: new Set(),
             conflictState: null,
+            cachedProjectPath: null,
+            cachedTabPaths: [],
+            cachedNodeId: null,
+            lastClosedAt: Date.now(),
           });
         },
 
@@ -369,6 +388,7 @@ export const useIdeStore = create<IdeState & IdeActions>()(
                       }
                     : t
                 ),
+                cachedTabPaths: [...new Set([...state.cachedTabPaths, path])],
               }));
             } else {
               // 不应该发生，但以防万一
@@ -875,6 +895,9 @@ export const useIdeStore = create<IdeState & IdeActions>()(
         partialize: (state) => ({
           treeWidth: state.treeWidth,
           terminalHeight: state.terminalHeight,
+          cachedProjectPath: state.cachedProjectPath,
+          cachedTabPaths: state.cachedTabPaths,
+          cachedNodeId: state.cachedNodeId,
         }),
       }
     )

@@ -50,7 +50,6 @@ interface AppStore {
   networkOnline: boolean;
 
   // Actions - Sessions
-  cancelReconnect: (sessionId: string) => Promise<void>;
   updateSessionState: (sessionId: string, state: SessionState, error?: string) => void;
   
   // Actions - Connection Pool
@@ -413,15 +412,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-
-  cancelReconnect: async (sessionId: string) => {
-    try {
-      await api.cancelReconnect(sessionId);
-      // State will be updated via event handler
-    } catch (error) {
-      console.error('Failed to cancel reconnect:', error);
-    }
-  },
 
   updateSessionState: (sessionId, state, error) => {
     set((s) => {

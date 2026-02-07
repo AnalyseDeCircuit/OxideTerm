@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network, Plug, Square, HardDrive, LayoutList } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
+import { useReconnectOrchestratorStore } from '../../store/reconnectOrchestratorStore';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { cn } from '../../lib/utils';
 import { Tab, PaneNode } from '../../types';
@@ -103,13 +104,6 @@ const getTabTitle = (
   return tab.title;
 };
 
-// Format time remaining for reconnect
-const formatTimeRemaining = (nextRetry: number): string => {
-  const remaining = Math.max(0, nextRetry - Date.now());
-  const seconds = Math.ceil(remaining / 1000);
-  return `${seconds}s`;
-};
-
 export const TabBar = () => {
   const { t } = useTranslation();
   const {
@@ -118,12 +112,10 @@ export const TabBar = () => {
     setActiveTab,
     closeTab,
     closeTerminalSession,
-    cancelReconnect,
     sessions,
     networkOnline
   } = useAppStore();
-  const { reconnectCascade } = useSessionTreeStore();
-  const [reconnecting, setReconnecting] = React.useState<string | null>(null);
+  const orchestrator = useReconnectOrchestratorStore();
   const [closing, setClosing] = React.useState<string | null>(null);
   // Force re-render for countdown
   const [, setTick] = React.useState(0);
@@ -140,47 +132,39 @@ export const TabBar = () => {
     }
   };
 
-  // Update countdown every second when there are reconnecting sessions
+  // Update indicator when orchestrator jobs change
   React.useEffect(() => {
-    const hasReconnecting = tabs.some((tab) => {
-      if (!tab.sessionId) return false;
-      const session = sessions.get(tab.sessionId);
-      return session?.state === 'reconnecting' && session.reconnectNextRetry;
-    });
+    const hasActiveJobs = orchestrator.jobEntries.some(
+      ([, job]) => job.status !== 'done' && job.status !== 'failed' && job.status !== 'cancelled'
+    );
 
-    if (!hasReconnecting) return;
+    if (!hasActiveJobs) return;
 
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [tabs, sessions]);
+  }, [orchestrator.jobEntries]);
 
   const handleReconnect = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
-    setReconnecting(sessionId);
-    try {
-      // 从 session 获取 connectionId，再通过 topologyResolver 获取 nodeId
-      const session = sessions.get(sessionId);
-      const connectionId = session?.connectionId;
-      const nodeId = connectionId ? topologyResolver.getNodeId(connectionId) : undefined;
-      
-      if (nodeId) {
-        // 新架构: 通过 SessionTree 重连
-        await reconnectCascade(nodeId);
-      } else {
-        // 旧会话或直接会话：只打印警告
-        console.warn(`[TabBar] Cannot reconnect session ${sessionId}: no associated tree node`);
-      }
-    } finally {
-      setReconnecting(null);
+    // 从 session 获取 connectionId，再通过 topologyResolver 获取 nodeId
+    const session = sessions.get(sessionId);
+    const connectionId = session?.connectionId;
+    const nodeId = connectionId ? topologyResolver.getNodeId(connectionId) : undefined;
+    
+    if (nodeId) {
+      // 委托给 orchestrator
+      orchestrator.scheduleReconnect(nodeId);
+    } else {
+      console.warn(`[TabBar] Cannot reconnect session ${sessionId}: no associated tree node`);
     }
   };
 
-  const handleCancelReconnect = async (e: React.MouseEvent, sessionId: string) => {
+  const handleCancelReconnect = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
-    await cancelReconnect(sessionId);
+    orchestrator.cancel(nodeId);
   };
 
   // 关闭 Tab 时释放后端资源
@@ -251,13 +235,15 @@ export const TabBar = () => {
         <div className="inline-flex h-full">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
-            const isManualReconnecting = reconnecting === tab.sessionId;
             const session = tab.sessionId ? sessions.get(tab.sessionId) : undefined;
-            const isAutoReconnecting = session?.state === 'reconnecting';
-            const reconnectAttempt = session?.reconnectAttempt;
-            const reconnectMax = session?.reconnectMaxAttempts;
-            const reconnectNextRetry = session?.reconnectNextRetry;
-            const showReconnectProgress = isAutoReconnecting && reconnectAttempt !== undefined;
+            
+            // Look up orchestrator job for this tab's node
+            const connectionId = session?.connectionId;
+            const nodeId = connectionId ? topologyResolver.getNodeId(connectionId) : undefined;
+            const orchJob = nodeId ? orchestrator.getJob(nodeId) : undefined;
+            const isOrchestratorActive = orchJob && orchJob.status !== 'done' && orchJob.status !== 'failed' && orchJob.status !== 'cancelled';
+            const isManualReconnecting = !!isOrchestratorActive;
+            const showReconnectProgress = !!isOrchestratorActive;
 
             return (
               // 每个 Tab 必须 flex-shrink-0，防止被挤压
@@ -276,15 +262,15 @@ export const TabBar = () => {
                 <span className="truncate flex-1">{getTabTitle(tab, sessions, t)}</span>
 
                 {/* Reconnect progress indicator */}
-                {showReconnectProgress && (
+                {showReconnectProgress && orchJob && nodeId && (
                   <div className="flex items-center gap-1 text-xs text-amber-400">
                     <RefreshCw className="h-3 w-3 animate-spin" />
                     <span>
-                      {reconnectAttempt}/{reconnectMax}
-                      {reconnectNextRetry && ` (${formatTimeRemaining(reconnectNextRetry)})`}
+                      {orchJob.status}
+                      {orchJob.attempt > 1 && ` (${orchJob.attempt}/${orchJob.maxAttempts})`}
                     </span>
                     <button
-                      onClick={(e) => tab.sessionId && handleCancelReconnect(e, tab.sessionId)}
+                      onClick={(e) => handleCancelReconnect(e, nodeId)}
                       className="hover:bg-theme-bg-hover rounded p-0.5"
                       title={t('tabbar.cancel_reconnect')}
                     >

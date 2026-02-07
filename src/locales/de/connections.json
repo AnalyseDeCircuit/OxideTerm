@@ -62,6 +62,13 @@
       "reconnecting_wait": "Die Verbindung wird wiederhergestellt. Bitte warten Sie und versuchen Sie es erneut.",
       "reconnect_unstable": "Verbindung instabil",
       "try_again_later": "Die Verbindung ist noch nicht stabil. Bitte versuchen Sie es später erneut."
+    },
+    "reconnect": {
+      "starting": "{{name}} wird neu verbunden...",
+      "ssh_restored": "SSH-Verbindung wiederhergestellt",
+      "completed": "Verbindung wiederhergestellt, {{count}} Dienst(e) wiederhergestellt",
+      "failed": "Neuverbindung fehlgeschlagen: {{error}}",
+      "cancelled": "Neuverbindung abgebrochen"
     }
   }
 }

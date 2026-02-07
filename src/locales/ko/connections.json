@@ -62,6 +62,13 @@
       "reconnecting_wait": "연결을 복원하고 있습니다. 잠시 후 다시 시도해 주세요.",
       "reconnect_unstable": "연결 불안정",
       "try_again_later": "연결이 아직 안정되지 않았습니다. 나중에 다시 시도해 주세요."
+    },
+    "reconnect": {
+      "starting": "{{name}} 재연결 중...",
+      "ssh_restored": "SSH 연결이 복원되었습니다",
+      "completed": "연결이 복원되었습니다. {{count}}개 서비스가 복구되었습니다",
+      "failed": "재연결 실패: {{error}}",
+      "cancelled": "재연결이 취소되었습니다"
     }
   }
 }
