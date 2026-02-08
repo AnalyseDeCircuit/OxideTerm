@@ -55,12 +55,13 @@
 flowchart TB
     subgraph Frontend ["Frontend Layer (React 19)"]
         UI[User Interface]
-        
-        subgraph Stores ["Multi-Store Sync System (v1.4.0)"]
+
+        subgraph Stores ["Multi-Store Sync System (v1.6.2)"]
             TreeStore["SessionTreeStore (Logic)<br/>User Intent"]
             RemoteStore["AppStore (Fact)<br/>Connection State"]
             IdeStore["IdeStore (Context)<br/>Project State"]
             LocalStore["LocalTerminalStore<br/>Local PTY"]
+            ReconnectStore["ReconnectOrchestratorStore<br/>Auto-Reconnect Pipeline"]
             PluginStore["PluginStore<br/>UI Registry"]
         end
 
@@ -69,15 +70,16 @@ flowchart TB
         UI --> TreeStore
         UI --> RemoteStore
         UI --> PluginStore
-        
+
         TreeStore -- "Sync (refreshConnections)" --> RemoteStore
         RemoteStore --> Terminal
         LocalStore --> Terminal
+        ReconnectStore -- "Orchestrate" --> TreeStore
     end
 
     subgraph Backend ["Backend Layer (Rust / Tauri 2.0)"]
         Router["IPC Command Router"]
-        
+
         subgraph Features ["Feature Gates"]
             LocalFeat["Feature: local-terminal"]
         end
@@ -89,29 +91,30 @@ flowchart TB
         end
 
         subgraph LocalEngine ["Local Engine (PTY)"]
-            PtyMgr["PTY Manager"]
+            LocalReg["LocalTerminalRegistry"]
             PtyHandle["Thread-Safe PtyHandle"]
             NativePTY["portable-pty (Native/ConPTY)"]
         end
     end
 
     %% Data Flows
-    LocalStore <-->|Tauri IPC| PtyMgr
-    PtyMgr --> PtyHandle --> NativePTY
-    
+    LocalStore <-->|Tauri IPC| LocalReg
+    LocalReg --> PtyHandle --> NativePTY
+
     TreeStore -->|Connect/Retry| Router
     RemoteStore <-->|Events/Fetch| Router
-    
+
     Terminal <-->|WebSocket Binary| WS
     WS <--> SSH <--> Pool
-    
+
     LocalFeat -.-> LocalEngine
-    
+
     style Frontend fill:#e1f5ff,stroke:#01579b
     style Backend fill:#fff3e0,stroke:#e65100
     style Start fill:#f9fbe7
     style TreeStore fill:#fff3cd,stroke:#fbc02d
     style RemoteStore fill:#fce4ec,stroke:#c2185b
+    style ReconnectStore fill:#e8f5e9,stroke:#388e3c
 ```
 
 ---
@@ -299,46 +302,57 @@ classDiagram
         +list_by_state(state)
         +remove(session_id)
     }
-    
+
     class SshConnectionRegistry {
         -DashMap~String, ConnectionEntry~ connections
         -RwLock~ConnectionPoolConfig~ config
         +connect(config)
         +register_existing(id, controller)
         +start_heartbeat(conn_id)
-        +start_reconnect(conn_id)
+        +start_reconnect(conn_id) [NO-OP: 前端驱动]
     }
-    
+
     class ConnectionEntry {
         +String id
         +HandleController handle_controller
         +RwLock~ConnectionState~ state
         +AtomicU32 ref_count
         +AtomicU32 heartbeat_failures
+        +SessionConfig config
+        +Option~JoinHandle~ idle_timer
+        +Option~JoinHandle~ heartbeat_task
+        +AtomicU64 last_active
+        +String created_at
+        +Vec~String~ terminal_ids
+        +Option~String~ sftp_session_id
+        +Vec~String~ forward_ids
+        +Option~String~ parent_connection_id
+        +Option~RemoteEnvInfo~ remote_env
         +add_ref()
         +release()
     }
-    
+
     class HandleController {
         -mpsc::Sender~HandleCommand~ cmd_tx
+        -broadcast::Sender disconnect_tx
         +open_session_channel()
         +channel_open_direct_tcpip()
         +tcpip_forward()
         +ping()
     }
-    
+
     class SshSession {
         +String session_id
         +Handle~ClientHandler~ handle
         +start() HandleController
     }
-    
+
     class BridgeManager {
-        -HashMap~String, WsBridgeHandle~ bridges
+        -HashMap~String, BridgeHandle~ bridges
         +start_bridge(session_id, channel)
         +stop_bridge(session_id)
     }
-    
+
     class WsBridge {
         +String session_id
         +Channel ssh_channel
@@ -346,32 +360,35 @@ classDiagram
         +run()
     }
 
-    class PtyManager {
-        -DashMap~String, PtyHandle~ ptys
+    class LocalTerminalRegistry {
+        -RwLock~HashMap~String, LocalTerminalSession~~ sessions
         +create(config)
         +resize(id, rows, cols)
         +write(id, data)
         +kill(id)
+        +list()
     }
 
     class PtyHandle {
-        -Mutex~MasterPty~ master
-        -Mutex~Child~ child
+        -StdMutex~MasterPty~ master
+        -StdMutex~Child~ child
         +read()
         +write()
+        +resize()
+        +kill()
     }
-    
+
     SessionRegistry --> ConnectionEntry : manages
     SshConnectionRegistry --> ConnectionEntry : owns
     ConnectionEntry --> HandleController : contains
     HandleController --> SshSession : controls
     BridgeManager --> WsBridge : manages
     WsBridge --> SshSession : uses channel
-    PtyManager --> PtyHandle : manages
-    
+    LocalTerminalRegistry --> PtyHandle : manages
+
     SessionRegistry --> SshConnectionRegistry : cooperates
     SessionRegistry --> BridgeManager : uses
-    SessionRegistry --> PtyManager : uses (via LocalTerminal command)
+    SessionRegistry --> LocalTerminalRegistry : uses (via LocalTerminal command)
 
 ```
 
@@ -803,41 +820,47 @@ pub fn compute_checksum(connections: &[EncryptedConnection]) -> Result<String> {
 ```mermaid
 graph TD
     App["App.tsx<br/>应用根"]
-    
+
     subgraph Layout["布局层"]
         AppLayout["AppLayout<br/>主布局"]
         Sidebar["Sidebar<br/>侧边栏"]
         TabBar["TabBar<br/>标签栏"]
     end
-    
+
     subgraph Views["视图层"]
         Terminal["TerminalView<br/>远程终端"]
         LocalTerm["LocalTerminalView<br/>本地终端"]
         SFTP["SFTPView<br/>文件浏览器"]
         Forwards["ForwardsView<br/>转发管理"]
+        IdeWorkspace["IdeWorkspace<br/>IDE 模式"]
+        AiSidebar["AiSidebar<br/>AI 聊天"]
     end
-    
-    subgraph Modals["弹窗层"]
+
+    subgraph Settings["设置层"]
+        SettingsView["SettingsView<br/>设置 (Tab 模式)"]
         NewConn["NewConnectionModal<br/>新建连接"]
-        Settings["SettingsModal<br/>设置"]
         Import["OxideImportModal<br/>导入"]
     end
-    
+
     subgraph State["状态管理 (Zustand)"]
+        SessionTreeStore["sessionTreeStore<br/>- User Intent<br/>- Tree Structure"]
         AppStore["appStore<br/>- Remote Sessions<br/>- Connections"]
         LocalStore["localTerminalStore<br/>- Local PTYs<br/>- Shells"]
+        IdeStoreState["ideStore<br/>- Remote Files<br/>- Git Status"]
+        ReconnectStore["reconnectOrchestratorStore<br/>- Auto-Reconnect Pipeline"]
         TransferStore["transferStore<br/>- SFTP Transfers"]
         SettingsStore["settingsStore<br/>- Config & Theme"]
         AiStore["aiChatStore<br/>- AI Conversations"]
+        PluginStoreState["pluginStore<br/>- Plugin Runtime"]
     end
-    
+
     subgraph Hooks["自定义 Hooks"]
         UseConnEvents["useConnectionEvents<br/>连接事件"]
         UseNetwork["useNetworkStatus<br/>网络状态"]
         UseToast["useToast<br/>提示消息"]
         UseTermKb["useTerminalKeyboard<br/>终端快捷键"]
     end
-    
+
     App --> AppLayout
     AppLayout --> Sidebar
     AppLayout --> TabBar
@@ -845,24 +868,30 @@ graph TD
     AppLayout --> LocalTerm
     AppLayout --> SFTP
     AppLayout --> Forwards
-    
+    AppLayout --> IdeWorkspace
+    AppLayout --> AiSidebar
+
+    App --> SettingsView
     App --> NewConn
-    App --> Settings
     App --> Import
-    
+
     Terminal --> AppStore
+    Terminal --> SessionTreeStore
     LocalTerm --> LocalStore
     SFTP --> TransferStore
     Forwards --> AppStore
-    Settings --> SettingsStore
-    
+    IdeWorkspace --> IdeStoreState
+    SettingsView --> SettingsStore
+    AiSidebar --> AiStore
+
     Terminal --> UseConnEvents
+    UseConnEvents --> ReconnectStore
     App --> UseNetwork
     Terminal --> UseToast
-    
+
     style Layout fill:#e3f2fd
     style Views fill:#f3e5f5
-    style Modals fill:#fff3cd
+    style Settings fill:#fff3cd
     style State fill:#c8e6c9
     style Hooks fill:#ffccbc
 ```
@@ -1098,7 +1127,7 @@ const TerminalView = ({ sessionId, wsUrl }: Props) => {
 
 ---
 
-## 多 Store 架构 (v1.4.0)
+## 多 Store 架构 (v1.6.2)
 
 ### 架构概览
 
@@ -1107,15 +1136,22 @@ flowchart TB
     subgraph Frontend ["Frontend State Layer"]
         SessionTree["sessionTreeStore.ts<br/>(User Intent)<br/>Decides WHAT to connect"]
         AppStore["appStore.ts<br/>(Backend Fact)<br/>Knows STATE of connection"]
-        
+        ReconnectOrch["reconnectOrchestratorStore.ts<br/>(Pipeline)<br/>Orchestrates reconnect flow"]
+
         IdeStore["ideStore.ts<br/>(Context)<br/>Uses connectionId"]
+        LocalTermStore["localTerminalStore.ts<br/>(Local PTY)<br/>Manages local shells"]
         Transfer["transferStore.ts<br/>(Task)<br/>Uses connectionId"]
         PluginStore["pluginStore.ts<br/>(UI Registry)<br/>Tabs & Panels"]
-        
+        SettingsStore["settingsStore.ts<br/>(Config)<br/>Theme & Preferences"]
+        AiChatStore["aiChatStore.ts<br/>(AI)<br/>Chat conversations"]
+
         SessionTree -- "3. Refresh Signal" --> AppStore
         AppStore -- "Fact: ConnectionId" --> IdeStore
         AppStore -- "Fact: ConnectionId" --> Transfer
         AppStore -- "Read-only snapshots" --> PluginStore
+        ReconnectOrch -- "Orchestrate" --> SessionTree
+        ReconnectOrch -- "Restore" --> IdeStore
+        ReconnectOrch -- "Restore" --> Transfer
     end
 
     subgraph Backend ["Backend Layer"]
@@ -1126,9 +1162,11 @@ flowchart TB
     SessionTree -- "1. Connect" --> RPC
     RPC -- "2. Result (Ok)" --> SessionTree
     Events -- "Auto Update" --> AppStore
+    Events -- "Trigger Pipeline" --> ReconnectOrch
 
     style AppStore fill:#fce4ec,stroke:#c2185b,stroke-width:2px
     style SessionTree fill:#fff3cd,stroke:#fbc02d,stroke-width:2px
+    style ReconnectOrch fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     style IdeStore fill:#f3e5f5
     style PluginStore fill:#e8f5e9
     style Backend fill:#fff3e0
@@ -1414,30 +1452,36 @@ stateDiagram-v2
         Connecting --> Connected: Backend Return
         Connected --> Active: Sync Complete (refreshConnections)
         Active --> LinkDown: Event (LinkDown)
-        LinkDown --> Active: Auto Heal
+        LinkDown --> Active: Auto Heal (via Orchestrator)
     end
 
-    subgraph Backend["Backend Physical (SshConnection)"]
-        None --> Handshaking: Connect()
-        Handshaking --> Authenticated: Auth OK
-        Authenticated --> Ready: Channel Open
-        Ready --> Reconnecting: Heartbeat Fail
-        Reconnecting --> Ready: Retry Success
+    subgraph Backend["Backend Physical (ConnectionState)"]
+        B_Connecting --> B_Active: Auth + Channel OK
+        B_Active --> B_Idle: ref_count = 0
+        B_Idle --> B_Active: New consumer
+        B_Active --> B_LinkDown: Heartbeat Fail × 2
+        B_LinkDown --> B_Reconnecting: Frontend triggers
+        B_Reconnecting --> B_Active: Retry Success
+        B_Reconnecting --> B_Disconnected: Max retries
+        B_Active --> B_Disconnecting: User disconnect
+        B_Disconnecting --> B_Disconnected: Cleanup done
     end
 
-    Connecting --> Handshaking: IPC Call
-    Handshaking --> Connecting: Await
-    Authenticated --> Connected: Success Return
-    
+    Connecting --> B_Connecting: IPC Call
+    B_Connecting --> Connecting: Await
+    B_Active --> Connected: Success Return
+
     note right of Connected
         CRITICAL GAP:
         Backend is ready, but
         Frontend has NO ConnectionId yet.
         Must trigger refreshConnections()
     end note
-    
-    Connected --> Ready: Sync Action
+
+    Connected --> B_Active: Sync Action
 ```
+
+> **v1.6.2 变更**: 后端 `start_reconnect()` 已变为 NO-OP。重连逻辑完全由前端 `reconnectOrchestratorStore` 驱动。
 
 ### 生命周期阶段详解
 
@@ -1458,8 +1502,9 @@ stateDiagram-v2
     *   SFTP/PortForward 功能可用。
 
 4.  **LinkDown / Reconnecting (保活期)**
-    *   心跳连续失败 (默认 30s)。
-    *   后端进入 `Reconnecting` 状态，尝试指数退避重连。
+    *   心跳连续失败 (默认 30s，2 次失败)。
+    *   后端进入 `LinkDown` 状态，emit `connection:update` 事件。
+    *   前端 `reconnectOrchestratorStore` 接管，执行重连 pipeline。
     *   前端收到事件，UI 变灰，输入锁定。
     *   用户看到的 Terminal 内容保留（History Buffer）。
 
@@ -1602,22 +1647,25 @@ graph TB
     end
     
     subgraph Lifecycle["生命周期管理"]
-        HB["Heartbeat Task<br/>15s 间隔<br/>2次失败触发重连"]
-        RC["Reconnect Task<br/>指数退避<br/>最多5次重试"]
+        HB["Heartbeat Task<br/>15s 间隔<br/>2次失败 → LinkDown"]
         IT["Idle Timer<br/>30分钟超时"]
     end
-    
+
+    subgraph FrontendReconnect["前端重连 (v1.6.2)"]
+        RC["reconnectOrchestratorStore<br/>指数退避 pipeline"]
+    end
+
     T1 -->|add_ref| Entry1
     T2 -->|add_ref| Entry1
     S1 -->|add_ref| Entry1
     T3 -->|add_ref| Entry2
     F1 -->|release| Entry3
-    
+
     Entry1 --> HB
     Entry2 --> HB
     Entry3 --> IT
-    
-    HB -->|ping failed × 2| RC
+
+    HB -->|"emit connection:update<br/>(heartbeat_fail)"| RC
     IT -->|timeout| Disconnect["断开连接"]
     
     style ConnectionPool fill:#e1f5ff
@@ -1724,9 +1772,11 @@ graph LR
 
 ---
 
-## 后端重连与心跳实现
+## 心跳检测与前端重连编排 (v1.6.2)
 
-### 心跳检测与重连
+> **重要变更**: v1.6.2 移除了后端自动重连逻辑，改为前端 `reconnectOrchestratorStore` 统一编排。
+
+### 心跳检测 (后端)
 
 ```mermaid
 sequenceDiagram
@@ -1735,13 +1785,13 @@ sequenceDiagram
     participant HC as HandleController
     participant Reg as SshConnectionRegistry
     participant UI as Frontend
-    
+
     Note over HB: 每 15 秒执行
-    
+
     loop Heartbeat Loop
         HB->>HC: ping()
         HC->>HC: open_session_channel()<br/>(5s timeout)
-        
+
         alt Ping 成功
             HC-->>HB: PingResult::Ok
             HB->>Conn: reset_heartbeat_failures()
@@ -1754,41 +1804,71 @@ sequenceDiagram
             HC-->>HB: PingResult::IoError
             HB->>Conn: set_state(LinkDown)
             HB->>Reg: emit_event("link_down")
-            Reg->>UI: connection_status_changed
-            HB->>Reg: start_reconnect()
-            Note over HB: 立即触发重连，不等第二次
+            Reg->>UI: connection:update (trigger: heartbeat_fail)
+            Note over HB: 停止心跳，等待前端重连
         end
-        
+
         alt failures >= 2
             HB->>Conn: set_state(LinkDown)
             HB->>Reg: emit_event("link_down")
-            Reg->>UI: connection_status_changed
-            HB->>Reg: start_reconnect()
+            Reg->>UI: connection:update (trigger: heartbeat_fail)
             Note over HB: 停止心跳任务
         end
     end
-    
-    Note over Reg: 重连任务接管
-    
-    loop Reconnect Loop
-        Reg->>Reg: connect(config)
-        
-        alt 重连成功
-            Reg->>Conn: replace_handle_controller()
-            Reg->>Conn: set_state(Active)
-            Reg->>UI: connection_status_changed("connected")
-            Reg->>Reg: start_heartbeat()<br/>重新启动心跳
-        else 重连失败
-            Reg->>Reg: 等待 (1s, 2s, 4s, 8s, 16s...)
-            Note over Reg: 指数退避
+```
+
+### 前端重连编排 (v1.6.2)
+
+```mermaid
+sequenceDiagram
+    participant UI as Frontend Event Handler
+    participant Orch as ReconnectOrchestratorStore
+    participant Tree as SessionTreeStore
+    participant App as AppStore
+    participant Backend as Rust Backend
+
+    Note over UI: 收到 connection:update (link_down)
+
+    UI->>Orch: startReconnect(nodeId)
+    Orch->>Orch: 1. Snapshot forwards/transfers/IDE state
+
+    loop Pipeline Stages
+        Orch->>Tree: 2. reconnectCascade(nodeId)
+        Tree->>Tree: resetNodeState() [销毁旧状态]
+        Tree->>Backend: connect_v2(config)
+
+        alt 连接成功
+            Backend-->>Tree: ConnectResponse (new connectionId)
+            Tree->>App: refreshConnections()
+            Note over App: Key-Driven Reset 触发组件重建
+            Orch->>Orch: 3. await-terminal (等待 WebSocket 就绪)
+            Orch->>Backend: 4. restore-forwards (从快照恢复)
+            Orch->>Backend: 5. resume-transfers (恢复传输任务)
+            Orch->>Orch: 6. restore-ide (恢复 IDE 状态)
+            Orch->>UI: Pipeline Complete
+        else 连接失败
+            Backend-->>Tree: Error
+            Orch->>Orch: 等待 (1s, 2s, 4s, 8s...)
+            Note over Orch: 指数退避
         end
-        
+
         alt 达到最大重试次数(5)
-            Reg->>Conn: set_state(Disconnected)
-            Reg->>UI: connection_status_changed("disconnected")
+            Orch->>Tree: setNodeError()
+            Orch->>UI: Pipeline Failed
         end
     end
 ```
+
+### Pipeline 阶段说明
+
+| 阶段 | 说明 | 关键点 |
+|------|------|--------|
+| `snapshot` | 捕获 forward 规则、传输任务、IDE 状态 | 必须在 `resetNodeState` 之前执行 |
+| `ssh-connect` | 调用 `reconnectCascade` 重建 SSH 连接 | 生成新的 `connectionId` |
+| `await-terminal` | 等待 WebSocket 桥接就绪 | Key-Driven Reset 自动处理 |
+| `restore-forwards` | 从快照恢复端口转发规则 | 跳过 `status === 'stopped'` 的规则 |
+| `resume-transfers` | 恢复中断的 SFTP 传输 | 仅恢复 `pending` 状态的任务 |
+| `restore-ide` | 恢复 IDE 模式状态 | 包括打开的文件、光标位置等 |
 
 ### 状态守卫机制
 

@@ -60,68 +60,64 @@ flowchart TB
     subgraph Frontend ["Couche Frontend (React 19)"]
         UI[Interface Utilisateur]
 
-        subgraph Stores ["Gestion d'État Multi-Store (Zustand)"]
-            TreeStore["SessionTreeStore<br/>Intention Utilisateur"]
-            AppStore["AppStore<br/>Faits de Connexion"]
-            IdeStore["IdeStore<br/>Mode IDE"]
-            LocalStore["LocalTerminalStore<br/>PTYs Locaux"]
-            ReconnectStore["ReconnectOrchestratorStore"]
-            PluginStore["PluginStore<br/>Runtime Plugins"]
+        subgraph Stores ["Multi-Store Sync System (v1.6.2)"]
+            TreeStore["SessionTreeStore (Logic)<br/>Intention Utilisateur"]
+            RemoteStore["AppStore (Fact)<br/>État de Connexion"]
+            IdeStore["IdeStore (Context)<br/>État du Projet"]
+            LocalStore["LocalTerminalStore<br/>PTY Local"]
+            ReconnectStore["ReconnectOrchestratorStore<br/>Pipeline Auto-Reconnexion"]
+            PluginStore["PluginStore<br/>UI Registry"]
         end
 
-        Terminal["xterm.js 6 + WebGL/Canvas"]
-        PluginRT["Runtime Plugins<br/>(ESM Loader + UIKit)"]
+        Terminal["xterm.js + WebGL"]
 
         UI --> TreeStore
-        TreeStore -->|refreshConnections| AppStore
-        UI --> IdeStore
-        UI --> LocalStore
-        AppStore --> Terminal
+        UI --> RemoteStore
+        UI --> PluginStore
+
+        TreeStore -- "Sync (refreshConnections)" --> RemoteStore
+        RemoteStore --> Terminal
         LocalStore --> Terminal
-        PluginRT --> PluginStore
+        ReconnectStore -- "Orchestrate" --> TreeStore
     end
 
     subgraph Backend ["Couche Backend (Rust / Tauri 2.0)"]
-        Router["Routeur de Commandes IPC<br/>(src/commands/)"]
+        Router["IPC Command Router"]
 
         subgraph Features ["Feature Gates"]
             LocalFeat["Feature: local-terminal"]
         end
 
         subgraph RemoteEngine ["Moteur Distant (SSH)"]
-            WS["Pont WebSocket<br/>(Token Auth + Heartbeat)"]
-            SSH["russh 0.49<br/>(Rust Pur SSH)"]
-            Pool["Registre de Connexions<br/>(DashMap)"]
+            WS["WebSocket Bridge"]
+            SSH["russh Client (Rust Pur)"]
+            Pool["Connection Pool"]
         end
 
         subgraph LocalEngine ["Moteur Local (PTY)"]
-            PtyMgr["Gestionnaire PTY"]
-            PtyHandle["PtyHandle Thread-Safe<br/>(Arc+Mutex)"]
-            NativePTY["portable-pty 0.8<br/>(Natif/ConPTY)"]
-        end
-
-        subgraph Storage ["Persistance"]
-            Redb["redb 2.1"]
-            Keychain["Trousseau Système<br/>(keyring)"]
+            LocalReg["LocalTerminalRegistry"]
+            PtyHandle["PtyHandle Thread-Safe"]
+            NativePTY["portable-pty (Natif/ConPTY)"]
         end
     end
 
     %% Flux de Données
-    LocalStore <-->|Tauri IPC| PtyMgr
-    PtyMgr --> PtyHandle --> NativePTY
+    LocalStore <-->|Tauri IPC| LocalReg
+    LocalReg --> PtyHandle --> NativePTY
 
-    AppStore <-->|Tauri IPC Contrôle| Router
-    Terminal <-->|WebSocket Binaire<br/>Wire Protocol v1| WS
+    TreeStore -->|Connect/Retry| Router
+    RemoteStore <-->|Events/Fetch| Router
+
+    Terminal <-->|WebSocket Binary| WS
     WS <--> SSH <--> Pool
 
-    Router --> Storage
-    LocalFeat -.->|porte de compilation| LocalEngine
+    LocalFeat -.-> LocalEngine
 
     style Frontend fill:#e1f5ff,stroke:#01579b
     style Backend fill:#fff3e0,stroke:#e65100
-    style LocalEngine fill:#e8f5e9,stroke:#2e7d32
-    style RemoteEngine fill:#fce4ec,stroke:#c2185b
-    style Storage fill:#f3e5f5,stroke:#7b1fa2
+    style TreeStore fill:#fff3cd,stroke:#fbc02d
+    style RemoteStore fill:#fce4ec,stroke:#c2185b
+    style ReconnectStore fill:#e8f5e9,stroke:#388e3c
 ```
 
 ---
