@@ -60,68 +60,64 @@ flowchart TB
     subgraph Frontend ["Frontend Layer (React 19)"]
         UI[User Interface]
 
-        subgraph Stores ["Multi-Store State Management (Zustand)"]
-            TreeStore["SessionTreeStore<br/>User Intent"]
-            AppStore["AppStore<br/>Connection Facts"]
-            IdeStore["IdeStore<br/>IDE Mode"]
-            LocalStore["LocalTerminalStore<br/>Local PTYs"]
-            ReconnectStore["ReconnectOrchestratorStore"]
-            PluginStore["PluginStore<br/>Plugin Runtime"]
+        subgraph Stores ["Multi-Store Sync System (v1.6.2)"]
+            TreeStore["SessionTreeStore (Logic)<br/>User Intent"]
+            RemoteStore["AppStore (Fact)<br/>Connection State"]
+            IdeStore["IdeStore (Context)<br/>Project State"]
+            LocalStore["LocalTerminalStore<br/>Local PTY"]
+            ReconnectStore["ReconnectOrchestratorStore<br/>Auto-Reconnect Pipeline"]
+            PluginStore["PluginStore<br/>UI Registry"]
         end
 
-        Terminal["xterm.js 6 + WebGL/Canvas"]
-        PluginRT["Plugin Runtime<br/>(ESM Loader + UIKit)"]
+        Terminal["xterm.js + WebGL"]
 
         UI --> TreeStore
-        TreeStore -->|refreshConnections| AppStore
-        UI --> IdeStore
-        UI --> LocalStore
-        AppStore --> Terminal
+        UI --> RemoteStore
+        UI --> PluginStore
+
+        TreeStore -- "Sync (refreshConnections)" --> RemoteStore
+        RemoteStore --> Terminal
         LocalStore --> Terminal
-        PluginRT --> PluginStore
+        ReconnectStore -- "Orchestrate" --> TreeStore
     end
 
     subgraph Backend ["Backend Layer (Rust / Tauri 2.0)"]
-        Router["IPC Command Router<br/>(src/commands/)"]
+        Router["IPC Command Router"]
 
         subgraph Features ["Feature Gates"]
             LocalFeat["Feature: local-terminal"]
         end
 
         subgraph RemoteEngine ["Remote Engine (SSH)"]
-            WS["WebSocket Bridge<br/>(Token Auth + Heartbeat)"]
-            SSH["russh 0.49<br/>(Pure Rust SSH)"]
-            Pool["Connection Registry<br/>(DashMap)"]
+            WS["WebSocket Bridge"]
+            SSH["russh Client (Pure Rust)"]
+            Pool["Connection Pool"]
         end
 
         subgraph LocalEngine ["Local Engine (PTY)"]
-            PtyMgr["PTY Manager"]
-            PtyHandle["Thread-Safe PtyHandle<br/>(Arc+Mutex)"]
-            NativePTY["portable-pty 0.8<br/>(Native/ConPTY)"]
-        end
-
-        subgraph Storage ["Persistence"]
-            Redb["redb 2.1"]
-            Keychain["OS Keychain<br/>(keyring)"]
+            LocalReg["LocalTerminalRegistry"]
+            PtyHandle["Thread-Safe PtyHandle"]
+            NativePTY["portable-pty (Native/ConPTY)"]
         end
     end
 
     %% Data Flows
-    LocalStore <-->|Tauri IPC| PtyMgr
-    PtyMgr --> PtyHandle --> NativePTY
+    LocalStore <-->|Tauri IPC| LocalReg
+    LocalReg --> PtyHandle --> NativePTY
 
-    AppStore <-->|Tauri IPC Control| Router
-    Terminal <-->|WebSocket Binary<br/>Wire Protocol v1| WS
+    TreeStore -->|Connect/Retry| Router
+    RemoteStore <-->|Events/Fetch| Router
+
+    Terminal <-->|WebSocket Binary| WS
     WS <--> SSH <--> Pool
 
-    Router --> Storage
-    LocalFeat -.->|compile gate| LocalEngine
+    LocalFeat -.-> LocalEngine
 
     style Frontend fill:#e1f5ff,stroke:#01579b
     style Backend fill:#fff3e0,stroke:#e65100
-    style LocalEngine fill:#e8f5e9,stroke:#2e7d32
-    style RemoteEngine fill:#fce4ec,stroke:#c2185b
-    style Storage fill:#f3e5f5,stroke:#7b1fa2
+    style TreeStore fill:#fff3cd,stroke:#fbc02d
+    style RemoteStore fill:#fce4ec,stroke:#c2185b
+    style ReconnectStore fill:#e8f5e9,stroke:#388e3c
 ```
 
 ---
