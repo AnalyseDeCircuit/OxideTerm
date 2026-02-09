@@ -431,6 +431,31 @@ impl ConnectionEntry {
         }
     }
 
+    /// 失效并清除 SFTP session（静默重建时调用）
+    ///
+    /// 与 `clear_sftp()` 的区别：
+    /// - `clear_sftp()`: 用于连接断开时的清理，表示"不再需要"
+    /// - `invalidate_sftp()`: 用于静默重建时的清理，表示"准备重新创建"
+    ///
+    /// 内部实现相同，但语义不同便于代码阅读和日志追踪。
+    ///
+    /// # Returns
+    /// - `true`: 存在 SFTP session 且已清除
+    /// - `false`: 不存在 SFTP session
+    pub async fn invalidate_sftp(&self) -> bool {
+        let mut guard = self.sftp.lock().await;
+        if guard.is_some() {
+            *guard = None;
+            info!(
+                "Invalidated SFTP session for connection {} (preparing rebuild)",
+                self.id
+            );
+            true
+        } else {
+            false
+        }
+    }
+
     /// 检查是否有活跃的 SFTP session
     pub async fn has_sftp(&self) -> bool {
         self.sftp.lock().await.is_some()
