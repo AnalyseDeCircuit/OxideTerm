@@ -687,10 +687,12 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
   const [remoteSortField, setRemoteSortField] = useState<SortField>('name');
   const [remoteSortDirection, setRemoteSortDirection] = useState<SortDirection>('asc');
 
-  const recoverSftpSession = useCallback(async (): Promise<void> => {
-    // node-first: backend handles SFTP session recovery via NodeRouter.
-    // Only recreates the terminal — caller is responsible for re-calling nodeSftpInit.
-    await useSessionTreeStore.getState().createTerminalForNode(nodeId);
+  const recoverSftpSession = useCallback(async (): Promise<string> => {
+    // 🔧 SFTP 静默重建：后端 invalidate_and_reacquire_sftp 会在
+    // 现有 SSH 连接上重建 SFTP 通道，不影响终端。
+    // 前端只需重新调用 nodeSftpInit 触发后端重建流程。
+    console.info(`[SFTPView] Recovering SFTP session for node ${nodeId}`);
+    return await nodeSftpInit(nodeId);
   }, [nodeId]);
 
   // Sort handler
@@ -817,19 +819,9 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
       try {
         // node-first: nodeSftpInit 是幂等的
         let cwd: string;
-        try {
-          cwd = await nodeSftpInit(nodeId);
-        } catch (initError) {
-          if (!isRecoverableSftpChannelError(initError)) {
-            throw initError;
-          }
-
-          // Channel error (ConnectFailed / stale session) — attempt self-heal ONCE
-          console.warn('[SFTPView] Detected stale SFTP channel, attempting self-heal...');
-          await recoverSftpSession();
-          if (cancelled) return;
-          cwd = await nodeSftpInit(nodeId);
-        }
+        // node-first: nodeSftpInit 触发后端 acquire_sftp，
+        // 后续操作通过 sftp_with_retry 自动处理通道错误。
+        cwd = await nodeSftpInit(nodeId);
         if (cancelled) return;
 
         setSftpInitialized(true);

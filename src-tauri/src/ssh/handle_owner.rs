@@ -338,9 +338,11 @@ pub fn spawn_handle_owner_task(
                         }
 
                         HandleCommand::Ping { reply_tx } => {
-                            // Use channel_open_session as keepalive probe, but handle errors carefully.
-                            // ChannelOpenFailure (e.g., MaxSessions limit) doesn't mean connection is broken.
-                            // Only true disconnects should trigger immediate reconnection.
+                            // Use channel_open_session as keepalive probe, but MUST close the
+                            // channel properly. In russh 0.49, `drop(channel)` does NOT send
+                            // SSH CHANNEL_CLOSE, causing channel leaks on the server.
+                            // Without explicit close(), each 15s ping leaks a channel, exhausting
+                            // OpenSSH MaxSessions (default 10) in ~2.5 minutes.
                             debug!("Ping probe starting for session {}", session_id);
                             let result = match tokio::time::timeout(
                                 std::time::Duration::from_secs(5),
@@ -349,33 +351,28 @@ pub fn spawn_handle_owner_task(
                             .await
                             {
                                 Ok(Ok(channel)) => {
-                                    // Successfully opened, close it immediately
+                                    // Properly close the channel before dropping
+                                    let _ = channel.close().await;
                                     drop(channel);
                                     debug!("Ping OK for session {}", session_id);
                                     PingResult::Ok
                                 }
                                 Ok(Err(e)) => {
-                                    // Check error type to distinguish soft vs hard failures
                                     let error_str = format!("{:?}", e);
                                     if error_str.contains("ChannelOpenFailure") {
-                                        // Server refused channel (MaxSessions, policy, idle cleanup, etc.)
-                                        // SSH transport layer is still alive - treat as OK (server responded!)
-                                        // Key insight: ChannelOpenFailure means the server received and processed
-                                        // our request, it just declined to open a new channel. Connection is healthy.
+                                        // Server refused channel (MaxSessions, policy, etc.)
+                                        // SSH transport is still alive — server responded.
                                         debug!("Ping channel refused for session {} (server policy, connection healthy): {:?}", session_id, e);
                                         PingResult::Ok
                                     } else if error_str.contains("Disconnect") || error_str.contains("disconnect") {
-                                        // True SSH disconnect - connection is gone
                                         warn!("Ping SSH disconnect for session {}: {:?}", session_id, e);
                                         PingResult::IoError
                                     } else {
-                                        // Other errors - treat as soft failure to avoid false positive reconnects
                                         warn!("Ping SSH error for session {} (treating as soft failure): {:?}", session_id, e);
                                         PingResult::Timeout
                                     }
                                 }
                                 Err(_) => {
-                                    // Timeout
                                     warn!("Ping timeout for session {} (5s)", session_id);
                                     PingResult::Timeout
                                 }

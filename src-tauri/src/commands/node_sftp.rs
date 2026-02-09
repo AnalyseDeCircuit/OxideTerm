@@ -11,8 +11,68 @@ use tauri::{AppHandle, Emitter, State};
 use tracing::info;
 
 use crate::router::{NodeRouter, NodeStateSnapshot, RouteError, TerminalEndpoint};
+use crate::sftp::error::SftpError;
 use crate::sftp::types::*;
 use crate::ssh::SshConnectionRegistry;
+
+// ============================================================================
+// SFTP 静默重建辅助宏
+// ============================================================================
+
+/// SFTP 操作重试宏（用于只读操作）
+///
+/// 捕获通道级别可恢复错误，尝试重建 SFTP session 后重试一次。
+/// 适用于只读操作（list_dir, stat, preview 等），不建议用于写入操作。
+///
+/// # 使用方式
+/// ```rust,ignore
+/// sftp_with_retry!(router, &node_id, sftp, {
+///     sftp.list_dir(&path, filter.clone()).await
+/// })
+/// ```
+///
+/// # 参数
+/// - `$router`: NodeRouter 实例
+/// - `$node_id`: 节点 ID 引用
+/// - `$sftp`: SFTP session 绑定名
+/// - `$op`: 返回 `Result<T, SftpError>` 的异步操作块
+macro_rules! sftp_with_retry {
+    ($router:expr, $node_id:expr, $sftp:ident, $op:block) => {{
+        // 首次尝试
+        let sftp_arc = $router.acquire_sftp($node_id).await?;
+        let $sftp = sftp_arc.lock().await;
+        let first_result: Result<_, SftpError> = $op;
+        drop($sftp); // 释放锁以便重建
+
+        match first_result {
+            Ok(v) => Ok(v),
+            Err(e) if e.is_channel_recoverable() => {
+                // 通道错误，尝试重建
+                tracing::info!(
+                    "SFTP channel error for node {}, attempting rebuild: {}",
+                    $node_id,
+                    e
+                );
+
+                // 重建 SFTP session
+                let sftp_arc = $router.invalidate_and_reacquire_sftp($node_id).await?;
+                let $sftp = sftp_arc.lock().await;
+
+                // 重试操作
+                let retry_result: Result<_, SftpError> = $op;
+                retry_result.map_err(RouteError::from)
+            }
+            Err(e) => {
+                // 业务错误，直接返回
+                Err(RouteError::from(e))
+            }
+        }
+    }};
+}
+
+// ============================================================================
+// Node State 查询
+// ============================================================================
 
 /// 获取节点状态快照（含 generation，用于前端初始对齐）
 #[tauri::command]
@@ -36,7 +96,7 @@ pub async fn node_sftp_init(
     Ok(sftp.cwd().to_string())
 }
 
-/// 列目录
+/// 列目录（支持静默重建）
 #[tauri::command]
 pub async fn node_sftp_list_dir(
     node_id: String,
@@ -44,39 +104,34 @@ pub async fn node_sftp_list_dir(
     filter: Option<ListFilter>,
     router: State<'_, Arc<NodeRouter>>,
 ) -> Result<Vec<FileInfo>, RouteError> {
-    let sftp = router.acquire_sftp(&node_id).await?;
-    let sftp = sftp.lock().await;
-    sftp.list_dir(&path, filter)
-        .await
-        .map_err(RouteError::from)
+    let filter = filter.clone();
+    sftp_with_retry!(router, &node_id, sftp, {
+        sftp.list_dir(&path, filter.clone()).await
+    })
 }
 
-/// 文件信息
+/// 文件信息（支持静默重建）
 #[tauri::command]
 pub async fn node_sftp_stat(
     node_id: String,
     path: String,
     router: State<'_, Arc<NodeRouter>>,
 ) -> Result<FileInfo, RouteError> {
-    let sftp = router.acquire_sftp(&node_id).await?;
-    let sftp = sftp.lock().await;
-    sftp.stat(&path)
-        .await
-        .map_err(RouteError::from)
+    sftp_with_retry!(router, &node_id, sftp, {
+        sftp.stat(&path).await
+    })
 }
 
-/// 预览文件内容
+/// 预览文件内容（支持静默重建）
 #[tauri::command]
 pub async fn node_sftp_preview(
     node_id: String,
     path: String,
     router: State<'_, Arc<NodeRouter>>,
 ) -> Result<PreviewContent, RouteError> {
-    let sftp = router.acquire_sftp(&node_id).await?;
-    let sftp = sftp.lock().await;
-    sftp.preview(&path)
-        .await
-        .map_err(RouteError::from)
+    sftp_with_retry!(router, &node_id, sftp, {
+        sftp.preview(&path).await
+    })
 }
 
 /// 写入文件内容（IDE 编辑器用）
@@ -341,7 +396,7 @@ pub async fn node_sftp_upload_dir(
         .map_err(RouteError::from)
 }
 
-/// 十六进制预览
+/// 十六进制预览（支持静默重建）
 #[tauri::command]
 pub async fn node_sftp_preview_hex(
     node_id: String,
@@ -349,11 +404,9 @@ pub async fn node_sftp_preview_hex(
     offset: u64,
     router: State<'_, Arc<NodeRouter>>,
 ) -> Result<PreviewContent, RouteError> {
-    let sftp = router.acquire_sftp(&node_id).await?;
-    let sftp = sftp.lock().await;
-    sftp.preview_with_offset(&path, offset)
-        .await
-        .map_err(RouteError::from)
+    sftp_with_retry!(router, &node_id, sftp, {
+        sftp.preview_with_offset(&path, offset).await
+    })
 }
 
 /// 列出未完成的传输

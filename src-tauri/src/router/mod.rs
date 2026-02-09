@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time::timeout;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::commands::SessionTreeState;
 use crate::session::SessionRegistry;
@@ -185,6 +185,65 @@ impl NodeRouter {
             );
         }
 
+        Ok(sftp)
+    }
+
+    /// 失效并重新获取 SFTP session（静默重建入口）
+    ///
+    /// 工作流程：
+    /// 1. 验证 SSH 连接仍然有效（active 状态）
+    /// 2. 清理现有 SFTP session
+    /// 3. 发送 SftpReady(false) 事件（通知前端正在重建）
+    /// 4. 重新创建 SFTP session
+    /// 5. 发送 SftpReady(true) 事件
+    ///
+    /// # Errors
+    /// - SSH 连接已断开：返回 NotConnected
+    /// - SFTP 子系统不可用：返回 CapabilityUnavailable
+    pub async fn invalidate_and_reacquire_sftp(
+        &self,
+        node_id: &str,
+    ) -> Result<Arc<tokio::sync::Mutex<SftpSession>>, RouteError> {
+        let resolved = self.resolve_connection(node_id).await?;
+
+        // 获取 ConnectionEntry
+        let entry = self
+            .connection_registry
+            .get_connection(&resolved.connection_id)
+            .ok_or_else(|| {
+                RouteError::NotConnected(format!(
+                    "Connection {} not found during SFTP rebuild",
+                    resolved.connection_id
+                ))
+            })?;
+
+        // 1. 失效当前 SFTP session
+        let had_sftp = entry.invalidate_sftp().await;
+        if had_sftp {
+            info!(
+                "SFTP session invalidated for node {}, rebuilding...",
+                node_id
+            );
+            // 发送 SftpReady(false) 通知前端正在重建
+            self.emitter
+                .emit_sftp_ready(&resolved.connection_id, false, None);
+        }
+
+        // 2. 重新获取（会创建新的 SFTP session）
+        let sftp = entry
+            .acquire_sftp()
+            .await
+            .map_err(|e| RouteError::CapabilityUnavailable(format!("SFTP rebuild failed: {}", e)))?;
+
+        // 3. 获取 cwd 并发送 SftpReady(true)
+        let cwd = entry.sftp_cwd().await;
+        self.emitter
+            .emit_sftp_ready(&resolved.connection_id, true, cwd.clone());
+
+        info!(
+            "SFTP session rebuilt successfully for node {}, cwd={:?}",
+            node_id, cwd
+        );
         Ok(sftp)
     }
 
