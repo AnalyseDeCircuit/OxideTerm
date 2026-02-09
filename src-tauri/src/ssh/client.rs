@@ -37,11 +37,14 @@ impl SshClient {
             .next()
             .ok_or_else(|| SshError::ConnectionFailed("No address found".to_string()))?;
 
-        // Configure SSH client with keepalive
+        // SSH keepalive config (defense-in-depth):
+        // Layer 1 (here): russh native keepalive — safety net in case app heartbeat stalls
+        // Layer 2: App-level heartbeat (15s) in connection_registry — provides granular
+        //          LinkDown events, smart probe confirmation, and frontend state updates
         let ssh_config = client::Config {
-            inactivity_timeout: None, // Disabled: app-level heartbeat (15s) handles liveness
-            keepalive_interval: Some(Duration::from_secs(30)),  // Send keepalive every 30s
-            keepalive_max: 3, // Disconnect after 3 missed keepalives (90s total)
+            inactivity_timeout: None, // Disabled: app-level heartbeat handles liveness
+            keepalive_interval: Some(Duration::from_secs(30)),
+            keepalive_max: 3,
             ..Default::default()
         };
 
@@ -91,21 +94,8 @@ impl SshClient {
             }
             AuthMethod::Agent => {
                 // Connect to SSH Agent and authenticate
-                let mut agent =
-                    crate::ssh::agent::SshAgentClient::connect()
-                        .await
-                        .map_err(|e| {
-                            SshError::AuthenticationFailed(format!(
-                                "Failed to connect to SSH agent: {}",
-                                e
-                            ))
-                        })?;
-
-                agent
-                    .authenticate(&mut handle, self.config.username.clone())
-                    .await
-                    .map_err(|e| SshError::AuthenticationFailed(e.to_string()))?;
-
+                let mut agent = crate::ssh::agent::SshAgentClient::connect().await?;
+                agent.authenticate(&mut handle, self.config.username.clone()).await?;
                 client::AuthResult::Success
             }
             AuthMethod::Certificate {

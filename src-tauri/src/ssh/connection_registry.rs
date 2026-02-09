@@ -53,12 +53,17 @@ use crate::sftp::session::SftpSession;
 /// 默认空闲超时时间（30 分钟）
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
-/// 心跳间隔（15 秒）
-/// 配合 HEARTBEAT_FAIL_THRESHOLD=2，确保 30 秒内检测到断连
+/// App-level heartbeat interval (15s).
+///
+/// This runs on top of russh's native `keepalive_interval` (30s) as the
+/// **primary** liveness monitor. Why keep both?
+/// - App heartbeat: granular LinkDown → frontend events, smart probe, reuse scoring
+/// - russh native keepalive: defense-in-depth safety net if heartbeat task stalls
+///
+/// 15s × HEARTBEAT_FAIL_THRESHOLD(2) = 30s to detect link-down.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 
-/// 心跳连续失败次数阈值，达到后标记为 LinkDown
-/// 15s × 2 = 30s 内必触发重连
+/// Heartbeat consecutive failure threshold → mark LinkDown
 const HEARTBEAT_FAIL_THRESHOLD: u32 = 2;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -999,8 +1004,9 @@ impl SshConnectionRegistry {
         let connection_id = uuid::Uuid::new_v4().to_string();
 
         // 创建 SSH 配置（非严格主机密钥检查，因为是隧道连接）
+        // Defense-in-depth: native keepalive as safety net (see HEARTBEAT_INTERVAL)
         let ssh_config = russh::client::Config {
-            inactivity_timeout: None, // Disabled: app-level heartbeat handles liveness
+            inactivity_timeout: None,
             keepalive_interval: Some(std::time::Duration::from_secs(30)),
             keepalive_max: 3,
             ..Default::default()
