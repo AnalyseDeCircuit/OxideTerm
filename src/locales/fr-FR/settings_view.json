@@ -88,7 +88,9 @@
       "color_theme_hint": "Schéma de couleurs du terminal",
       "select_theme": "Sélectionner le thème",
       "layout": "Disposition",
-      "layout_hint": "La barre latérale peut être redimensionnée en faisant glisser son bord droit. Utilisez le bouton de réduction (◧) pour la masquer."
+      "layout_hint": "La barre latérale peut être redimensionnée en faisant glisser son bord droit. Utilisez le bouton de réduction (◧) pour la masquer.",
+      "theme_group_oxide": "Série Oxide",
+      "theme_group_classic": "Classique / Autre"
     },
     "connections": {
       "title": "Valeurs par défaut des connexions",

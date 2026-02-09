@@ -972,7 +972,7 @@ export const SettingsView = () => {
                                             </SelectTrigger>
                                             <SelectContent className="bg-theme-bg-panel border-theme-border max-h-[300px]">
                                                 <SelectGroup>
-                                                    <SelectLabel className="text-theme-text-muted text-xs uppercase tracking-wider px-2 py-1.5 font-bold">Oxide Series</SelectLabel>
+                                                    <SelectLabel className="text-theme-text-muted text-xs uppercase tracking-wider px-2 py-1.5 font-bold whitespace-normal break-words">{t('settings_view.appearance.theme_group_oxide')}</SelectLabel>
                                                     {['oxide', 'verdigris', 'magnetite', 'cobalt', 'ochre', 'silver-oxide', 'cuprite', 'chromium-oxide', 'paper-oxide'].map((key) => (
                                                         <SelectItem key={key} value={key} className="text-theme-text focus:bg-theme-bg-hover focus:text-theme-text pl-4">
                                                             {formatThemeName(key)}
@@ -983,7 +983,7 @@ export const SettingsView = () => {
                                                 <SelectSeparator className="bg-zinc-700 my-1" />
 
                                                 <SelectGroup>
-                                                    <SelectLabel className="text-theme-text-muted text-xs uppercase tracking-wider px-2 py-1.5 font-bold">Classic / Other</SelectLabel>
+                                                    <SelectLabel className="text-theme-text-muted text-xs uppercase tracking-wider px-2 py-1.5 font-bold whitespace-normal break-words">{t('settings_view.appearance.theme_group_classic')}</SelectLabel>
                                                     {Object.keys(themes)
                                                         .filter(key => !['oxide', 'verdigris', 'magnetite', 'cobalt', 'ochre', 'silver-oxide', 'cuprite', 'chromium-oxide', 'paper-oxide'].includes(key))
                                                         .map(key => (

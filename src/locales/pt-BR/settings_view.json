@@ -88,7 +88,9 @@
       "color_theme_hint": "Esquema de cores do terminal",
       "select_theme": "Selecionar tema",
       "layout": "Layout",
-      "layout_hint": "A barra lateral pode ser redimensionada arrastando a borda direita. Use o botão de recolher (◧) para ocultá-la."
+      "layout_hint": "A barra lateral pode ser redimensionada arrastando a borda direita. Use o botão de recolher (◧) para ocultá-la.",
+      "theme_group_oxide": "Série Oxide",
+      "theme_group_classic": "Clássico / Outros"
     },
     "connections": {
       "title": "Padrões de conexão",

@@ -88,7 +88,9 @@
       "color_theme_hint": "Bảng màu terminal",
       "select_theme": "Chọn giao diện",
       "layout": "Bố cục",
-      "layout_hint": "Có thể thay đổi kích thước thanh bên bằng cách kéo cạnh phải. Sử dụng nút thu gọn (◧) để ẩn."
+      "layout_hint": "Có thể thay đổi kích thước thanh bên bằng cách kéo cạnh phải. Sử dụng nút thu gọn (◧) để ẩn.",
+      "theme_group_oxide": "Dòng Oxide",
+      "theme_group_classic": "Cổ điển / Khác"
     },
     "connections": {
       "title": "Mặc định kết nối",

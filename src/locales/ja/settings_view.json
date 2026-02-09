@@ -88,7 +88,9 @@
       "color_theme_hint": "ターミナルの配色",
       "select_theme": "テーマを選択",
       "layout": "レイアウト",
-      "layout_hint": "サイドバーは右端をドラッグしてサイズ変更できます。折りたたみボタン（◧）を使用して非表示にします。"
+      "layout_hint": "サイドバーは右端をドラッグしてサイズ変更できます。折りたたみボタン（◧）を使用して非表示にします。",
+      "theme_group_oxide": "Oxide シリーズ",
+      "theme_group_classic": "クラシック / その他"
     },
     "connections": {
       "title": "接続のデフォルト値",

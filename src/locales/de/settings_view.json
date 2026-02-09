@@ -88,7 +88,9 @@
       "color_theme_hint": "Terminal-Farbschema",
       "select_theme": "Design auswählen",
       "layout": "Layout",
-      "layout_hint": "Die Seitenleiste kann durch Ziehen des rechten Rands angepasst werden. Verwenden Sie die Einklappen-Schaltfläche (◧) zum Ausblenden."
+      "layout_hint": "Die Seitenleiste kann durch Ziehen des rechten Rands angepasst werden. Verwenden Sie die Einklappen-Schaltfläche (◧) zum Ausblenden.",
+      "theme_group_oxide": "Oxide-Reihe",
+      "theme_group_classic": "Klassisch / Andere"
     },
     "connections": {
       "title": "Verbindungsstandards",

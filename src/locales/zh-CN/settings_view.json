@@ -88,7 +88,9 @@
       "color_theme_hint": "终端配色方案",
       "select_theme": "选择主题",
       "layout": "布局",
-      "layout_hint": "可以通过拖动右边缘调整侧边栏大小。使用折叠按钮 (◧) 隐藏它。"
+      "layout_hint": "可以通过拖动右边缘调整侧边栏大小。使用折叠按钮 (◧) 隐藏它。",
+      "theme_group_oxide": "Oxide 系列",
+      "theme_group_classic": "经典 / 其他"
     },
     "connections": {
       "title": "连接默认值",

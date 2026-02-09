@@ -88,7 +88,9 @@
       "color_theme_hint": "Terminal color scheme",
       "select_theme": "Select theme",
       "layout": "Layout",
-      "layout_hint": "Sidebar can be resized by dragging its right edge. Use the collapse button (◧) to hide it."
+      "layout_hint": "Sidebar can be resized by dragging its right edge. Use the collapse button (◧) to hide it.",
+      "theme_group_oxide": "Oxide Series",
+      "theme_group_classic": "Classic / Other"
     },
     "connections": {
       "title": "Connection Defaults",

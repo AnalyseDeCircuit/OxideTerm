@@ -88,7 +88,9 @@
       "color_theme_hint": "터미널 색상 구성표",
       "select_theme": "테마 선택",
       "layout": "레이아웃",
-      "layout_hint": "사이드바는 오른쪽 가장자리를 드래그하여 크기를 조정할 수 있습니다. 접기 버튼 (◧)을 사용하여 숨길 수 있습니다."
+      "layout_hint": "사이드바는 오른쪽 가장자리를 드래그하여 크기를 조정할 수 있습니다. 접기 버튼 (◧)을 사용하여 숨길 수 있습니다.",
+      "theme_group_oxide": "Oxide 시리즈",
+      "theme_group_classic": "클래식 / 기타"
     },
     "connections": {
       "title": "연결 기본값",
