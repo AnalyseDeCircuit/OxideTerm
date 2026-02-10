@@ -44,19 +44,20 @@ pub async fn wsl_graphics_start(
     }
 
     // 1. Check prerequisites: Xtigervnc, desktop environment, D-Bus
-    let (desktop_cmd, dbus_cmd) = wsl::check_prerequisites(&distro)
+    let (desktop_cmd, dbus_cmd, force_x11) = wsl::check_prerequisites(&distro)
         .await
         .map_err(|e| e.to_string())?;
     tracing::info!(
-        "WSL Graphics: prerequisites OK for '{}' (desktop={}, dbus={})",
+        "WSL Graphics: prerequisites OK for '{}' (desktop={}, dbus={}, force_x11={})",
         distro,
         desktop_cmd,
-        dbus_cmd
+        dbus_cmd,
+        force_x11
     );
 
     // 2. Start Xtigervnc + desktop session
     let (vnc_port, vnc_child, desktop_child) =
-        wsl::start_session(&distro, &desktop_cmd, &dbus_cmd)
+        wsl::start_session(&distro, &desktop_cmd, &dbus_cmd, force_x11)
             .await
             .map_err(|e| e.to_string())?;
     tracing::info!(

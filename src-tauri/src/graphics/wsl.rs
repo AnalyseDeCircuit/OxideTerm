@@ -93,14 +93,26 @@ fn decode_utf16le(data: &[u8]) -> String {
         .collect()
 }
 
-/// Desktop session commands in order of preference.
-const DESKTOP_CANDIDATES: &[&str] = &[
-    "xfce4-session",
-    "mate-session",
-    "startlxde",
-    "openbox-session",
-    "fluxbox",
-    "icewm-session",
+/// A desktop session candidate with detection binary and launch command.
+struct DesktopCandidate {
+    /// Binary to check with `which` (must exist in $PATH)
+    detect_bin: &'static str,
+    /// Actual command to exec in the bootstrap script (may include args)
+    launch_cmd: &'static str,
+    /// Whether to force `XDG_SESSION_TYPE=x11` + `GDK_BACKEND=x11` (needed by GNOME)
+    force_x11: bool,
+}
+
+/// Desktop session candidates in order of preference.
+const DESKTOP_CANDIDATES: &[DesktopCandidate] = &[
+    DesktopCandidate { detect_bin: "xfce4-session",    launch_cmd: "xfce4-session",                     force_x11: false },
+    DesktopCandidate { detect_bin: "gnome-session",    launch_cmd: "gnome-session --session=gnome-xorg", force_x11: true  },
+    DesktopCandidate { detect_bin: "mate-session",     launch_cmd: "mate-session",                      force_x11: false },
+    DesktopCandidate { detect_bin: "startlxde",        launch_cmd: "startlxde",                         force_x11: false },
+    DesktopCandidate { detect_bin: "cinnamon-session", launch_cmd: "cinnamon-session",                  force_x11: false },
+    DesktopCandidate { detect_bin: "openbox-session",  launch_cmd: "openbox-session",                   force_x11: false },
+    DesktopCandidate { detect_bin: "fluxbox",          launch_cmd: "fluxbox",                           force_x11: false },
+    DesktopCandidate { detect_bin: "icewm-session",    launch_cmd: "icewm-session",                     force_x11: false },
 ];
 
 /// Marker file written by bootstrap script so we can clean up later.
@@ -110,7 +122,7 @@ const PID_FILE: &str = "/tmp/oxideterm-desktop.pid";
 async fn has_desktop(distro: &str) -> bool {
     for de in DESKTOP_CANDIDATES {
         let output = Command::new("wsl.exe")
-            .args(["-d", distro, "--", "which", de])
+            .args(["-d", distro, "--", "which", de.detect_bin])
             .output()
             .await;
         if let Ok(out) = output {
@@ -147,7 +159,7 @@ async fn detect_dbus(distro: &str) -> Option<&'static str> {
 /// Returns the detected desktop command and D-Bus launcher.
 pub async fn check_prerequisites(
     distro: &str,
-) -> Result<(&'static str, &'static str), GraphicsError> {
+) -> Result<(&'static str, &'static str, bool), GraphicsError> {
     // 1. Check for Xtigervnc
     let output = Command::new("wsl.exe")
         .args(["-d", distro, "--", "which", "Xtigervnc"])
@@ -159,20 +171,20 @@ pub async fn check_prerequisites(
     }
 
     // 2. Check for a desktop environment
-    let mut desktop_cmd: Option<&str> = None;
+    let mut matched: Option<&DesktopCandidate> = None;
     for de in DESKTOP_CANDIDATES {
         let output = Command::new("wsl.exe")
-            .args(["-d", distro, "--", "which", de])
+            .args(["-d", distro, "--", "which", de.detect_bin])
             .output()
             .await;
         if let Ok(out) = output {
             if out.status.success() {
-                desktop_cmd = Some(de);
+                matched = Some(de);
                 break;
             }
         }
     }
-    let desktop_cmd = desktop_cmd.ok_or_else(|| GraphicsError::NoDesktop(distro.to_string()))?;
+    let candidate = matched.ok_or_else(|| GraphicsError::NoDesktop(distro.to_string()))?;
 
     // 3. Check for D-Bus
     let dbus_cmd =
@@ -181,12 +193,13 @@ pub async fn check_prerequisites(
             .ok_or_else(|| GraphicsError::NoDbus(distro.to_string()))?;
 
     tracing::info!(
-        "WSL Graphics prerequisites OK: desktop='{}', dbus='{}'",
-        desktop_cmd,
-        dbus_cmd
+        "WSL Graphics prerequisites OK: desktop='{}', dbus='{}', force_x11={}",
+        candidate.launch_cmd,
+        dbus_cmd,
+        candidate.force_x11
     );
 
-    Ok((desktop_cmd, dbus_cmd))
+    Ok((candidate.launch_cmd, dbus_cmd, candidate.force_x11))
 }
 
 /// Find a free X display number by checking `/tmp/.X11-unix/X{n}` inside WSL.
@@ -225,6 +238,7 @@ pub async fn start_session(
     distro: &str,
     desktop_cmd: &str,
     dbus_cmd: &str,
+    force_x11: bool,
 ) -> Result<(u16, Child, Option<Child>), GraphicsError> {
     let port = find_free_port().await?;
     let disp = find_free_display(distro).await;
@@ -264,7 +278,7 @@ pub async fn start_session(
 
     // 3. Launch desktop session via bootstrap script
     let desktop_child =
-        start_desktop_session(distro, &disp, desktop_cmd, dbus_cmd).await;
+        start_desktop_session(distro, &disp, desktop_cmd, dbus_cmd, force_x11).await;
 
     Ok((port, vnc_child, desktop_child))
 }
@@ -282,6 +296,7 @@ async fn start_desktop_session(
     x_display: &str,
     desktop_cmd: &str,
     dbus_cmd: &str,
+    force_x11: bool,
 ) -> Option<Child> {
     // Build the bootstrap script.
     // `dbus-run-session` wraps the desktop command directly (cleaner lifecycle).
@@ -293,6 +308,13 @@ async fn start_desktop_session(
             "eval $(dbus-launch --sh-syntax)\nexport DBUS_SESSION_BUS_ADDRESS\nexec {}",
             desktop_cmd
         )
+    };
+
+    // For GNOME and other sessions that require explicit X11 mode
+    let x11_env = if force_x11 {
+        "export XDG_SESSION_TYPE=x11\nexport GDK_BACKEND=x11"
+    } else {
+        ""
     };
 
     let script = format!(
@@ -307,6 +329,8 @@ export DISPLAY={display}
 export XDG_RUNTIME_DIR="/tmp/oxideterm-xdg-$$"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
+
+{x11_env}
 
 # Write PID file for session cleanup
 echo $$ > {pid_file}
@@ -323,6 +347,7 @@ trap cleanup EXIT
 "#,
         display = x_display,
         pid_file = PID_FILE,
+        x11_env = x11_env,
         dbus_wrapper = dbus_wrapper,
     );
 
@@ -365,15 +390,32 @@ trap cleanup EXIT
 /// Clean up any lingering session processes inside WSL.
 ///
 /// Called when stopping a session — reads the PID file written by the
-/// bootstrap script and sends SIGTERM to the process tree.
+/// bootstrap script and recursively kills the entire process tree.
+/// This is critical for GNOME which spawns deep process trees
+/// (gnome-session → gnome-shell → gnome-settings-daemon → ...).
 pub async fn cleanup_wsl_session(distro: &str) {
     let cleanup_cmd = format!(
-        r#"if [ -f {pid} ]; then
+        r#"# Recursive process tree killer
+kill_tree() {{
+    local pid=$1
+    local children
+    children=$(pgrep -P "$pid" 2>/dev/null) || true
+    for child in $children; do
+        kill_tree "$child"
+    done
+    kill -TERM "$pid" 2>/dev/null || true
+}}
+
+if [ -f {pid} ]; then
     PID=$(cat {pid})
     if kill -0 "$PID" 2>/dev/null; then
-        pkill -TERM -P "$PID" 2>/dev/null || true
-        kill -TERM "$PID" 2>/dev/null || true
+        kill_tree "$PID"
         sleep 0.5
+        # Force-kill anything still alive
+        children=$(pgrep -P "$PID" 2>/dev/null) || true
+        for child in $children; do
+            kill -KILL "$child" 2>/dev/null || true
+        done
         kill -KILL "$PID" 2>/dev/null || true
     fi
     rm -f {pid}
@@ -502,12 +544,9 @@ mod tests {
     #[test]
     fn test_bootstrap_script_dbus_run_session() {
         // Verify the script uses `dbus-run-session` when available
-        // (just a sanity check on string formatting)
-        let display = ":10";
         let dbus_wrapper = format!("exec dbus-run-session {}", "xfce4-session");
         assert!(dbus_wrapper.contains("dbus-run-session xfce4-session"));
         assert!(!dbus_wrapper.contains("dbus-launch"));
-        let _ = display; // prevent unused warning
     }
 
     #[test]
@@ -518,5 +557,39 @@ mod tests {
         );
         assert!(dbus_wrapper.contains("dbus-launch --sh-syntax"));
         assert!(dbus_wrapper.contains("exec xfce4-session"));
+    }
+
+    #[test]
+    fn test_bootstrap_script_gnome_x11() {
+        // GNOME needs force_x11=true → XDG_SESSION_TYPE=x11 + GDK_BACKEND=x11
+        let desktop_cmd = "gnome-session --session=gnome-xorg";
+        let force_x11 = true;
+        let x11_env = if force_x11 {
+            "export XDG_SESSION_TYPE=x11\nexport GDK_BACKEND=x11"
+        } else {
+            ""
+        };
+        assert!(x11_env.contains("XDG_SESSION_TYPE=x11"));
+        assert!(x11_env.contains("GDK_BACKEND=x11"));
+        let dbus_wrapper = format!("exec dbus-run-session {}", desktop_cmd);
+        assert!(dbus_wrapper.contains("gnome-session --session=gnome-xorg"));
+    }
+
+    #[test]
+    fn test_desktop_candidates_gnome_has_force_x11() {
+        // Verify GNOME candidate has force_x11 = true
+        let gnome = DESKTOP_CANDIDATES
+            .iter()
+            .find(|c| c.detect_bin == "gnome-session")
+            .expect("gnome-session should be in candidates");
+        assert!(gnome.force_x11);
+        assert!(gnome.launch_cmd.contains("--session=gnome-xorg"));
+
+        // Other candidates should NOT have force_x11
+        for c in DESKTOP_CANDIDATES {
+            if c.detect_bin != "gnome-session" {
+                assert!(!c.force_x11, "{} should not have force_x11", c.detect_bin);
+            }
+        }
     }
 }

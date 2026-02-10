@@ -105,10 +105,10 @@ mod types {
     /// Errors specific to WSL Graphics operations
     #[derive(Debug, Error)]
     pub enum GraphicsError {
-        #[error("No VNC server found in WSL distro '{0}'. Install prerequisites:\nsudo apt update && sudo apt install tigervnc-standalone-server xfce4 dbus-x11 -y")]
+        #[error("No VNC server found in WSL distro '{0}'. Install prerequisites:\nsudo apt update && sudo apt install tigervnc-standalone-server dbus-x11 -y\nThen install a desktop: sudo apt install xfce4 -y (or ubuntu-desktop for GNOME)")]
         NoVncServer(String),
 
-        #[error("No desktop environment found in WSL distro '{0}'. Install one:\nsudo apt update && sudo apt install xfce4 -y")]
+        #[error("No desktop environment found in WSL distro '{0}'. Install one:\nsudo apt install xfce4 -y  (lightweight)\nsudo apt install ubuntu-desktop -y  (GNOME)")]
         NoDesktop(String),
 
         #[error("D-Bus is not available in WSL distro '{0}'. Install it:\nsudo apt update && sudo apt install dbus-x11 -y")]
