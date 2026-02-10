@@ -12,8 +12,9 @@
     "stop": "Arrêter",
     "distro_running": "En cours d'exécution",
     "distro_stopped": "Arrêtée",
-    "no_vnc_server": "Aucun serveur VNC installé. Exécutez : sudo apt install tigervnc-standalone-server dbus-x11 -y, puis installez un bureau (xfce4 ou ubuntu-desktop)",
+    "no_vnc_server": "Aucun serveur VNC installé. Exécutez : sudo apt install tigervnc-standalone-server dbus-x11 -y, puis installez un bureau (xfce4, ubuntu-desktop ou kde-plasma-desktop)",
     "no_dbus": "D-Bus n'est pas disponible. Exécutez : sudo apt update && sudo apt install dbus-x11 -y",
-    "not_available": "WSL Graphiques est disponible uniquement sous Windows avec la fonctionnalité wsl-graphics activée."
+    "not_available": "WSL Graphiques est disponible uniquement sous Windows avec la fonctionnalité wsl-graphics activée.",
+    "desktop_experimental": "Expérimental, sans garantie"
   }
 }

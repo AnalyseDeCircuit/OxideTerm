@@ -12,8 +12,9 @@
     "stop": "중지",
     "distro_running": "실행 중",
     "distro_stopped": "중지됨",
-    "no_vnc_server": "VNC 서버가 설치되지 않았습니다. 실행: sudo apt install tigervnc-standalone-server dbus-x11 -y, 그리고 데스크톱 설치 (xfce4 또는 ubuntu-desktop)",
+    "no_vnc_server": "VNC 서버가 설치되지 않았습니다. 실행: sudo apt install tigervnc-standalone-server dbus-x11 -y, 그리고 데스크톱 설치 (xfce4, ubuntu-desktop 또는 kde-plasma-desktop)",
     "no_dbus": "D-Bus를 사용할 수 없습니다. 실행: sudo apt update && sudo apt install dbus-x11 -y",
-    "not_available": "WSL 그래픽은 Windows에서 wsl-graphics 기능이 활성화된 경우에만 사용할 수 있습니다."
+    "not_available": "WSL 그래픽은 Windows에서 wsl-graphics 기능이 활성화된 경우에만 사용할 수 있습니다.",
+    "desktop_experimental": "실험적 기능, 무보증"
   }
 }

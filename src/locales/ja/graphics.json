@@ -12,8 +12,9 @@
     "stop": "停止",
     "distro_running": "実行中",
     "distro_stopped": "停止中",
-    "no_vnc_server": "VNC サーバーがインストールされていません。実行: sudo apt install tigervnc-standalone-server dbus-x11 -y、その後デスクトップをインストール (xfce4 または ubuntu-desktop)",
+    "no_vnc_server": "VNC サーバーがインストールされていません。実行: sudo apt install tigervnc-standalone-server dbus-x11 -y、その後デスクトップをインストール (xfce4、ubuntu-desktop、または kde-plasma-desktop)",
     "no_dbus": "D-Bus が利用できません。実行: sudo apt update && sudo apt install dbus-x11 -y",
-    "not_available": "WSL グラフィックスは Windows で wsl-graphics 機能が有効な場合のみ利用できます。"
+    "not_available": "WSL グラフィックスは Windows で wsl-graphics 機能が有効な場合のみ利用できます。",
+    "desktop_experimental": "実験的機能、無保証"
   }
 }

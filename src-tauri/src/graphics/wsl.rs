@@ -99,20 +99,70 @@ struct DesktopCandidate {
     detect_bin: &'static str,
     /// Actual command to exec in the bootstrap script (may include args)
     launch_cmd: &'static str,
-    /// Whether to force `XDG_SESSION_TYPE=x11` + `GDK_BACKEND=x11` (needed by GNOME)
-    force_x11: bool,
+    /// Extra environment exports injected into the bootstrap script.
+    /// E.g. GNOME needs `XDG_SESSION_TYPE=x11`, KDE needs `QT_QPA_PLATFORM=xcb`.
+    /// Empty string if no extra env is needed.
+    extra_env: &'static str,
+    /// Human-readable name shown in the UI
+    display_name: &'static str,
 }
 
 /// Desktop session candidates in order of preference.
 const DESKTOP_CANDIDATES: &[DesktopCandidate] = &[
-    DesktopCandidate { detect_bin: "xfce4-session",    launch_cmd: "xfce4-session",                     force_x11: false },
-    DesktopCandidate { detect_bin: "gnome-session",    launch_cmd: "gnome-session --session=gnome-xorg", force_x11: true  },
-    DesktopCandidate { detect_bin: "mate-session",     launch_cmd: "mate-session",                      force_x11: false },
-    DesktopCandidate { detect_bin: "startlxde",        launch_cmd: "startlxde",                         force_x11: false },
-    DesktopCandidate { detect_bin: "cinnamon-session", launch_cmd: "cinnamon-session",                  force_x11: false },
-    DesktopCandidate { detect_bin: "openbox-session",  launch_cmd: "openbox-session",                   force_x11: false },
-    DesktopCandidate { detect_bin: "fluxbox",          launch_cmd: "fluxbox",                           force_x11: false },
-    DesktopCandidate { detect_bin: "icewm-session",    launch_cmd: "icewm-session",                     force_x11: false },
+    DesktopCandidate {
+        detect_bin: "xfce4-session",
+        launch_cmd: "xfce4-session",
+        extra_env: "",
+        display_name: "Xfce",
+    },
+    DesktopCandidate {
+        detect_bin: "gnome-session",
+        launch_cmd: "gnome-session --session=gnome-xorg",
+        extra_env: "export XDG_SESSION_TYPE=x11\nexport GDK_BACKEND=x11",
+        display_name: "GNOME",
+    },
+    DesktopCandidate {
+        detect_bin: "startplasma-x11",
+        launch_cmd: "startplasma-x11",
+        extra_env: "export QT_QPA_PLATFORM=xcb\nexport DESKTOP_SESSION=plasma\nexport KWIN_COMPOSE=N",
+        display_name: "KDE Plasma",
+    },
+    DesktopCandidate {
+        detect_bin: "mate-session",
+        launch_cmd: "mate-session",
+        extra_env: "",
+        display_name: "MATE",
+    },
+    DesktopCandidate {
+        detect_bin: "startlxde",
+        launch_cmd: "startlxde",
+        extra_env: "",
+        display_name: "LXDE",
+    },
+    DesktopCandidate {
+        detect_bin: "cinnamon-session",
+        launch_cmd: "cinnamon-session",
+        extra_env: "",
+        display_name: "Cinnamon",
+    },
+    DesktopCandidate {
+        detect_bin: "openbox-session",
+        launch_cmd: "openbox-session",
+        extra_env: "",
+        display_name: "Openbox",
+    },
+    DesktopCandidate {
+        detect_bin: "fluxbox",
+        launch_cmd: "fluxbox",
+        extra_env: "",
+        display_name: "Fluxbox",
+    },
+    DesktopCandidate {
+        detect_bin: "icewm-session",
+        launch_cmd: "icewm-session",
+        extra_env: "",
+        display_name: "IceWM",
+    },
 ];
 
 /// Marker file written by bootstrap script so we can clean up later.
@@ -159,7 +209,7 @@ async fn detect_dbus(distro: &str) -> Option<&'static str> {
 /// Returns the detected desktop command and D-Bus launcher.
 pub async fn check_prerequisites(
     distro: &str,
-) -> Result<(&'static str, &'static str, bool), GraphicsError> {
+) -> Result<(&'static str, &'static str, &'static str, &'static str), GraphicsError> {
     // 1. Check for Xtigervnc
     let output = Command::new("wsl.exe")
         .args(["-d", distro, "--", "which", "Xtigervnc"])
@@ -193,13 +243,14 @@ pub async fn check_prerequisites(
             .ok_or_else(|| GraphicsError::NoDbus(distro.to_string()))?;
 
     tracing::info!(
-        "WSL Graphics prerequisites OK: desktop='{}', dbus='{}', force_x11={}",
+        "WSL Graphics prerequisites OK: desktop='{}' ({}), dbus='{}', extra_env={}",
         candidate.launch_cmd,
+        candidate.display_name,
         dbus_cmd,
-        candidate.force_x11
+        if candidate.extra_env.is_empty() { "(none)" } else { "yes" }
     );
 
-    Ok((candidate.launch_cmd, dbus_cmd, candidate.force_x11))
+    Ok((candidate.launch_cmd, dbus_cmd, candidate.extra_env, candidate.display_name))
 }
 
 /// Find a free X display number by checking `/tmp/.X11-unix/X{n}` inside WSL.
@@ -238,7 +289,7 @@ pub async fn start_session(
     distro: &str,
     desktop_cmd: &str,
     dbus_cmd: &str,
-    force_x11: bool,
+    extra_env: &str,
 ) -> Result<(u16, Child, Option<Child>), GraphicsError> {
     let port = find_free_port().await?;
     let disp = find_free_display(distro).await;
@@ -278,7 +329,7 @@ pub async fn start_session(
 
     // 3. Launch desktop session via bootstrap script
     let desktop_child =
-        start_desktop_session(distro, &disp, desktop_cmd, dbus_cmd, force_x11).await;
+        start_desktop_session(distro, &disp, desktop_cmd, dbus_cmd, extra_env).await;
 
     Ok((port, vnc_child, desktop_child))
 }
@@ -296,7 +347,7 @@ async fn start_desktop_session(
     x_display: &str,
     desktop_cmd: &str,
     dbus_cmd: &str,
-    force_x11: bool,
+    extra_env: &str,
 ) -> Option<Child> {
     // Build the bootstrap script.
     // `dbus-run-session` wraps the desktop command directly (cleaner lifecycle).
@@ -308,13 +359,6 @@ async fn start_desktop_session(
             "eval $(dbus-launch --sh-syntax)\nexport DBUS_SESSION_BUS_ADDRESS\nexec {}",
             desktop_cmd
         )
-    };
-
-    // For GNOME and other sessions that require explicit X11 mode
-    let x11_env = if force_x11 {
-        "export XDG_SESSION_TYPE=x11\nexport GDK_BACKEND=x11"
-    } else {
-        ""
     };
 
     let script = format!(
@@ -330,7 +374,7 @@ export XDG_RUNTIME_DIR="/tmp/oxideterm-xdg-$$"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-{x11_env}
+{extra_env}
 
 # Write PID file for session cleanup
 echo $$ > {pid_file}
@@ -347,7 +391,7 @@ trap cleanup EXIT
 "#,
         display = x_display,
         pid_file = PID_FILE,
-        x11_env = x11_env,
+        extra_env = extra_env,
         dbus_wrapper = dbus_wrapper,
     );
 
@@ -560,35 +604,44 @@ mod tests {
     }
 
     #[test]
-    fn test_bootstrap_script_gnome_x11() {
-        // GNOME needs force_x11=true → XDG_SESSION_TYPE=x11 + GDK_BACKEND=x11
-        let desktop_cmd = "gnome-session --session=gnome-xorg";
-        let force_x11 = true;
-        let x11_env = if force_x11 {
-            "export XDG_SESSION_TYPE=x11\nexport GDK_BACKEND=x11"
-        } else {
-            ""
-        };
-        assert!(x11_env.contains("XDG_SESSION_TYPE=x11"));
-        assert!(x11_env.contains("GDK_BACKEND=x11"));
-        let dbus_wrapper = format!("exec dbus-run-session {}", desktop_cmd);
-        assert!(dbus_wrapper.contains("gnome-session --session=gnome-xorg"));
-    }
-
-    #[test]
-    fn test_desktop_candidates_gnome_has_force_x11() {
-        // Verify GNOME candidate has force_x11 = true
+    fn test_bootstrap_script_gnome_extra_env() {
+        // GNOME needs extra_env for X11 session type + GDK backend
         let gnome = DESKTOP_CANDIDATES
             .iter()
             .find(|c| c.detect_bin == "gnome-session")
             .expect("gnome-session should be in candidates");
-        assert!(gnome.force_x11);
-        assert!(gnome.launch_cmd.contains("--session=gnome-xorg"));
+        assert!(gnome.extra_env.contains("XDG_SESSION_TYPE=x11"));
+        assert!(gnome.extra_env.contains("GDK_BACKEND=x11"));
+        assert_eq!(gnome.display_name, "GNOME");
+        let dbus_wrapper = format!("exec dbus-run-session {}", gnome.launch_cmd);
+        assert!(dbus_wrapper.contains("gnome-session --session=gnome-xorg"));
+    }
 
-        // Other candidates should NOT have force_x11
+    #[test]
+    fn test_desktop_candidates_kde_has_extra_env() {
+        // KDE Plasma needs QT_QPA_PLATFORM=xcb + DESKTOP_SESSION=plasma + KWIN_COMPOSE=N
+        let kde = DESKTOP_CANDIDATES
+            .iter()
+            .find(|c| c.detect_bin == "startplasma-x11")
+            .expect("startplasma-x11 should be in candidates");
+        assert!(kde.extra_env.contains("QT_QPA_PLATFORM=xcb"));
+        assert!(kde.extra_env.contains("DESKTOP_SESSION=plasma"));
+        assert!(kde.extra_env.contains("KWIN_COMPOSE=N"));
+        assert_eq!(kde.display_name, "KDE Plasma");
+        assert_eq!(kde.launch_cmd, "startplasma-x11");
+    }
+
+    #[test]
+    fn test_desktop_candidates_extra_env_consistency() {
+        // GNOME and KDE should have non-empty extra_env, others should be empty
         for c in DESKTOP_CANDIDATES {
-            if c.detect_bin != "gnome-session" {
-                assert!(!c.force_x11, "{} should not have force_x11", c.detect_bin);
+            match c.detect_bin {
+                "gnome-session" | "startplasma-x11" => {
+                    assert!(!c.extra_env.is_empty(), "{} should have extra_env", c.display_name);
+                }
+                _ => {
+                    assert!(c.extra_env.is_empty(), "{} should NOT have extra_env", c.display_name);
+                }
             }
         }
     }

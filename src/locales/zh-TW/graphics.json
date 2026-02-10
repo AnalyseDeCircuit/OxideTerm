@@ -12,8 +12,9 @@
     "stop": "停止",
     "distro_running": "執行中",
     "distro_stopped": "已停止",
-    "no_vnc_server": "未安裝 VNC 伺服器。請執行: sudo apt install tigervnc-standalone-server dbus-x11 -y，然後安裝桌面環境 (xfce4 或 ubuntu-desktop)",
+    "no_vnc_server": "未安裝 VNC 伺服器。請執行: sudo apt install tigervnc-standalone-server dbus-x11 -y，然後安裝桌面環境 (xfce4、ubuntu-desktop 或 kde-plasma-desktop)",
     "no_dbus": "D-Bus 不可用。請執行: sudo apt update && sudo apt install dbus-x11 -y",
-    "not_available": "WSL 圖形轉發僅在 Windows 平台且啟用 wsl-graphics 特性時可用。"
+    "not_available": "WSL 圖形轉發僅在 Windows 平台且啟用 wsl-graphics 特性時可用。",
+    "desktop_experimental": "實驗性功能，概不負責"
   }
 }

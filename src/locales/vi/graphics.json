@@ -12,8 +12,9 @@
     "stop": "Dừng",
     "distro_running": "Đang chạy",
     "distro_stopped": "Đã dừng",
-    "no_vnc_server": "Chưa cài đặt máy chủ VNC. Chạy: sudo apt install tigervnc-standalone-server dbus-x11 -y, sau đó cài đặt môi trường desktop (xfce4 hoặc ubuntu-desktop)",
+    "no_vnc_server": "Chưa cài đặt máy chủ VNC. Chạy: sudo apt install tigervnc-standalone-server dbus-x11 -y, sau đó cài đặt môi trường desktop (xfce4, ubuntu-desktop hoặc kde-plasma-desktop)",
     "no_dbus": "D-Bus không khả dụng. Chạy: sudo apt update && sudo apt install dbus-x11 -y",
-    "not_available": "WSL Đồ họa chỉ khả dụng trên Windows khi tính năng wsl-graphics được bật."
+    "not_available": "WSL Đồ họa chỉ khả dụng trên Windows khi tính năng wsl-graphics được bật.",
+    "desktop_experimental": "Thử nghiệm, không bảo hành"
   }
 }

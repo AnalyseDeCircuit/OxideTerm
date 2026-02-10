@@ -44,6 +44,7 @@ pub mod commands {
         pub ws_port: u16,
         pub ws_token: String,
         pub distro: String,
+        pub desktop_name: String,
     }
 
     #[tauri::command]
@@ -105,10 +106,10 @@ mod types {
     /// Errors specific to WSL Graphics operations
     #[derive(Debug, Error)]
     pub enum GraphicsError {
-        #[error("No VNC server found in WSL distro '{0}'. Install prerequisites:\nsudo apt update && sudo apt install tigervnc-standalone-server dbus-x11 -y\nThen install a desktop: sudo apt install xfce4 -y (or ubuntu-desktop for GNOME)")]
+        #[error("No VNC server found in WSL distro '{0}'. Install prerequisites:\nsudo apt update && sudo apt install tigervnc-standalone-server dbus-x11 -y\nThen install a desktop: sudo apt install xfce4 -y (recommended), ubuntu-desktop (GNOME), or kde-plasma-desktop (KDE Plasma)")]
         NoVncServer(String),
 
-        #[error("No desktop environment found in WSL distro '{0}'. Install one:\nsudo apt install xfce4 -y  (lightweight)\nsudo apt install ubuntu-desktop -y  (GNOME)")]
+        #[error("No desktop environment found in WSL distro '{0}'. Install one:\nsudo apt install xfce4 -y  (lightweight, recommended)\nsudo apt install ubuntu-desktop -y  (GNOME, experimental)\nsudo apt install kde-plasma-desktop -y  (KDE Plasma, experimental)")]
         NoDesktop(String),
 
         #[error("D-Bus is not available in WSL distro '{0}'. Install it:\nsudo apt update && sudo apt install dbus-x11 -y")]
@@ -153,6 +154,8 @@ mod types {
         pub ws_port: u16,
         pub ws_token: String,
         pub distro: String,
+        /// Human-readable desktop environment name (e.g. "Xfce", "GNOME", "KDE Plasma")
+        pub desktop_name: String,
     }
 
     /// Internal handle for an active graphics session.
@@ -171,6 +174,8 @@ mod types {
         pub bridge_handle: JoinHandle<()>,
         /// The VNC port on localhost (needed for reconnect bridge rebuilds)
         pub vnc_port: u16,
+        /// Desktop environment display name (for UI)
+        pub desktop_name: String,
     }
 
     /// Global state for WSL Graphics, managed by Tauri

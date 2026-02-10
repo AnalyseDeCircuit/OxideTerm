@@ -23,6 +23,7 @@ interface WslGraphicsSession {
   wsPort: number;
   wsToken: string;
   distro: string;
+  desktopName: string;
 }
 
 const STATUS = {
@@ -142,6 +143,8 @@ function Toolbar({
 }) {
   const { t } = useTranslation();
 
+  const isExperimental = sessionInfo?.desktopName === 'GNOME' || sessionInfo?.desktopName === 'KDE Plasma';
+
   const buttonClass =
     'px-3 py-1.5 text-xs font-medium rounded transition-colors border border-border hover:bg-accent text-foreground';
 
@@ -151,6 +154,16 @@ function Toolbar({
         {sessionInfo && (
           <span className="text-xs text-muted-foreground mr-2">
             {sessionInfo.distro}
+            {sessionInfo.desktopName && (
+              <span className="ml-1.5 text-muted-foreground/70">
+                · {sessionInfo.desktopName}
+              </span>
+            )}
+            {isExperimental && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning/15 text-warning border border-warning/20">
+                {t('graphics.desktop_experimental')}
+              </span>
+            )}
           </span>
         )}
 
