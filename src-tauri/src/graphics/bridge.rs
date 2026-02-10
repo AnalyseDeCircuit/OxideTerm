@@ -75,7 +75,8 @@ async fn proxy_connection(
     let expected_token_owned = expected_token.to_string();
     let ws_stream = tokio_tungstenite::accept_hdr_async(
         tcp_stream,
-        |req: &tokio_tungstenite::tungstenite::http::Request<()>, mut resp: Response<()>| {
+        |req: &tokio_tungstenite::tungstenite::http::Request<()>, resp: Response<()>| -> Result<Response<()>, Response<Option<String>>> {
+            let mut resp = resp;
             // Validate token from query string
             let uri = req.uri().to_string();
             let token_valid = extract_token(&uri)
@@ -88,8 +89,11 @@ async fn proxy_connection(
 
             if !token_valid {
                 tracing::warn!("Graphics proxy: invalid token from {}", uri);
-                *resp.status_mut() = StatusCode::FORBIDDEN;
-                return Err(resp);
+                let reject = Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Some("Invalid token".to_string()))
+                    .unwrap();
+                return Err(reject);
             }
 
             // noVNC sends Sec-WebSocket-Protocol: binary

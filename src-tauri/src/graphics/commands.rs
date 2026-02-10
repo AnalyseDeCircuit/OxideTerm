@@ -14,7 +14,7 @@ use super::{bridge, wsl, WslDistro, WslGraphicsHandle, WslGraphicsSession, WslGr
 
 /// List available WSL distributions.
 #[tauri::command]
-pub async fn wsl_graphics_list_distros() -> Result<Vec<super::WslDistro>, String> {
+pub async fn wsl_graphics_list_distros() -> Result<Vec<WslDistro>, String> {
     wsl::list_distros().await.map_err(|e| e.to_string())
 }
 
