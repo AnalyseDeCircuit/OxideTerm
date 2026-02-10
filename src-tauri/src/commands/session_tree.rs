@@ -400,6 +400,7 @@ pub async fn set_tree_node_sftp(
 pub async fn remove_tree_node(
     state: State<'_, Arc<SessionTreeState>>,
     connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+    emitter: State<'_, Arc<crate::router::NodeEventEmitter>>,
     node_id: String,
 ) -> Result<Vec<String>, String> {
     // 1. 收集要移除的节点及其 connection_id（先不从树中移除）
@@ -455,8 +456,14 @@ pub async fn remove_tree_node(
     let removed = tree.remove_node(&node_id)
         .map_err(|e| e.to_string())?;
     
+    // 4. 清理 sequencer 中对应节点的 generation 计数器（防止 DashMap 泄漏）
+    let sequencer = emitter.sequencer();
+    for removed_id in &removed {
+        sequencer.remove(removed_id);
+    }
+    
     tracing::info!(
-        "Removed {} nodes starting from {} (connections cleaned up)", 
+        "Removed {} nodes starting from {} (connections + sequencer cleaned up)", 
         removed.len(), 
         node_id
     );
@@ -509,10 +516,46 @@ pub async fn get_tree_node_path(
 #[tauri::command]
 pub async fn clear_session_tree(
     state: State<'_, Arc<SessionTreeState>>,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+    emitter: State<'_, Arc<crate::router::NodeEventEmitter>>,
 ) -> Result<(), String> {
+    // 1. 收集所有节点 ID 及其关联的 SSH 连接（在写锁之前用读锁）
+    let nodes_to_cleanup: Vec<(String, Option<String>)> = {
+        let tree = state.tree.read().await;
+        tree.node_ids()
+            .map(|id| {
+                let ssh_id = tree.get_node(&id)
+                    .and_then(|n| n.ssh_connection_id.clone());
+                (id, ssh_id)
+            })
+            .collect()
+    };
+    
+    // 2. 断开所有活跃 SSH 连接（自底向上顺序不重要，disconnect 本身是幂等的）
+    for (nid, ssh_id) in &nodes_to_cleanup {
+        if let Some(ssh_connection_id) = ssh_id {
+            if let Err(e) = connection_registry.disconnect(ssh_connection_id).await {
+                tracing::warn!(
+                    "Failed to disconnect SSH connection {} for node {} during tree clear: {}",
+                    ssh_connection_id, nid, e
+                );
+            }
+        }
+    }
+    
+    // 3. 清理 sequencer
+    let sequencer = emitter.sequencer();
+    for (node_id, _) in &nodes_to_cleanup {
+        sequencer.remove(node_id);
+    }
+    
+    // 4. 清空树
     let mut tree = state.tree.write().await;
     *tree = SessionTree::new();
-    tracing::info!("Session tree cleared");
+    tracing::info!(
+        "Session tree cleared ({} nodes, connections disconnected, sequencer cleaned)",
+        nodes_to_cleanup.len()
+    );
     Ok(())
 }
 

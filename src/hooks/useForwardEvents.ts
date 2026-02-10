@@ -110,25 +110,34 @@ export function useForwardEvents({
   useEffect(() => {
     let mounted = true;
     let unlisten: (() => void) | null = null;
+    let resolved = false;
 
-    const setupListener = async () => {
+    const setupPromise = (async () => {
       try {
-        unlisten = await listen<ForwardEvent>('forward-event', (event) => {
+        const fn = await listen<ForwardEvent>('forward-event', (event) => {
           if (mounted) {
             handleEvent(event.payload);
           }
         });
+        // 如果在 await 期间组件已卸载，立即清理
+        if (!mounted) {
+          fn();
+          return;
+        }
+        unlisten = fn;
+        resolved = true;
       } catch (error) {
         console.error('[useForwardEvents] Failed to setup listener:', error);
       }
-    };
-
-    setupListener();
+    })();
 
     return () => {
       mounted = false;
-      if (unlisten) {
-        unlisten();
+      if (resolved) {
+        unlisten?.();
+      } else {
+        // listen() 尚未 resolve，等待完成后再清理
+        setupPromise.then(() => unlisten?.());
       }
     };
   }, [handleEvent]);

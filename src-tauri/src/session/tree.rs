@@ -247,6 +247,11 @@ impl SessionTree {
         self.nodes.is_empty()
     }
 
+    /// 获取所有节点 ID 的迭代器
+    pub fn node_ids(&self) -> impl Iterator<Item = String> + '_ {
+        self.nodes.keys().cloned()
+    }
+
     /// 获取节点
     pub fn get_node(&self, id: &str) -> Option<&SessionNode> {
         self.nodes.get(id)

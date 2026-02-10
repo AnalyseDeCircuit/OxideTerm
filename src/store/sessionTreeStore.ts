@@ -527,6 +527,18 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         
         set({ nodeTerminalMap: newTerminalMap, terminalNodeMap: newNodeMap });
         
+        // 清理 disconnectedTerminalCounts 中与被删除节点关联的条目（防止 Map 泄漏）
+        const { disconnectedTerminalCounts } = get();
+        if (disconnectedTerminalCounts.size > 0) {
+          const newDisconnectedCounts = new Map(disconnectedTerminalCounts);
+          for (const node of nodesToRemove) {
+            newDisconnectedCounts.delete(node.id);
+          }
+          if (newDisconnectedCounts.size !== disconnectedTerminalCounts.size) {
+            set({ disconnectedTerminalCounts: newDisconnectedCounts });
+          }
+        }
+        
         // 关闭关联的 Tab（异步导入 appStore 避免循环依赖）
         const { useAppStore } = await import('./appStore');
         const appState = useAppStore.getState();
@@ -568,6 +580,21 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
           topologyResolver.unregister(node.id);
         }
         
+        // 清理 linkDownNodeIds 和 reconnectProgress 中的残留条目
+        const { linkDownNodeIds, reconnectProgress } = get();
+        if (linkDownNodeIds.size > 0 || reconnectProgress.size > 0) {
+          const newLinkDown = new Set(linkDownNodeIds);
+          const newReconnect = new Map(reconnectProgress);
+          let changed = false;
+          for (const id of localRemovedIds) {
+            if (newLinkDown.delete(id)) changed = true;
+            if (newReconnect.delete(id)) changed = true;
+          }
+          if (changed) {
+            set({ linkDownNodeIds: newLinkDown, reconnectProgress: newReconnect });
+          }
+        }
+        
         const removedIds = await api.removeTreeNode(nodeId);
         await get().fetchTree();
         
@@ -586,13 +613,20 @@ export const useSessionTreeStore = create<SessionTreeStore>()(
         // 清空 settingsStore 中的树状态
         useSettingsStore.getState().setTreeExpanded([]);
         useSettingsStore.getState().setFocusedNode(null);
+        // 清空全局拓扑映射
+        topologyResolver.clear();
+        
         set({ 
           rawNodes: [],
           nodes: [], 
           selectedNodeId: null, 
           nodeTerminalMap: new Map(),
           terminalNodeMap: new Map(),
+          disconnectedTerminalCounts: new Map(),
           linkDownNodeIds: new Set(),
+          reconnectProgress: new Map(),
+          connectingNodeIds: new Set(),
+          isConnectingChain: false,
           isLoading: false 
         });
       } catch (e) {

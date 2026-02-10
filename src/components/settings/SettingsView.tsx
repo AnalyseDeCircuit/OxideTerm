@@ -937,6 +937,8 @@ export const SettingsView = () => {
                                         type="number"
                                         value={terminal.scrollback}
                                         onChange={(e) => updateTerminal('scrollback', parseInt(e.target.value))}
+                                        min={100}
+                                        max={50000}
                                         className="w-28 text-center"
                                     />
                                 </div>

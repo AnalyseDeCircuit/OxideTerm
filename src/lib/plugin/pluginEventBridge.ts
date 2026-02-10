@@ -178,11 +178,38 @@ export async function setupNodeStateBridge(): Promise<() => void> {
       pluginEventBridge.emit('node:ready', { nodeId, connectionId });
     }
 
-    // disconnected/error → emit node:disconnected
+    // disconnected/error → emit node:disconnected, then clean up tracking Maps
     if ((newState === 'disconnected' || newState === 'error') && prevState === 'ready') {
       pluginEventBridge.emit('node:disconnected', { nodeId });
     }
+
+    // 节点进入终态时清理跟踪条目，防止 Map 在节点 churn 下单调增长
+    if (newState === 'disconnected' || newState === 'error') {
+      nodeReadiness.delete(nodeId);
+      nodeGeneration.delete(nodeId);
+    }
   });
 
-  return unlisten;
+  // Subscribe to sessionTreeStore to clean up when nodes are removed from tree
+  const unsubTree = useSessionTreeStore.subscribe(
+    (state) => state.nodes,
+    (nodes) => {
+      // Build set of current node IDs
+      const currentIds = new Set(nodes.map(n => n.id));
+      // Evict stale entries from tracking Maps
+      for (const id of nodeReadiness.keys()) {
+        if (!currentIds.has(id)) {
+          nodeReadiness.delete(id);
+          nodeGeneration.delete(id);
+        }
+      }
+    },
+  );
+
+  return () => {
+    unlisten();
+    unsubTree();
+    nodeReadiness.clear();
+    nodeGeneration.clear();
+  };
 }

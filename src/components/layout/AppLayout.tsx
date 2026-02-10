@@ -10,13 +10,13 @@ import { SplitTerminalContainer } from '../terminal/SplitTerminalContainer';
 import { SplitPaneToolbar } from '../terminal/SplitPaneToolbar';
 import { Button } from '../ui/button';
 import { NewConnectionModal } from '../modals/NewConnectionModal';
-import { SettingsView } from '../settings/SettingsView';
 import { ConnectionPoolMonitor } from '../connections/ConnectionPoolMonitor';
 import { ConnectionsPanel } from '../connections/ConnectionsPanel';
-import { TopologyPage } from '../topology/TopologyPage';
 import { Plus } from 'lucide-react';
 
 // Lazy load non-critical views (only loaded when user opens SFTP/Forwards tab)
+const SettingsView = lazy(() => import('../settings/SettingsView').then(m => ({ default: m.SettingsView })));
+const TopologyPage = lazy(() => import('../topology/TopologyPage').then(m => ({ default: m.TopologyPage })));
 const SFTPView = lazy(() => import('../sftp/SFTPView').then(m => ({ default: m.SFTPView })));
 const ForwardsView = lazy(() => import('../forwards/ForwardsView').then(m => ({ default: m.ForwardsView })));
 const IdeWorkspace = lazy(() => import('../ide').then(m => ({ default: m.IdeWorkspace })));

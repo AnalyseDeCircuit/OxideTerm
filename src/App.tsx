@@ -58,7 +58,12 @@ function App() {
   useEffect(() => {
     const bridgeCleanup = setupConnectionBridge(useAppStore);
     let nodeStateBridgeCleanup: (() => void) | undefined;
-    setupNodeStateBridge().then(cleanup => { nodeStateBridgeCleanup = cleanup; });
+    let nodeStateBridgeResolved = false;
+
+    const bridgePromise = setupNodeStateBridge().then(cleanup => {
+      nodeStateBridgeCleanup = cleanup;
+      nodeStateBridgeResolved = true;
+    });
 
     // Wire plugin toast events → app toast system
     const toastCleanup = pluginEventBridge.on('plugin:toast', (data) => {
@@ -76,7 +81,12 @@ function App() {
     });
     return () => {
       bridgeCleanup();
-      nodeStateBridgeCleanup?.();
+      if (nodeStateBridgeResolved) {
+        nodeStateBridgeCleanup?.();
+      } else {
+        // setupNodeStateBridge() 尚未 resolve，等待完成后再清理
+        bridgePromise.then(() => nodeStateBridgeCleanup?.());
+      }
       toastCleanup();
     };
   }, []);

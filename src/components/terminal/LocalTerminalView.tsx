@@ -51,6 +51,7 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const webLinksAddonRef = useRef<WebLinksAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const imageAddonRef = useRef<ImageAddon | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
@@ -413,6 +414,7 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
     
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
+    webLinksAddonRef.current = webLinksAddon;
     // SearchAddon and ImageAddon are loaded lazily to reduce memory usage
     
     // Unicode11Addon for proper Nerd Font icons and CJK wide character rendering
@@ -642,6 +644,26 @@ export const LocalTerminalView: React.FC<LocalTerminalViewProps> = ({
           // Ignore errors during addon disposal
         }
         searchAddonRef.current = null;
+      }
+
+      // Dispose web links addon
+      if (webLinksAddonRef.current) {
+        try {
+          webLinksAddonRef.current.dispose();
+        } catch (e) {
+          // Ignore errors during addon disposal
+        }
+        webLinksAddonRef.current = null;
+      }
+
+      // Dispose fit addon
+      if (fitAddonRef.current) {
+        try {
+          fitAddonRef.current.dispose();
+        } catch (e) {
+          // Ignore errors during addon disposal
+        }
+        fitAddonRef.current = null;
       }
 
       // Dispose terminal event listeners (onData, onBinary) before terminal

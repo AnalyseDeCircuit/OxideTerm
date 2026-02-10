@@ -85,6 +85,10 @@ export function useNodeState(nodeId: string | undefined): UseNodeStateResult {
     setReady(false);
 
     // ---------- 事件监听 ----------
+    // 使用 Promise 追踪 unlisten，确保即使组件先卸载也能清理
+    let unlistenFn: (() => void) | undefined;
+    let resolved = false;
+
     const setupListener = async () => {
       const unlisten = await listen<NodeStateEvent>('node:state', (event) => {
         if (!mounted) return;
@@ -130,15 +134,21 @@ export function useNodeState(nodeId: string | undefined): UseNodeStateResult {
         }
       });
 
-      return unlisten;
+      // 如果在 await 期间组件已卸载，立即清理
+      if (!mounted) {
+        unlisten();
+        return;
+      }
+      unlistenFn = unlisten;
+      resolved = true;
     };
 
-    let unlistenFn: (() => void) | undefined;
-
     // ---------- 初始快照 + 事件监听并发启动 ----------
+    const listenerPromise = setupListener();
+
     const init = async () => {
-      // 先启动事件监听（避免丢失初始快照后的首个事件）
-      unlistenFn = await setupListener();
+      // 先等待事件监听就绪（避免丢失初始快照后的首个事件）
+      await listenerPromise;
 
       // 获取初始快照
       try {
@@ -166,7 +176,12 @@ export function useNodeState(nodeId: string | undefined): UseNodeStateResult {
 
     return () => {
       mounted = false;
-      unlistenFn?.();
+      if (resolved) {
+        unlistenFn?.();
+      } else {
+        // listen() 尚未 resolve，等待完成后再清理
+        listenerPromise.then(() => unlistenFn?.());
+      }
     };
   }, [nodeId, applyUpdate]);
 

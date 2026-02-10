@@ -32,6 +32,9 @@ interface ProfilerStore {
   /** Active Tauri event unlisteners (not serialized) */
   _unlisteners: Map<string, UnlistenFn>;
 
+  /** Per-connection generation tokens to detect stale async callbacks */
+  _generations: Map<string, number>;
+
   /** Enable and start profiler for a connection (idempotent) */
   startProfiler: (connectionId: string) => Promise<void>;
 
@@ -54,11 +57,19 @@ interface ProfilerStore {
 export const useProfilerStore = create<ProfilerStore>((set, get) => ({
   connections: new Map(),
   _unlisteners: new Map(),
+  _generations: new Map(),
 
   startProfiler: async (connectionId: string) => {
     const state = get();
     const existing = state.connections.get(connectionId);
     if (existing?.isRunning) return; // idempotent
+
+    // Bump generation token: any in-flight async from earlier start attempts
+    // will see a stale token and discard their results.
+    const gen = (get()._generations.get(connectionId) ?? 0) + 1;
+    const generations = new Map(get()._generations);
+    generations.set(connectionId, gen);
+    set({ _generations: generations });
 
     try {
       await api.startResourceProfiler(connectionId);
@@ -76,6 +87,13 @@ export const useProfilerStore = create<ProfilerStore>((set, get) => ({
       const unlisten = await listen<ResourceMetrics>(eventName, (event) => {
         get()._updateMetrics(connectionId, event.payload);
       });
+
+      // Race guard: if generation changed while we were awaiting,
+      // this start is stale — immediately dispose the listener.
+      if (get()._generations.get(connectionId) !== gen) {
+        unlisten();
+        return;
+      }
 
       // Store unlisten fn
       const unlisteners = new Map(get()._unlisteners);
@@ -95,6 +113,9 @@ export const useProfilerStore = create<ProfilerStore>((set, get) => ({
 
       set({ connections, _unlisteners: unlisteners });
     } catch (e) {
+      // Stale check: don't overwrite state if generation moved on
+      if (get()._generations.get(connectionId) !== gen) return;
+
       const connections = new Map(get().connections);
       connections.set(connectionId, {
         metrics: null,
@@ -108,6 +129,12 @@ export const useProfilerStore = create<ProfilerStore>((set, get) => ({
   },
 
   stopProfiler: async (connectionId: string) => {
+    // Bump generation to invalidate any in-flight startProfiler
+    const gen = (get()._generations.get(connectionId) ?? 0) + 1;
+    const generations = new Map(get()._generations);
+    generations.set(connectionId, gen);
+    set({ _generations: generations });
+
     // Unlisten events
     const unlisten = get()._unlisteners.get(connectionId);
     if (unlisten) {
@@ -158,6 +185,11 @@ export const useProfilerStore = create<ProfilerStore>((set, get) => ({
   },
 
   removeConnection: (connectionId: string) => {
+    // Bump generation to invalidate any in-flight startProfiler
+    const gen = (get()._generations.get(connectionId) ?? 0) + 1;
+    const generations = new Map(get()._generations);
+    generations.set(connectionId, gen);
+
     // Unlisten
     const unlisten = get()._unlisteners.get(connectionId);
     if (unlisten) unlisten();
@@ -166,7 +198,9 @@ export const useProfilerStore = create<ProfilerStore>((set, get) => ({
     connections.delete(connectionId);
     const unlisteners = new Map(get()._unlisteners);
     unlisteners.delete(connectionId);
-    set({ connections, _unlisteners: unlisteners });
+    // Clean up generation entry to prevent Map growth
+    generations.delete(connectionId);
+    set({ connections, _unlisteners: unlisteners, _generations: generations });
   },
 
   getSparklineHistory: (connectionId: string) => {
