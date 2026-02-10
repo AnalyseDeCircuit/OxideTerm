@@ -8,9 +8,11 @@
 //! noVNC silently disconnects without it.
 
 use crate::graphics::GraphicsError;
+use crate::graphics::WslGraphicsState;
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use rand::RngCore;
+use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -23,7 +25,14 @@ use tokio_tungstenite::tungstenite::Message;
 /// Binds to `127.0.0.1:0` (random port), returns `(ws_port, token, task_handle)`.
 /// The proxy accepts exactly one WebSocket connection, validates the token,
 /// then transparently relays data between VNC and WebSocket.
-pub async fn start_proxy(vnc_addr: String) -> Result<(u16, String, JoinHandle<()>), GraphicsError> {
+///
+/// When the proxy task ends (VNC crash, frontend disconnect, etc.),
+/// it auto-removes the session from state and kills the VNC child process.
+pub async fn start_proxy(
+    vnc_addr: String,
+    state: Arc<WslGraphicsState>,
+    session_id: String,
+) -> Result<(u16, String, JoinHandle<()>), GraphicsError> {
     let token = generate_token();
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let ws_port = listener.local_addr()?.port();
@@ -42,6 +51,14 @@ pub async fn start_proxy(vnc_addr: String) -> Result<(u16, String, JoinHandle<()
             Err(e) => {
                 tracing::error!("Graphics proxy: failed to accept connection: {}", e);
             }
+        }
+
+        // Auto-cleanup: remove session from state and kill VNC child
+        let mut sessions = state.sessions.write().await;
+        if let Some(mut handle) = sessions.remove(&session_id) {
+            tracing::info!("Graphics proxy: auto-cleaning session {}", session_id);
+            let _ = handle.vnc_child.kill().await;
+            // bridge_handle is ourselves — no need to abort
         }
     });
 

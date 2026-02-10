@@ -58,13 +58,15 @@ pub async fn wsl_graphics_start(
 
     // 3. Start WebSocket ↔ TCP proxy bridge
     let vnc_addr = format!("127.0.0.1:{}", vnc_port);
-    let (ws_port, ws_token, bridge_handle) = bridge::start_proxy(vnc_addr)
-        .await
-        .map_err(|e| e.to_string())?;
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let state_arc: Arc<WslGraphicsState> = state.inner().clone();
+    let (ws_port, ws_token, bridge_handle) =
+        bridge::start_proxy(vnc_addr, state_arc, session_id.clone())
+            .await
+            .map_err(|e| e.to_string())?;
     tracing::info!("WSL Graphics: WebSocket proxy on port {}", ws_port);
 
     // 4. Register session
-    let session_id = uuid::Uuid::new_v4().to_string();
     let session = WslGraphicsSession {
         id: session_id.clone(),
         ws_port,
@@ -86,6 +88,9 @@ pub async fn wsl_graphics_start(
 }
 
 /// Stop a graphics session.
+///
+/// Idempotent: returns Ok(()) even if the session was already removed
+/// (e.g., by bridge auto-cleanup when VNC crashed).
 #[tauri::command]
 pub async fn wsl_graphics_stop(
     state: State<'_, Arc<WslGraphicsState>>,
@@ -101,7 +106,11 @@ pub async fn wsl_graphics_stop(
             let _ = handle.vnc_child.kill().await;
             Ok(())
         }
-        None => Err(format!("Session not found: {}", session_id)),
+        None => {
+            // Session already cleaned up (bridge auto-cleanup or duplicate call)
+            tracing::debug!("WSL Graphics: session {} already removed, ignoring", session_id);
+            Ok(())
+        }
     }
 }
 
