@@ -1,11 +1,11 @@
 /**
- * SystemHealthPanel - Sidebar panel for resource profiler metrics
+ * SystemHealthPanel - Per-connection resource profiler metrics
  *
- * Card-based layout matching FocusedNodeList / ConnectionsPanel patterns.
- * Reads from global profilerStore, derives active connection from activeTabId.
+ * Embedded inside the Connection Monitor tab.
+ * Includes a connection selector so users can pick which host to monitor.
  */
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store/appStore';
 import { useProfilerStore } from '../../store/profilerStore';
@@ -23,6 +23,13 @@ import {
   WifiOff,
   Power,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 
 const SPARKLINE_POINTS = 12;
 
@@ -144,18 +151,28 @@ function MetricCard({
 export const SystemHealthPanel: React.FC = () => {
   const { t } = useTranslation();
 
-  // Derive active connectionId: activeTabId → tab → session → connectionId
-  const activeTabId = useAppStore((s) => s.activeTabId);
-  const tabs = useAppStore((s) => s.tabs);
-  const sessions = useAppStore((s) => s.sessions);
+  // All connections for selector
+  const connections = useAppStore((s) => s.connections);
+  const connectionList = useMemo(() =>
+    Array.from(connections.entries()).map(([id, info]) => ({ ...info, id })),
+    [connections]
+  );
 
-  const activeConnectionId = useMemo(() => {
-    if (!activeTabId) return null;
-    const tab = tabs.find((tb) => tb.id === activeTabId);
-    if (!tab?.sessionId) return null;
-    const session = sessions.get(tab.sessionId);
-    return session?.connectionId ?? null;
-  }, [activeTabId, tabs, sessions]);
+  // Selected connection state
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+
+  // Auto-select first connection; reset if selected was removed
+  useEffect(() => {
+    if (connectionList.length === 0) {
+      setSelectedConnectionId(null);
+      return;
+    }
+    if (!selectedConnectionId || !connections.has(selectedConnectionId)) {
+      setSelectedConnectionId(connectionList[0].id);
+    }
+  }, [selectedConnectionId, connectionList, connections]);
+
+  const activeConnectionId = selectedConnectionId;
 
   // Read profiler state for active connection
   const connState = useProfilerStore((s) =>
@@ -196,8 +213,8 @@ export const SystemHealthPanel: React.FC = () => {
   const source = metrics?.source ?? 'failed';
   const isRttOnly = source === 'rtt_only' || source === 'failed';
 
-  // ─── No connection state ───
-  if (!activeConnectionId) {
+  // ─── No connections at all ───
+  if (connectionList.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-theme-text-muted text-center px-4">
         <WifiOff className="w-8 h-8 mb-2 opacity-30 shrink-0" />
@@ -206,10 +223,32 @@ export const SystemHealthPanel: React.FC = () => {
     );
   }
 
+  // ─── Connection selector ───
+  const connectionSelector = (
+    <div className="mb-4">
+      <Select value={activeConnectionId ?? ''} onValueChange={setSelectedConnectionId}>
+        <SelectTrigger className="w-full font-mono text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {connectionList.map((c) => (
+            <SelectItem key={c.id} value={c.id} className="font-mono text-sm">
+              <span className="flex items-center gap-2">
+                <Server className="w-3.5 h-3.5 shrink-0 text-theme-text-muted" />
+                {c.username}@{c.host}:{c.port}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   // ─── Disabled state ───
   if (!isEnabled && !isRunning) {
     return (
-      <div className="space-y-2 px-2">
+      <div className="space-y-2">
+        {connectionSelector}
         <PanelHeader connection={activeConnection} isRunning={false} onToggle={handleToggle} isEnabled={false} />
         <div className="flex flex-col items-center py-8 text-theme-text-muted">
           <Power className="w-8 h-8 mb-3 opacity-20" />
@@ -228,7 +267,8 @@ export const SystemHealthPanel: React.FC = () => {
   // ─── Waiting for data ───
   if (!metrics && isRunning) {
     return (
-      <div className="space-y-2 px-2">
+      <div className="space-y-2">
+        {connectionSelector}
         <PanelHeader connection={activeConnection} isRunning onToggle={handleToggle} isEnabled />
         <div className="flex flex-col items-center py-6 text-theme-text-muted">
           <Activity className="w-5 h-5 animate-pulse mb-2 opacity-50" />
@@ -240,7 +280,8 @@ export const SystemHealthPanel: React.FC = () => {
 
   if (!metrics) {
     return (
-      <div className="space-y-2 px-2">
+      <div className="space-y-2">
+        {connectionSelector}
         <PanelHeader connection={activeConnection} isRunning={false} onToggle={handleToggle} isEnabled />
         <div className="flex flex-col items-center py-6 text-theme-text-muted">
           <span className="text-xs opacity-60">{t('profiler.panel.no_data')}</span>
@@ -250,7 +291,8 @@ export const SystemHealthPanel: React.FC = () => {
   }
 
   return (
-    <div className="space-y-2 px-2 overflow-y-auto">
+    <div className="space-y-2 overflow-y-auto">
+      {connectionSelector}
       {/* Connection Header */}
       <PanelHeader connection={activeConnection} isRunning={isRunning} onToggle={handleToggle} isEnabled />
 

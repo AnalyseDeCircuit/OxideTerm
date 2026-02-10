@@ -2,7 +2,7 @@
  * Profiler Store
  *
  * Global state for per-connection resource profiler metrics.
- * Both the sidebar SystemHealthPanel and the terminal PerformanceCapsule
+ * Both the Connection Monitor tab (SystemHealthPanel) and the terminal PerformanceCapsule
  * read from this single source of truth.
  *
  * Lifecycle: profiler starts when startProfiler() is called (idempotent),

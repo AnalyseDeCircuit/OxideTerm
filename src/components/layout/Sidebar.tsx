@@ -18,7 +18,6 @@ import {
   Square,
   PanelLeftClose,
   PanelLeft,
-  HeartPulse,
   LayoutList,
   Puzzle,
   Monitor,
@@ -42,7 +41,7 @@ import { SavePathAsPresetDialog } from '../modals/SavePathAsPresetDialog';
 import { AddRootNodeDialog } from '../modals/AddRootNodeDialog';
 import { api } from '../../lib/api';
 import { connectToSaved } from '../../lib/connectToSaved';
-import { SystemHealthPanel } from './SystemHealthPanel';
+
 import { PluginSidebarRenderer } from '../plugin/PluginSidebarRenderer';
 
 export const Sidebar = () => {
@@ -652,7 +651,6 @@ export const Sidebar = () => {
     { kind: 'tab', key: 'connection_pool', icon: Terminal, titleKey: 'sidebar.panels.connection_pool', badge: connections.size > 0 ? connections.size : undefined, badgeColor: 'bg-green-500' },
     { kind: 'tab', key: 'connection_monitor', icon: Activity, titleKey: 'sidebar.panels.connection_monitor' },
     { kind: 'tab', key: 'topology', icon: Network, titleKey: 'sidebar.panels.connection_matrix' },
-    { kind: 'section', key: 'system_health', icon: HeartPulse, titleKey: 'sidebar.panels.system_health' },
     { kind: 'toggle', key: 'ai', icon: Sparkles, titleKey: 'sidebar.panels.ai' },
     // Plugin-registered sidebar panels
     ...pluginPanelDefs,
@@ -975,17 +973,6 @@ export const Sidebar = () => {
             </div>
           )}
 
-          {/* System Health Panel */}
-          {sidebarActiveSection === 'system_health' && (
-            <div className="space-y-4 flex flex-col h-full">
-              <div className="flex items-center justify-between px-2 min-w-0">
-                <span className="text-xs font-semibold text-theme-text-muted uppercase tracking-wider truncate">
-                  {t('sidebar.panels.system_health')}
-                </span>
-              </div>
-              <SystemHealthPanel />
-            </div>
-          )}
 
           {/* Plugin Sidebar Panels */}
           {typeof sidebarActiveSection === 'string' && sidebarActiveSection.startsWith('plugin:') && (

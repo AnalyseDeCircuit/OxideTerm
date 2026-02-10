@@ -12,6 +12,7 @@ import { Button } from '../ui/button';
 import { NewConnectionModal } from '../modals/NewConnectionModal';
 import { ConnectionPoolMonitor } from '../connections/ConnectionPoolMonitor';
 import { ConnectionsPanel } from '../connections/ConnectionsPanel';
+import { SystemHealthPanel } from './SystemHealthPanel';
 import { Plus } from 'lucide-react';
 
 // Lazy load non-critical views (only loaded when user opens SFTP/Forwards tab)
@@ -138,9 +139,15 @@ export const AppLayout = () => {
                   {tab.type === 'settings' && <SettingsView />}
                   {tab.type === 'connection_monitor' && (
                     <div className="h-full w-full bg-theme-bg p-8 overflow-auto">
-                      <div className="max-w-5xl mx-auto">
-                        <h2 className="text-2xl font-bold mb-6 text-zinc-200">{t('layout.connection_monitor.title')}</h2>
-                        <ConnectionPoolMonitor />
+                      <div className="max-w-5xl mx-auto space-y-8">
+                        <div>
+                          <h2 className="text-2xl font-bold mb-6 text-zinc-200">{t('layout.connection_monitor.title')}</h2>
+                          <ConnectionPoolMonitor />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold mb-4 text-zinc-200">{t('sidebar.panels.system_health')}</h2>
+                          <SystemHealthPanel />
+                        </div>
                       </div>
                     </div>
                   )}

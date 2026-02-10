@@ -72,7 +72,7 @@ export type FontFamily =
 export type CursorStyle = 'block' | 'underline' | 'bar';
 
 /** Sidebar section options (string allows plugin:* dynamic sections) */
-export type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections' | 'ai' | 'system_health' | (string & {});
+export type SidebarSection = 'sessions' | 'saved' | 'sftp' | 'forwards' | 'connections' | 'ai' | (string & {});
 
 /** Language options */
 export type Language = 'zh-CN' | 'en' | 'fr-FR' | 'ja' | 'es-ES' | 'pt-BR' | 'vi' | 'ko' | 'de' | 'it' | 'zh-TW';
