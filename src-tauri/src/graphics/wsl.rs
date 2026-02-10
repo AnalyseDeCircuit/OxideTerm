@@ -248,8 +248,6 @@ pub async fn start_session(
             "1920x1080",
             "-depth",
             "24",
-            "-randr",
-            "1920x1080,1600x900,1440x900,1366x768,1280x720",
         ])
         .env_remove("WAYLAND_DISPLAY")
         .kill_on_drop(true)
