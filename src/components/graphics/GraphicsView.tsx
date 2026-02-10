@@ -146,29 +146,31 @@ function Toolbar({
     'px-3 py-1.5 text-xs font-medium rounded transition-colors border border-border hover:bg-accent text-foreground';
 
   return (
-    <div className="absolute top-2 right-2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-sm border border-border shadow-sm">
-      {sessionInfo && (
-        <span className="text-xs text-muted-foreground mr-2">
-          {sessionInfo.distro}
-        </span>
-      )}
+    <div className="absolute top-0 right-0 left-0 z-10 flex justify-end opacity-0 hover:opacity-100 transition-opacity duration-200">
+      <div className="flex items-center gap-2 px-3 py-1.5 mt-2 mr-2 rounded-lg bg-background/90 backdrop-blur-sm border border-border shadow-sm">
+        {sessionInfo && (
+          <span className="text-xs text-muted-foreground mr-2">
+            {sessionInfo.distro}
+          </span>
+        )}
 
-      {status === STATUS.DISCONNECTED && (
-        <button onClick={onReconnect} className={buttonClass}>
-          {t('graphics.reconnect')}
+        {status === STATUS.DISCONNECTED && (
+          <button onClick={onReconnect} className={buttonClass}>
+            {t('graphics.reconnect')}
+          </button>
+        )}
+
+        <button onClick={onFullscreen} className={buttonClass}>
+          {t('graphics.fullscreen')}
         </button>
-      )}
 
-      <button onClick={onFullscreen} className={buttonClass}>
-        {t('graphics.fullscreen')}
-      </button>
-
-      <button
-        onClick={onStop}
-        className={`${buttonClass} hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30`}
-      >
-        {t('graphics.stop')}
-      </button>
+        <button
+          onClick={onStop}
+          className={`${buttonClass} hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30`}
+        >
+          {t('graphics.stop')}
+        </button>
+      </div>
     </div>
   );
 }
@@ -293,6 +295,7 @@ export function GraphicsView() {
 
         rfb.scaleViewport = true;
         rfb.resizeSession = true;
+        rfb.clipViewport = false;
         rfb.background = '#000000';
         rfbRef.current = rfb;
 
