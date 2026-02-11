@@ -123,6 +123,13 @@
     "propAccessed": "上次存取",
     "propAccess": "存取權限",
     "propYes": "是",
-    "propTitleGetInfo": "顯示簡介"
+    "propTitleGetInfo": "顯示簡介",
+    "propContents": "內容",
+    "propScanning": "掃描中...",
+    "propDirSummary": "{{files}} 個檔案，{{dirs}} 個資料夾",
+    "propTotalSize": "總大小",
+    "propChecksum": "校驗和",
+    "propCalculating": "計算中...",
+    "propCalcChecksum": "計算 MD5 / SHA-256"
   }
 }

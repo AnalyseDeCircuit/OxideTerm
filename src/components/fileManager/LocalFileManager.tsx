@@ -26,7 +26,7 @@ import {
   DialogFooter
 } from '../ui/dialog';
 import { cn } from '../../lib/utils';
-import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo } from './types';
+import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo, ChecksumResult, DirStatsResult } from './types';
 
 // Preview imports
 import { readFile, stat, writeTextFile, copyFile } from '@tauri-apps/plugin-fs';
@@ -173,6 +173,10 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
   const [propertiesFile, setPropertiesFile] = useState<FileInfo | null>(null);
   const [propertiesMetadata, setPropertiesMetadata] = useState<FileMetadata | null>(null);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
+  const [dirStats, setDirStats] = useState<DirStatsResult | null>(null);
+  const [dirStatsLoading, setDirStatsLoading] = useState(false);
+  const [checksum, setChecksum] = useState<ChecksumResult | null>(null);
+  const [checksumLoading, setChecksumLoading] = useState(false);
   
   // Compute previewable files (non-directories) from displayFiles
   const previewableFiles = React.useMemo(() => 
@@ -493,15 +497,37 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
     setPropertiesFile(file);
     setPropertiesMetadata(null);
     setPropertiesLoading(true);
+    setDirStats(null);
+    setDirStatsLoading(false);
+    setChecksum(null);
+    setChecksumLoading(false);
     try {
       const meta = await invoke<FileMetadata>('local_get_file_metadata', { path: file.path });
       setPropertiesMetadata(meta);
+
+      // Auto-fetch dir stats for directories
+      if (file.file_type === 'Directory') {
+        setDirStatsLoading(true);
+        invoke<DirStatsResult>('local_dir_stats', { path: file.path })
+          .then(setDirStats)
+          .catch((err) => console.warn('Failed to fetch dir stats:', err))
+          .finally(() => setDirStatsLoading(false));
+      }
     } catch (err) {
       console.warn('Failed to fetch file metadata:', err);
     } finally {
       setPropertiesLoading(false);
     }
   }, []);
+
+  const handleCalculateChecksum = useCallback(() => {
+    if (!propertiesFile || checksumLoading) return;
+    setChecksumLoading(true);
+    invoke<ChecksumResult>('local_calculate_checksum', { path: propertiesFile.path })
+      .then(setChecksum)
+      .catch((err) => console.warn('Failed to calculate checksum:', err))
+      .finally(() => setChecksumLoading(false));
+  }, [propertiesFile, checksumLoading]);
 
   // Handle open terminal at directory
   const handleOpenTerminal = useCallback(async (dirPath: string) => {
@@ -842,10 +868,17 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
         onClose={() => {
           setPropertiesFile(null);
           setPropertiesMetadata(null);
+          setDirStats(null);
+          setChecksum(null);
         }}
         file={propertiesFile}
         metadata={propertiesMetadata}
         loading={propertiesLoading}
+        dirStats={dirStats}
+        dirStatsLoading={dirStatsLoading}
+        checksum={checksum}
+        checksumLoading={checksumLoading}
+        onCalculateChecksum={handleCalculateChecksum}
         t={t}
       />
 

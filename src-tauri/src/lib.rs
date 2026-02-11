@@ -405,6 +405,8 @@ pub fn run() {
         commands::local_get_drives,
         commands::local_get_file_metadata,
         commands::local_read_file_range,
+        commands::local_calculate_checksum,
+        commands::local_dir_stats,
         // Session commands (v2 with registry)
         commands::disconnect_v2,
         commands::list_sessions_v2,

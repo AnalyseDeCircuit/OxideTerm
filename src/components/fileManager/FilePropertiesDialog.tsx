@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Folder, File, FileSymlink } from 'lucide-react';
+import { Folder, File, FileSymlink, Hash, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '../ui/dialog';
-import type { FileInfo, FileMetadata } from './types';
+import type { FileInfo, FileMetadata, ChecksumResult, DirStatsResult } from './types';
 import {
   formatFileSize,
   formatOctalPermissions,
@@ -26,6 +26,11 @@ export interface FilePropertiesDialogProps {
   file: FileInfo | null;
   metadata: FileMetadata | null;
   loading?: boolean;
+  dirStats?: DirStatsResult | null;
+  dirStatsLoading?: boolean;
+  checksum?: ChecksumResult | null;
+  checksumLoading?: boolean;
+  onCalculateChecksum?: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }
 
@@ -107,6 +112,11 @@ export const FilePropertiesDialog: React.FC<FilePropertiesDialogProps> = ({
   file,
   metadata,
   loading,
+  dirStats,
+  dirStatsLoading,
+  checksum,
+  checksumLoading,
+  onCalculateChecksum,
   t,
 }) => {
   if (!file) return null;
@@ -233,6 +243,83 @@ export const FilePropertiesDialog: React.FC<FilePropertiesDialogProps> = ({
                   value={metadata.mimeType}
                   mono
                 />
+              )}
+
+              {/* Directory Stats */}
+              {isDir && (
+                <>
+                  <Separator />
+                  {dirStatsLoading ? (
+                    <PropertyRow
+                      label={t('fileManager.propContents')}
+                      value={
+                        <span className="text-zinc-500 flex items-center gap-1.5">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {t('fileManager.propScanning')}
+                        </span>
+                      }
+                    />
+                  ) : dirStats ? (
+                    <>
+                      <PropertyRow
+                        label={t('fileManager.propContents')}
+                        value={t('fileManager.propDirSummary', {
+                          files: dirStats.fileCount,
+                          dirs: dirStats.dirCount,
+                        })}
+                      />
+                      <PropertyRow
+                        label={t('fileManager.propTotalSize')}
+                        value={
+                          <span>
+                            {formatFileSize(dirStats.totalSize)}
+                            {dirStats.totalSize >= 1024 && (
+                              <span className="text-zinc-600 ml-1">
+                                ({formatExactBytes(dirStats.totalSize, t)})
+                              </span>
+                            )}
+                          </span>
+                        }
+                      />
+                    </>
+                  ) : null}
+                </>
+              )}
+
+              {/* Checksum (files only) */}
+              {!isDir && (
+                <>
+                  <Separator />
+                  {checksum ? (
+                    <>
+                      <PropertyRow label="MD5" value={checksum.md5} mono />
+                      <PropertyRow label="SHA-256" value={checksum.sha256} mono />
+                    </>
+                  ) : (
+                    <div className="flex items-start gap-3 py-1.5">
+                      <span className="text-zinc-500 text-xs shrink-0 w-28 text-right select-none">
+                        {t('fileManager.propChecksum')}
+                      </span>
+                      <button
+                        className="text-xs text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        onClick={onCalculateChecksum}
+                        disabled={checksumLoading}
+                      >
+                        {checksumLoading ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {t('fileManager.propCalculating')}
+                          </>
+                        ) : (
+                          <>
+                            <Hash className="h-3 w-3" />
+                            {t('fileManager.propCalcChecksum')}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </>
           ) : (

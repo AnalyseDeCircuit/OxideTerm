@@ -1,6 +1,6 @@
 [package]
 name = "oxideterm"
-version = "1.9.1"
+version = "1.9.2"
 description = "A modern SSH terminal client built with Rust and Tauri"
 authors = ["OxideTerm Team"]
 license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
@@ -89,6 +89,10 @@ chardetng = "0.1"
 # Archive (compression/extraction)
 zip = "2.0"
 walkdir = "2"
+
+# File type detection (magic bytes)
+infer = "0.16"
+md-5 = "0.10"
 
 # HTTP client (plugin registry)
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }

@@ -123,6 +123,13 @@
     "propAccessed": "最終アクセス",
     "propAccess": "アクセス権",
     "propYes": "はい",
-    "propTitleGetInfo": "情報を見る"
+    "propTitleGetInfo": "情報を見る",
+    "propContents": "内容",
+    "propScanning": "スキャン中...",
+    "propDirSummary": "{{files}} ファイル、{{dirs}} フォルダ",
+    "propTotalSize": "合計サイズ",
+    "propChecksum": "チェックサム",
+    "propCalculating": "計算中...",
+    "propCalcChecksum": "MD5 / SHA-256 を計算"
   }
 }

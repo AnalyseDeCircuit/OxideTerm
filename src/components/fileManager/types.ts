@@ -115,6 +115,19 @@ export interface FileMetadata {
   mimeType?: string;
 }
 
+// Checksum result from Rust backend
+export interface ChecksumResult {
+  md5: string;
+  sha256: string;
+}
+
+// Directory statistics from Rust backend
+export interface DirStatsResult {
+  fileCount: number;
+  dirCount: number;
+  totalSize: number;
+}
+
 export interface StreamPreviewInfo {
   path: string;
   size: number;

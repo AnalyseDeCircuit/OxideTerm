@@ -1,11 +1,11 @@
 # Third-Party Notices (Backend / Rust)
 
 This file lists third-party crates used by the Rust backend and their detected licenses (including transitive dependencies).
-Generated: 2026-02-11T08:54:03.312Z
+Generated: 2026-02-11T15:34:56.194Z
 
 ## Summary
-- MIT: 595
-- Apache-2.0: 446
+- MIT: 597
+- Apache-2.0: 447
 - Unicode-3.0: 19
 - Zlib: 18
 - BSD-3-Clause: 10
@@ -259,6 +259,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | idna_adapter | 1.2.1 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | indexmap | 1.9.3 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | indexmap | 2.13.0 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
+| infer | 0.16.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | infer | 0.19.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | inout | 0.1.4 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | internal-russh-forked-ssh-key | 0.6.11+upstream-0.6.7 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
@@ -295,6 +296,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | match_token | 0.1.0 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | matchers | 0.2.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | matches | 0.1.10 | MIT | registry+https://github.com/rust-lang/crates.io-index |
+| md-5 | 0.10.6 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | md5 | 0.7.0 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | memchr | 2.7.6 | Unlicense, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | memoffset | 0.6.5 | MIT | registry+https://github.com/rust-lang/crates.io-index |
@@ -342,7 +344,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | open | 5.3.3 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | option-ext | 0.2.0 | MPL-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | ordered-stream | 0.2.0 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
-| oxideterm | 1.9.0 | LicenseRef-PolyForm-Noncommercial-1.0.0 | path+file:///Users/dominical/Documents/OxideTerm/src-tauri |
+| oxideterm | 1.9.2 | LicenseRef-PolyForm-Noncommercial-1.0.0 | path+file:///Users/dominical/Documents/OxideTerm/src-tauri |
 | p256 | 0.13.2 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | p384 | 0.13.1 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | p521 | 0.13.3 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |

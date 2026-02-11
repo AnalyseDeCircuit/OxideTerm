@@ -123,6 +123,13 @@
     "propAccessed": "Último acesso",
     "propAccess": "Acesso",
     "propYes": "Sim",
-    "propTitleGetInfo": "Obter Informações"
+    "propTitleGetInfo": "Obter Informações",
+    "propContents": "Conteúdo",
+    "propScanning": "Verificando...",
+    "propDirSummary": "{{files}} arquivos, {{dirs}} pastas",
+    "propTotalSize": "Tamanho total",
+    "propChecksum": "Checksum",
+    "propCalculating": "Calculando...",
+    "propCalcChecksum": "Calcular MD5 / SHA-256"
   }
 }

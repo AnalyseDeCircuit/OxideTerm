@@ -123,6 +123,13 @@
     "propAccessed": "Truy cập lần cuối",
     "propAccess": "Quyền truy cập",
     "propYes": "Có",
-    "propTitleGetInfo": "Xem Thông Tin"
+    "propTitleGetInfo": "Xem Thông Tin",
+    "propContents": "Nội dung",
+    "propScanning": "Đang quét...",
+    "propDirSummary": "{{files}} tệp, {{dirs}} thư mục",
+    "propTotalSize": "Tổng kích thước",
+    "propChecksum": "Mã kiểm tra",
+    "propCalculating": "Đang tính...",
+    "propCalcChecksum": "Tính MD5 / SHA-256"
   }
 }

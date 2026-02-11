@@ -409,11 +409,12 @@ pub async fn local_get_file_metadata(path: String) -> Result<FileMetadata, Strin
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs());
 
-    // Guess MIME type from extension
-    let mime_type = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| guess_mime_type(ext));
+    // Detect MIME type: try magic bytes first, fall back to extension
+    let mime_type = if !metadata.is_dir() {
+        detect_mime_type(path)
+    } else {
+        None
+    };
 
     #[cfg(unix)]
     {
@@ -544,4 +545,100 @@ fn guess_mime_type(ext: &str) -> String {
         _ => "application/octet-stream",
     }
     .to_string()
+}
+
+/// Detect MIME type using magic bytes (infer crate), falling back to extension
+fn detect_mime_type(path: &std::path::Path) -> Option<String> {
+    // Try magic bytes first (reads first 8192 bytes)
+    if let Ok(mut file) = std::fs::File::open(path) {
+        use std::io::Read;
+        let mut buf = [0u8; 8192];
+        if let Ok(n) = file.read(&mut buf) {
+            if let Some(kind) = infer::get(&buf[..n]) {
+                return Some(kind.mime_type().to_string());
+            }
+        }
+    }
+
+    // Fall back to extension-based guess
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| guess_mime_type(ext))
+}
+
+/// Checksum result
+#[derive(Debug, Serialize)]
+pub struct ChecksumResult {
+    pub md5: String,
+    pub sha256: String,
+}
+
+/// Calculate MD5 and SHA256 checksums for a file
+#[tauri::command]
+pub async fn local_calculate_checksum(path: String) -> Result<ChecksumResult, String> {
+    use md5::Md5;
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let mut file =
+        std::fs::File::open(&path).map_err(|e| format!("Failed to open file: {}", e))?;
+
+    let mut md5_hasher = Md5::new();
+    let mut sha256_hasher = Sha256::new();
+    let mut buf = [0u8; 65536];
+
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        md5_hasher.update(&buf[..n]);
+        sha256_hasher.update(&buf[..n]);
+    }
+
+    Ok(ChecksumResult {
+        md5: format!("{:x}", md5_hasher.finalize()),
+        sha256: format!("{:x}", sha256_hasher.finalize()),
+    })
+}
+
+/// Directory statistics result
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirStatsResult {
+    pub file_count: u64,
+    pub dir_count: u64,
+    pub total_size: u64,
+}
+
+/// Get directory statistics (file count, subdir count, total size)
+#[tauri::command]
+pub async fn local_dir_stats(path: String) -> Result<DirStatsResult, String> {
+    use walkdir::WalkDir;
+
+    let mut file_count: u64 = 0;
+    let mut dir_count: u64 = 0;
+    let mut total_size: u64 = 0;
+
+    for entry in WalkDir::new(&path).min_depth(1) {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue, // skip permission errors
+        };
+        let ft = entry.file_type();
+        if ft.is_file() {
+            file_count += 1;
+            total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+        } else if ft.is_dir() {
+            dir_count += 1;
+        }
+    }
+
+    Ok(DirStatsResult {
+        file_count,
+        dir_count,
+        total_size,
+    })
 }

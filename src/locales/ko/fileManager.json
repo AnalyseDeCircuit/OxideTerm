@@ -123,6 +123,13 @@
     "propAccessed": "마지막 접근",
     "propAccess": "접근 권한",
     "propYes": "예",
-    "propTitleGetInfo": "정보 가져오기"
+    "propTitleGetInfo": "정보 가져오기",
+    "propContents": "내용",
+    "propScanning": "스캔 중...",
+    "propDirSummary": "파일 {{files}}개, 폴더 {{dirs}}개",
+    "propTotalSize": "전체 크기",
+    "propChecksum": "체크섬",
+    "propCalculating": "계산 중...",
+    "propCalcChecksum": "MD5 / SHA-256 계산"
   }
 }

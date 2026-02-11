@@ -2284,6 +2284,15 @@ dependencies = [
 
 [[package]]
 name = "infer"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc150e5ce2330295b8616ce0e3f53250e53af31759a9dbedad1621ba29151847"
+dependencies = [
+ "cfb",
+]
+
+[[package]]
+name = "infer"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
@@ -2687,6 +2696,16 @@ name = "matches"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
+
+[[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
 
 [[package]]
 name = "md5"
@@ -3211,7 +3230,7 @@ dependencies = [
 
 [[package]]
 name = "oxideterm"
-version = "1.9.1"
+version = "1.9.2"
 dependencies = [
  "argon2",
  "async-trait",
@@ -3226,7 +3245,9 @@ dependencies = [
  "futures-util",
  "glob",
  "hostname",
+ "infer 0.16.0",
  "keyring",
+ "md-5",
  "mimalloc",
  "mime_guess",
  "nix 0.29.0",
@@ -5450,7 +5471,7 @@ dependencies = [
  "glob",
  "html5ever",
  "http",
- "infer",
+ "infer 0.19.0",
  "json-patch",
  "kuchikiki",
  "log",

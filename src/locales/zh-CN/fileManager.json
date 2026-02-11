@@ -123,6 +123,13 @@
     "propAccessed": "上次访问",
     "propAccess": "访问权限",
     "propYes": "是",
-    "propTitleGetInfo": "显示简介"
+    "propTitleGetInfo": "显示简介",
+    "propContents": "内容",
+    "propScanning": "扫描中...",
+    "propDirSummary": "{{files}} 个文件，{{dirs}} 个文件夹",
+    "propTotalSize": "总大小",
+    "propChecksum": "校验和",
+    "propCalculating": "计算中...",
+    "propCalcChecksum": "计算 MD5 / SHA-256"
   }
 }

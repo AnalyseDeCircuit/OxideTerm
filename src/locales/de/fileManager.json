@@ -123,6 +123,13 @@
     "propAccessed": "Letzter Zugriff",
     "propAccess": "Zugriff",
     "propYes": "Ja",
-    "propTitleGetInfo": "Informationen"
+    "propTitleGetInfo": "Informationen",
+    "propContents": "Inhalt",
+    "propScanning": "Wird gescannt...",
+    "propDirSummary": "{{files}} Dateien, {{dirs}} Ordner",
+    "propTotalSize": "Gesamtgröße",
+    "propChecksum": "Prüfsumme",
+    "propCalculating": "Wird berechnet...",
+    "propCalcChecksum": "MD5 / SHA-256 berechnen"
   }
 }
