@@ -28,6 +28,7 @@
     "app_command_placeholder": "ex. gedit /home/user/file.txt",
     "app_common_apps": "Apps comuns:",
     "start_app": "Iniciar app",
-    "app_starting": "Iniciando aplicativo..."
+    "app_starting": "Iniciando aplicativo...",
+    "app_experimental_note": "O modo de aplicativo pode não funcionar com todos os aplicativos. Alguns programas requerem dependências adicionais ou configuração de ambiente."
   }
 }

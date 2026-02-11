@@ -28,6 +28,7 @@
     "app_command_placeholder": "vd. gedit /home/user/file.txt",
     "app_common_apps": "Ứng dụng phổ biến:",
     "start_app": "Khởi chạy ứng dụng",
-    "app_starting": "Đang khởi chạy ứng dụng..."
+    "app_starting": "Đang khởi chạy ứng dụng...",
+    "app_experimental_note": "Chế độ ứng dụng có thể không hoạt động với tất cả ứng dụng. Một số chương trình cần thêm các phụ thuộc hoặc cấu hình môi trường."
   }
 }

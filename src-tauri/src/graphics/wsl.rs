@@ -519,7 +519,7 @@ unset WAYLAND_DISPLAY XDG_SESSION_TYPE
 
 # Reset dangerous environment variables (§11.4 defense)
 unset LD_PRELOAD LD_LIBRARY_PATH PYTHONPATH PYTHONSTARTUP NODE_OPTIONS
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:$HOME/.local/bin"
 
 export DISPLAY={display}
 export XDG_RUNTIME_DIR="/tmp/oxideterm-app-xdg-$$"
@@ -592,7 +592,7 @@ async fn start_app_process(
         .kill_on_drop(true)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
         .spawn()?;
 
     // Write the bootstrap script to stdin

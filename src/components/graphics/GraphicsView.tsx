@@ -192,10 +192,10 @@ function DistroSelector({
         {/* Mode tabs */}
         <div className="flex gap-1 p-1 rounded-lg bg-muted">
           <button className={tabClass(mode === 'desktop')} onClick={() => setMode('desktop')}>
-            🖥️ {t('graphics.desktop_mode')}
+            {t('graphics.desktop_mode')}
           </button>
           <button className={tabClass(mode === 'app')} onClick={() => setMode('app')}>
-            📱 {t('graphics.app_mode')}
+            {t('graphics.app_mode')}
           </button>
         </div>
 
@@ -211,7 +211,11 @@ function DistroSelector({
 
         {mode === 'desktop' ? (
           /* Desktop mode: click distro to launch full desktop */
-          distros.map((distro) => (
+          <>
+            <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
+              <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
+            </div>
+            {distros.map((distro) => (
             <button
               key={distro.name}
               onClick={() => onSelectDesktop(distro.name)}
@@ -240,10 +244,17 @@ function DistroSelector({
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
-          ))
+          ))}
+          </>
         ) : (
           /* App mode: select distro + enter command */
           <>
+            {/* Experimental warning */}
+            <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
+              <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
+              <span className="ml-1">{t('graphics.app_experimental_note')}</span>
+            </div>
+
             {/* Distro selector dropdown */}
             <div>
               <label className="block text-xs text-muted-foreground mb-1">
@@ -307,7 +318,7 @@ function DistroSelector({
               disabled={!appCommand.trim() || !selectedDistro}
               className="w-full py-2.5 rounded-md font-medium text-sm transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              ▶ {t('graphics.start_app')}
+              {t('graphics.start_app')}
             </button>
           </>
         )}

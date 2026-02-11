@@ -28,6 +28,7 @@
     "app_command_placeholder": "例: gedit /home/user/file.txt",
     "app_common_apps": "よく使うアプリ:",
     "start_app": "アプリを起動",
-    "app_starting": "アプリケーションを起動中..."
+    "app_starting": "アプリケーションを起動中...",
+    "app_experimental_note": "アプリモードはすべてのアプリケーションで動作するとは限りません。一部のプログラムは追加の依存関係や環境設定が必要です。"
   }
 }

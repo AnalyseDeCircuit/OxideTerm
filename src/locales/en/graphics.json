@@ -28,6 +28,7 @@
     "app_command_placeholder": "e.g. gedit /home/user/file.txt",
     "app_common_apps": "Common apps:",
     "start_app": "Start App",
-    "app_starting": "Starting application..."
+    "app_starting": "Starting application...",
+    "app_experimental_note": "App mode may not work with all applications. Some programs require additional dependencies or environment setup."
   }
 }

@@ -28,6 +28,7 @@
     "app_command_placeholder": "例如 gedit /home/user/file.txt",
     "app_common_apps": "常用应用：",
     "start_app": "启动应用",
-    "app_starting": "正在启动应用..."
+    "app_starting": "正在启动应用...",
+    "app_experimental_note": "应用模式可能无法适用于所有应用。部分程序需要额外的依赖或环境配置。"
   }
 }

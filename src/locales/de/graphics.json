@@ -28,6 +28,7 @@
     "app_command_placeholder": "z.B. gedit /home/user/file.txt",
     "app_common_apps": "Häufige Apps:",
     "start_app": "App starten",
-    "app_starting": "Anwendung wird gestartet..."
+    "app_starting": "Anwendung wird gestartet...",
+    "app_experimental_note": "Der App-Modus funktioniert möglicherweise nicht mit allen Anwendungen. Einige Programme benötigen zusätzliche Abhängigkeiten oder Umgebungskonfigurationen."
   }
 }

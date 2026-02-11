@@ -461,11 +461,34 @@ async fn watch_app_exit(
         if let Some(ref mut app) = handle.app_child {
             match app.try_wait() {
                 Ok(Some(status)) => {
-                    tracing::info!(
-                        "WSL Graphics App: process exited for session {} (status: {:?})",
-                        session_id,
-                        status
-                    );
+                    // Read stderr for diagnostic info
+                    let stderr_msg = if let Some(mut stderr) = handle
+                        .app_child
+                        .as_mut()
+                        .and_then(|c| c.stderr.take())
+                    {
+                        use tokio::io::AsyncReadExt;
+                        let mut buf = Vec::with_capacity(4096);
+                        let _ = stderr.read_to_end(&mut buf).await;
+                        String::from_utf8_lossy(&buf).trim().to_string()
+                    } else {
+                        String::new()
+                    };
+
+                    if stderr_msg.is_empty() {
+                        tracing::info!(
+                            "WSL Graphics App: process exited for session {} (status: {:?})",
+                            session_id,
+                            status
+                        );
+                    } else {
+                        tracing::warn!(
+                            "WSL Graphics App: process exited for session {} (status: {:?}), stderr: {}",
+                            session_id,
+                            status,
+                            stderr_msg
+                        );
+                    }
                     // App exited — tear down the whole session
                     let mut handle = sessions.remove(&session_id).unwrap();
                     handle.bridge_handle.abort();

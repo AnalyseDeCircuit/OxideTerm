@@ -28,6 +28,7 @@
     "app_command_placeholder": "ex. gedit /home/user/file.txt",
     "app_common_apps": "Apps courantes :",
     "start_app": "Lancer l'app",
-    "app_starting": "Lancement de l'application..."
+    "app_starting": "Lancement de l'application...",
+    "app_experimental_note": "Le mode application peut ne pas fonctionner avec toutes les applications. Certains programmes nécessitent des dépendances ou une configuration d'environnement supplémentaires."
   }
 }
