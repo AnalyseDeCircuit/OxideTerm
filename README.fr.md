@@ -259,7 +259,7 @@ Malgré des sources d’état différentes, la logique de rendu est unifiée via
 | **Redirection** | Locale (-L), distante (-R), SOCKS5 dynamique (-D), auto-restauration, rapport de décès, I/O sans verrou |
 | **IA** | Panneau inline + chat latéral, SSE streaming, insertion de code, OpenAI/Ollama/DeepSeek |
 | **Plugins** | Chargement ESM runtime, 8 espaces API, 24 UI Kit, exécution sandboxée, disjoncteur |
-| **WSL Graphics** ⚠️ | Visionneuse de bureau VNC intégrée (Expérimental), Xtigervnc + noVNC, 9 bureaux (Xfce / GNOME / KDE Plasma / MATE / …), reconnexion, feature-gated |
+| **WSL Graphics** ⚠️ | Visionneuse VNC intégrée (Expérimental) : mode Bureau (9 DE) + mode Application (GUI unique), détection WSLg, Xtigervnc + noVNC, reconnexion, feature-gated |
 | **Sécurité** | Chiffrement .oxide, trousseau système, `zeroize` mémoire, TOFU clé d'hôte |
 | **i18n** | EN, 简体中文, 繁體中文, 日本語, FR, DE, ES, IT, 한국어, PT-BR, VI |
 
@@ -310,9 +310,11 @@ Recherche de contenu à l’échelle du projet avec cache intelligent :
 - **Contrôle de back-pressure** : prévient le débordement mémoire lors de pics.
 - **Auto-reconnexion** : recul exponentiel, jusqu’à 5 tentatives.
 ### 🖥️ WSL Graphics (⚠️ Expérimental)
-- **Visionneuse de bureau VNC intégrée** : exécutez des bureaux Linux GUI dans un onglet terminal — aucun client VNC externe nécessaire.
+- **Mode bureau** : exécutez des bureaux Linux GUI complets dans un onglet terminal — 9 environnements de bureau (Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM), détection automatique.
+- **Mode application** : lancez une seule application GUI (ex. `gedit`, `firefox`) sans bureau complet — Xtigervnc léger + Openbox WM optionnel, nettoyage automatique à la fermeture.
+- **Détection WSLg** : détection automatique de la disponibilité WSLg (sockets Wayland / X11) par distribution, affichée comme badge dans l'interface.
 - **Xtigervnc + noVNC** : serveur X autonome rendu via `<canvas>` in-app, avec `scaleViewport` et `resizeSession`.
-- **Détection automatique** : 9 environnements de bureau pris en charge (Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM), détection automatique par présence de commande.
+- **Sécurité** : injection tableau `argv` (sans parsing shell), `env_clear()` + liste blanche minimale, `validate_argv()` 6 règles de défense, limites de concurrence (4 sessions app/distro, 8 global).
 - **Reconnexion** : rétablissement du pont WebSocket sans tuer la session VNC.
 - **Feature-gated** : feature Cargo `wsl-graphics`, commandes stub sur les plateformes non-Windows.
 ---
@@ -413,7 +415,7 @@ OxideTerm/
 - [x] i18n — 11 langues × 18 espaces de noms
 - [x] Auth Keyboard-Interactive (2FA/MFA)
 - [x] Recherche historique profonde (30K lignes, Rust regex)
-- [x] WSL Graphics — visionneuse de bureau VNC intégrée (⚠️ Expérimental)
+- [x] WSL Graphics — mode bureau + mode application VNC (⚠️ Expérimental)
 
 ### 🚧 En cours
 

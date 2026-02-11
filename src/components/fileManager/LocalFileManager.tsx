@@ -773,27 +773,33 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
       
       {/* Drives Dialog */}
       <Dialog open={drivesDialog} onOpenChange={setDrivesDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-xs">
           <DialogHeader>
-            <DialogTitle>{t('fileManager.selectDrive')}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4" />
+              {t('fileManager.selectDrive')}
+            </DialogTitle>
             <DialogDescription>{t('fileManager.selectDriveDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 py-4">
+          <div className="flex flex-col gap-1.5 py-2">
             {availableDrives.map(drive => {
               const letter = drive.replace(/[:\\\/]/g, '');
               return (
                 <button
                   key={drive}
-                  className="group relative flex items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-all hover:border-primary/50 hover:bg-accent hover:shadow-sm active:scale-[0.98]"
+                  className="group flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-accent active:scale-[0.99]"
                   onClick={() => handleSelectDrive(drive)}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
-                    <HardDrive className="h-5 w-5" />
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                    <HardDrive className="h-4 w-4" />
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{letter}:</div>
-                    <div className="text-xs text-muted-foreground truncate">{t('fileManager.localDisk')}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{t('fileManager.localDisk')} ({letter}:)</div>
+                    <div className="text-xs text-muted-foreground">{drive}</div>
                   </div>
+                  <svg className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </button>
               );
             })}

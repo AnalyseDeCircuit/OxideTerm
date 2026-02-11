@@ -261,7 +261,7 @@ Despite different state sources, rendering logic is unified through `TerminalVie
 | **Forwarding** | Local (-L), Remote (-R), Dynamic SOCKS5 (-D), auto-restore, death reporting, lock-free I/O |
 | **AI** | Inline panel + sidebar chat, streaming SSE, code insertion, OpenAI/Ollama/DeepSeek |
 | **Plugins** | Runtime ESM loading, 8 API namespaces, 24 UI Kit, sandboxed, circuit breaker |
-| **WSL Graphics** ⚠️ | Built-in VNC desktop viewer (Experimental), Xtigervnc + noVNC, 9 desktops (Xfce / GNOME / KDE Plasma / MATE / …), reconnect, feature-gated |
+| **WSL Graphics** ⚠️ | Built-in VNC viewer (Experimental): Desktop mode (9 DEs) + App mode (single GUI app), WSLg detection, Xtigervnc + noVNC, reconnect, feature-gated |
 | **Security** | .oxide encryption, OS keychain, `zeroize` memory, host key TOFU |
 | **i18n** | EN, 简体中文, 繁體中文, 日本語, FR, DE, ES, IT, 한국어, PT-BR, VI |
 
@@ -313,9 +313,11 @@ Project-wide file content search with intelligent caching:
 - **Auto-reconnect**: exponential backoff retry, up to 5 attempts.
 
 ### 🖥️ WSL Graphics (⚠️ Experimental)
-- **Built-in VNC desktop viewer**: run Linux GUI desktops inside a terminal tab — no external VNC client.
+- **Desktop mode**: full Linux GUI desktops inside a terminal tab — 9 desktop environments (Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM), auto-detected.
+- **App mode**: launch a single GUI application (e.g., `gedit`, `firefox`) without a full desktop — lightweight Xtigervnc + optional Openbox WM, automatic cleanup on app exit.
+- **WSLg detection**: auto-detect WSLg availability (Wayland / X11 sockets) per distro, shown as a badge in the UI.
 - **Xtigervnc + noVNC**: standalone X server rendered via in-app `<canvas>`, with `scaleViewport` and `resizeSession`.
-- **Auto-detect desktop**: 9 desktop environments supported (Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM), auto-detected via command presence.
+- **Security**: `argv` array injection (no shell parsing), `env_clear()` + minimal whitelist, `validate_argv()` 6-rule defense, concurrency limits (4 app sessions/distro, 8 global).
 - **Reconnect**: WebSocket bridge re-establish without killing the VNC session.
 - **Feature-gated**: `wsl-graphics` Cargo feature, stub commands on non-Windows platforms.
 
@@ -363,7 +365,7 @@ OxideTerm/
 │   │   ├── sftp/                   #   Dual-pane file browser
 │   │   ├── ide/                    #   Editor, file tree, Git dialogs
 │   │   ├── ai/                     #   Inline + sidebar chat
-│   │   ├── graphics/               #   WSL Graphics (VNC desktop viewer)
+│   │   ├── graphics/               #   WSL Graphics (VNC desktop + app viewer)
 │   │   ├── plugin/                 #   Plugin manager & runtime UI
 │   │   ├── forwards/               #   Port forwarding management
 │   │   ├── connections/            #   Connection CRUD & import
@@ -417,7 +419,7 @@ OxideTerm/
 - [x] i18n — 11 languages × 18 namespaces
 - [x] Keyboard-Interactive auth (2FA/MFA)
 - [x] Deep history search (30K lines, Rust regex)
-- [x] WSL Graphics — built-in VNC desktop viewer (⚠️ Experimental)
+- [x] WSL Graphics — desktop mode + app mode VNC viewer (⚠️ Experimental)
 
 ### 🚧 In Progress
 

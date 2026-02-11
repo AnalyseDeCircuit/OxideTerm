@@ -2,26 +2,31 @@
 
 > **版本**: v0.3.0 | **状态**: ⚠️ 实验性 | **平台**: 仅限 Windows
 
-OxideTerm 内置 WSL 图形查看器，让你可以在终端标签页中运行 Linux GUI 桌面——无需外部 VNC 客户端。
+OxideTerm 内置 WSL 图形查看器，让你可以在终端标签页中运行 Linux GUI 桌面或单个 GUI 应用——无需外部 VNC 客户端。
 
 ---
 
 ## 概述
 
-WSL Graphics 模块在 WSL 发行版内启动 **Xtigervnc** 独立 X 服务器，启动桌面会话（D-Bus + 桌面环境），并通过 localhost WebSocket 桥接以 **noVNC** 在应用内渲染。
+WSL Graphics 模块在 WSL 发行版内启动 **Xtigervnc** 独立 X 服务器，根据模式启动桌面会话或单个应用，并通过 localhost WebSocket 桥接以 **noVNC** 在应用内渲染。
 
 ```
-WSL (Ubuntu)                    OxideTerm (Tauri)
-┌────────────────┐              ┌──────────────────────────────┐
-│ Xtigervnc :10  │──TCP──▶     │  Rust Bridge (WS↔TCP)        │
-│  └─ Desktop    │  localhost   │       │                      │
-│    (D-Bus)     │              │       ▼                      │
-└────────────────┘              │  GraphicsView.tsx (noVNC)    │
-                                │  ┌──────────────────────┐    │
-                                │  │ Canvas (RFB)         │    │
-                                │  │ Toolbar (auto-hide)  │    │
-                                │  └──────────────────────┘    │
-                                └──────────────────────────────┘
+模式 A：桌面模式                         模式 B：应用模式
+WSL (Ubuntu)                    WSL (Ubuntu)
+┌────────────────┐              ┌────────────────┐
+│ Xtigervnc :10  │              │ Xtigervnc :10  │
+│  └─ Desktop    │              │  └─ Openbox    │
+│    (D-Bus)     │              │    └─ gedit   │
+└────────────────┘              └────────────────┘
+     │ TCP localhost                │ TCP localhost
+     ▼                              ▼
+┌───────────────────────────────────────────────┐
+│  OxideTerm (Tauri)                            │
+│  Rust Bridge (WS↔TCP) + CSPRNG Token         │
+│       │                                       │
+│       ▼                                       │
+│  GraphicsView.tsx (noVNC ─ Canvas)            │
+└───────────────────────────────────────────────┘
 ```
 
 **关键特性**：
@@ -72,24 +77,26 @@ sudo apt install kde-plasma-desktop -y      # ⚠️ KDE Plasma（实验性）
 
 ```
 src-tauri/src/graphics/
-├── mod.rs        # 类型、状态、错误、Feature Gate、桩命令
-├── wsl.rs        # WSL 检测、Xtigervnc、桌面引导、清理
+├── mod.rs        # 类型、状态、错误、Feature Gate、桩命令、GraphicsSessionMode、并发限制
+├── wsl.rs        # WSL 检测、Xtigervnc、桌面引导、应用引导、清理
+├── wslg.rs       # WSLg 可用性检测（socket 级、Openbox 预检）
 ├── bridge.rs     # WebSocket ↔ VNC TCP 透明代理
-└── commands.rs   # 5 个 Tauri IPC 命令
+└── commands.rs   # 7 个 Tauri IPC 命令 + validate_argv + watch_app_exit
 ```
 
 **Feature Gate**：`#[cfg(all(feature = "wsl-graphics", target_os = "windows"))]`
 
-在非 Windows 平台或未启用 Feature 时，同名的 5 个命令注册为桩函数，返回 `"WSL Graphics is only available on Windows"`。
+在非 Windows 平台或未启用 Feature 时，同名的 7 个命令注册为桩函数，返回 `"WSL Graphics is only available on Windows"`。
 
 ### 前端（React）
 
 `src/components/graphics/GraphicsView.tsx` — 内置标签页组件：
 
-- **发行版选择器**：通过 `wsl_graphics_list_distros` 列出 WSL 发行版
+- **发行版选择器**：通过 `wsl_graphics_list_distros` 列出 WSL 发行版，显示 WSLg 状态徽章
+- **模式切换 Tab**：桌面模式 / 应用模式，应用模式提供命令输入框 + 常用应用快捷按钮
 - **noVNC 查看器**：`@novnc/novnc` RFB 类，启用 `scaleViewport + resizeSession`
-- **自动隐藏工具栏**：显示发行版名称、桌面名称、Experimental 徽章、重连、全屏、停止
-- **状态叠加层**：启动加载动画、断连警告、错误提示
+- **自动隐藏工具栏**：显示发行版名称、桌面/应用名称、模式标签、重连、全屏、停止
+- **实验性警告**：两种模式均显示醒目的实验性警告横条
 
 ### Tauri 命令
 
@@ -97,9 +104,11 @@ src-tauri/src/graphics/
 |-----|------|
 | `wsl_graphics_list_distros` | 列出 WSL 发行版（解析 `wsl.exe --list --verbose`，处理 UTF-16LE） |
 | `wsl_graphics_start` | 检查前置条件 → 启动 Xtigervnc → 桌面会话 → WebSocket 桥接 |
-| `wsl_graphics_stop` | 终止桥接、VNC、桌面；通过 PID 文件递归清理进程树 |
-| `wsl_graphics_reconnect` | 仅重建 WebSocket 桥接（VNC + 桌面保持运行） |
+| `wsl_graphics_start_app` | 校验 argv → 并发检查 → 启动 Xtigervnc → 应用进程 → 桥接 → 自动清理监听 |
+| `wsl_graphics_stop` | 终止桥接、VNC、桌面/应用；通过 PID 文件递归清理进程树 |
+| `wsl_graphics_reconnect` | 仅重建 WebSocket 桥接（VNC + 桌面/应用保持运行） |
 | `wsl_graphics_list_sessions` | 列出活跃的图形会话 |
+| `wsl_graphics_detect_wslg` | 检测指定发行版的 WSLg 可用性（Wayland / X11 / Openbox） |
 
 ---
 

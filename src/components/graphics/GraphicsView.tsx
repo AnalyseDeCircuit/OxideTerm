@@ -9,6 +9,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import RFB from '@novnc/novnc/lib/rfb.js';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -147,6 +152,25 @@ function DistroSelector({
     );
   }
 
+  // Platform not available — block entirely on macOS / Linux
+  if (error === '__NOT_AVAILABLE__') {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <div className="flex flex-col items-center gap-3 max-w-md text-center">
+          <svg
+            className="w-12 h-12 text-muted-foreground/50"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          >
+            <rect x={2} y={3} width={20} height={14} rx={2} />
+            <line x1={8} y1={21} x2={16} y2={21} />
+            <line x1={12} y1={17} x2={12} y2={21} />
+          </svg>
+          <p className="text-sm font-medium">{t('graphics.not_available')}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (distros.length === 0 && !error) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -179,149 +203,148 @@ function DistroSelector({
     onSelectApp(selectedDistro, [...argv]);
   };
 
-  const tabClass = (active: boolean) =>
-    `flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-      active
-        ? 'bg-primary text-primary-foreground shadow-sm'
-        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-    }`;
-
   return (
     <div className="flex items-center justify-center h-full">
       <div className="flex flex-col gap-4 max-w-sm w-full px-6">
-        {/* Mode tabs */}
-        <div className="flex gap-1 p-1 rounded-lg bg-muted">
-          <button className={tabClass(mode === 'desktop')} onClick={() => setMode('desktop')}>
-            {t('graphics.desktop_mode')}
-          </button>
-          <button className={tabClass(mode === 'app')} onClick={() => setMode('app')}>
-            {t('graphics.app_mode')}
-          </button>
-        </div>
+        <Tabs value={mode} onValueChange={(v) => setMode(v as LaunchMode)}>
+          <TabsList className="w-full">
+            <TabsTrigger value="desktop" className="flex-1">
+              {t('graphics.desktop_mode')}
+            </TabsTrigger>
+            <TabsTrigger value="app" className="flex-1">
+              {t('graphics.app_mode')}
+            </TabsTrigger>
+          </TabsList>
 
-        <h2 className="text-lg font-semibold text-foreground text-center">
-          {mode === 'desktop' ? t('graphics.select_distro') : t('graphics.app_select_distro')}
-        </h2>
+          <h2 className="text-lg font-semibold text-foreground text-center mt-4">
+            {mode === 'desktop' ? t('graphics.select_distro') : t('graphics.app_select_distro')}
+          </h2>
 
-        {displayError && (
-          <div className="px-3 py-2 rounded bg-destructive/10 text-destructive text-sm">
-            {displayError}
-          </div>
-        )}
-
-        {mode === 'desktop' ? (
-          /* Desktop mode: click distro to launch full desktop */
-          <>
-            <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
-              <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
+          {displayError && (
+            <div className="px-3 py-2 rounded bg-destructive/10 text-destructive text-sm">
+              {displayError}
             </div>
-            {distros.map((distro) => (
-            <button
-              key={distro.name}
-              onClick={() => onSelectDesktop(distro.name)}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors border-border hover:border-primary hover:bg-accent text-left"
-            >
-              <div className="flex-1">
-                <div className="font-medium text-foreground">
-                  {distro.name}
-                  {distro.isDefault && (
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      Default
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                  <span>{distro.isRunning ? t('graphics.distro_running') : t('graphics.distro_stopped')}</span>
-                  {wslgStatuses[distro.name] && (
-                    <WslgBadge status={wslgStatuses[distro.name]} />
-                  )}
-                </div>
+          )}
+
+          <TabsContent value="desktop">
+            {/* Desktop mode: click distro to launch full desktop */}
+            <div className="flex flex-col gap-4">
+              <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
+                <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
               </div>
-              <svg
-                className="w-4 h-4 text-muted-foreground"
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-          ))}
-          </>
-        ) : (
-          /* App mode: select distro + enter command */
-          <>
-            {/* Experimental warning */}
-            <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
-              <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
-              <span className="ml-1">{t('graphics.app_experimental_note')}</span>
-            </div>
-
-            {/* Distro selector dropdown */}
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">
-                {t('graphics.app_distro_label')}
-              </label>
-              <select
-                value={selectedDistro}
-                onChange={(e) => setSelectedDistro(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                {distros.map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.name}{d.isDefault ? ' (Default)' : ''}{d.isRunning ? '' : ` — ${t('graphics.distro_stopped')}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* WSLg badge for selected distro */}
-            {selectedDistro && wslgStatuses[selectedDistro] && (
-              <div className="flex items-center gap-2">
-                <WslgBadge status={wslgStatuses[selectedDistro]} />
-              </div>
-            )}
-
-            {/* Command input */}
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">
-                {t('graphics.app_command_label')}
-              </label>
-              <input
-                type="text"
-                value={appCommand}
-                onChange={(e) => setAppCommand(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleStartApp(); }}
-                placeholder={t('graphics.app_command_placeholder')}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                autoFocus
-              />
-            </div>
-
-            {/* Common apps shortcuts */}
-            <div>
-              <span className="text-xs text-muted-foreground">{t('graphics.app_common_apps')}</span>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {COMMON_APPS.map((app) => (
-                  <button
-                    key={app.label}
-                    onClick={() => handleQuickApp(app.argv)}
-                    className="px-2.5 py-1 text-xs rounded-md border border-border hover:border-primary hover:bg-accent transition-colors text-foreground"
+              {distros.map((distro) => (
+                <Button
+                  key={distro.name}
+                  variant="outline"
+                  className="flex items-center gap-3 px-4 py-3 h-auto justify-start text-left hover:border-primary"
+                  onClick={() => onSelectDesktop(distro.name)}
+                >
+                  <div className="flex-1">
+                    <div className="font-medium text-foreground">
+                      {distro.name}
+                      {distro.isDefault && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                      <span>{distro.isRunning ? t('graphics.distro_running') : t('graphics.distro_stopped')}</span>
+                      {wslgStatuses[distro.name] && (
+                        <WslgBadge status={wslgStatuses[distro.name]} />
+                      )}
+                    </div>
+                  </div>
+                  <svg
+                    className="w-4 h-4 text-muted-foreground"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                   >
-                    {app.label}
-                  </button>
-                ))}
-              </div>
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </Button>
+              ))}
             </div>
+          </TabsContent>
 
-            {/* Start button */}
-            <button
-              onClick={handleStartApp}
-              disabled={!appCommand.trim() || !selectedDistro}
-              className="w-full py-2.5 rounded-md font-medium text-sm transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {t('graphics.start_app')}
-            </button>
-          </>
-        )}
+          <TabsContent value="app">
+            {/* App mode: select distro + enter command */}
+            <div className="flex flex-col gap-4">
+              {/* Experimental warning */}
+              <div className="px-3 py-2 rounded-md bg-warning/10 border border-warning/20 text-xs text-warning">
+                <span className="font-semibold">{t('graphics.desktop_experimental')}</span>
+                <span className="ml-1">{t('graphics.app_experimental_note')}</span>
+              </div>
+
+              {/* Distro selector dropdown */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  {t('graphics.app_distro_label')}
+                </Label>
+                <Select value={selectedDistro} onValueChange={setSelectedDistro}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('graphics.app_distro_label')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {distros.map((d) => (
+                      <SelectItem key={d.name} value={d.name}>
+                        {d.name}{d.isDefault ? ' (Default)' : ''}{d.isRunning ? '' : ` — ${t('graphics.distro_stopped')}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* WSLg badge for selected distro */}
+              {selectedDistro && wslgStatuses[selectedDistro] && (
+                <div className="flex items-center gap-2">
+                  <WslgBadge status={wslgStatuses[selectedDistro]} />
+                </div>
+              )}
+
+              {/* Command input */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  {t('graphics.app_command_label')}
+                </Label>
+                <Input
+                  type="text"
+                  value={appCommand}
+                  onChange={(e) => setAppCommand(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleStartApp(); }}
+                  placeholder={t('graphics.app_command_placeholder')}
+                  autoFocus
+                />
+              </div>
+
+              {/* Common apps shortcuts */}
+              <div>
+                <span className="text-xs text-muted-foreground">{t('graphics.app_common_apps')}</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {COMMON_APPS.map((app) => (
+                    <Button
+                      key={app.label}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickApp(app.argv)}
+                    >
+                      {app.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Start button */}
+              <Button
+                variant="default"
+                className="w-full"
+                onClick={handleStartApp}
+                disabled={!appCommand.trim() || !selectedDistro}
+              >
+                {t('graphics.start_app')}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
@@ -345,9 +368,6 @@ function Toolbar({
   const { t } = useTranslation();
 
   const isExperimental = true; // WSL Graphics is globally experimental
-
-  const buttonClass =
-    'px-3 py-1.5 text-xs font-medium rounded transition-colors border border-border hover:bg-accent text-foreground';
 
   return (
     <div className="absolute top-0 right-0 left-0 z-10 flex justify-end opacity-0 hover:opacity-100 transition-opacity duration-200">
@@ -375,21 +395,23 @@ function Toolbar({
         )}
 
         {status === STATUS.DISCONNECTED && (
-          <button onClick={onReconnect} className={buttonClass}>
+          <Button variant="outline" size="sm" onClick={onReconnect}>
             {t('graphics.reconnect')}
-          </button>
+          </Button>
         )}
 
-        <button onClick={onFullscreen} className={buttonClass}>
+        <Button variant="outline" size="sm" onClick={onFullscreen}>
           {t('graphics.fullscreen')}
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="outline"
+          size="sm"
+          className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
           onClick={onStop}
-          className={`${buttonClass} hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30`}
         >
           {t('graphics.stop')}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -259,7 +259,7 @@ CodeMirror 6 编辑器通过 SFTP 操作远程文件——服务器端无需任�
 | **转发** | 本地 (-L)、远程 (-R)、动态 SOCKS5 (-D)、自动恢复、死亡报告、无锁 I/O |
 | **AI** | 内联面板 + 侧边栏聊天、流式 SSE、命令插入、OpenAI/Ollama/DeepSeek |
 | **插件** | ESM 运行时加载、8 API 命名空间、24 UI Kit、沙箱执行、熔断器 |
-| **WSL 图形** ⚠️ | 内置 VNC 桌面查看器（实验性），Xtigervnc + noVNC，9 种桌面环境（Xfce / GNOME / KDE Plasma / MATE / …），支持重连，Feature-gated |
+| **WSL 图形** ⚠️ | 内置 VNC 查看器（实验性）：桌面模式（9 种桌面环境）+ 应用模式（单 GUI 应用），WSLg 检测，Xtigervnc + noVNC，支持重连，Feature-gated |
 | **安全** | .oxide 加密导出、系统钥匙串、`zeroize` 内存擦除、主机密钥 TOFU |
 | **国际化** | EN, 简体中文, 繁體中文, 日本語, FR, DE, ES, IT, 한국어, PT-BR, VI |
 
@@ -310,10 +310,12 @@ CodeMirror 6 编辑器通过 SFTP 操作远程文件——服务器端无需任�
 - **背压控制**：突发流量时防止内存溢出。
 - **自动重连**：指数退避重试，最多 5 次。
 
-### 🖥️ WSL 图形桌面（⚠️ 实验性）
-- **内置 VNC 桌面查看器**：在终端标签页内运行 Linux GUI 桌面——无需外部 VNC 客户端。
+### 🖥️ WSL 图形（⚠️ 实验性）
+- **桌面模式**：在终端标签页内运行完整 Linux GUI 桌面——支持 9 种桌面环境（Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM），自动检测。
+- **应用模式**：无需完整桌面，直接启动单个 GUI 应用（如 `gedit`、`firefox`）——轻量 Xtigervnc + 可选 Openbox WM，应用退出时自动清理。
+- **WSLg 检测**：自动检测每个发行版的 WSLg 可用性（Wayland / X11 socket），UI 中显示状态徽章。
 - **Xtigervnc + noVNC**：独立 X 服务器，通过应用内 `<canvas>` 渲染，支持 `scaleViewport` 和 `resizeSession`。
-- **自动检测桌面**：支持 9 种桌面环境（Xfce / GNOME / KDE Plasma / MATE / LXDE / Cinnamon / Openbox / Fluxbox / IceWM），根据命令是否存在自动检测。
+- **安全性**：`argv` 数组注入（无 shell 解析），`env_clear()` + 最小白名单，`validate_argv()` 6 层防御，并发限制（每发行版 4 个应用会话，全局 8 个）。
 - **重连**：WebSocket 桥接可在不终止 VNC 会话的情况下重新建立。
 - **Feature-gated**：`wsl-graphics` Cargo Feature，非 Windows 平台注册桩命令。
 
@@ -414,7 +416,7 @@ OxideTerm/
 - [x] 国际化 — 11 种语言 × 18 命名空间
 - [x] Keyboard-Interactive 认证 (2FA/MFA)
 - [x] 深度历史搜索 (30K 行，Rust Regex)
-- [x] WSL 图形 — 内置 VNC 桌面查看器（⚠️ 实验性）
+- [x] WSL 图形 — 桌面模式 + 应用模式 VNC 查看器（⚠️ 实验性）
 
 ### 🚧 进行中
 

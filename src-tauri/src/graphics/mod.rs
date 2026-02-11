@@ -48,6 +48,7 @@ pub mod commands {
         pub ws_token: String,
         pub distro: String,
         pub desktop_name: String,
+        pub mode: GraphicsSessionMode,
     }
 
     /// Graphics session mode (stub).
