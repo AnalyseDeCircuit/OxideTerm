@@ -4,6 +4,8 @@ import { useToastStore } from '../hooks/useToast';
 import { topologyResolver } from '../lib/topologyResolver';
 import { useSettingsStore, type SidebarSection } from './settingsStore';
 import i18n from '../i18n';
+import { useSessionTreeStore } from './sessionTreeStore';
+import { useLocalTerminalStore } from './localTerminalStore';
 import { 
   SessionInfo, 
   Tab, 
@@ -453,18 +455,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     // nodeId is required for SFTP/IDE tabs — auto-migrate from sessionId if missing
     if ((type === 'sftp' || type === 'ide') && !options?.nodeId && sessionId) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { useSessionTreeStore } = require('./sessionTreeStore');
-        const node = useSessionTreeStore.getState().getNodeByTerminalId(sessionId);
-        if (node) {
-          console.info(`[AppStore] Auto-migrated ${type} tab: sessionId=${sessionId} → nodeId=${node.id}`);
-          options = { ...options, nodeId: node.id };
-        } else {
-          console.warn(`[AppStore] Creating ${type} tab without nodeId (no node found for sessionId=${sessionId}). Tab may not survive reconnects.`);
-        }
-      } catch {
-        console.warn(`[AppStore] Creating ${type} tab without nodeId. Tab may not survive reconnects.`);
+      const node = useSessionTreeStore.getState().getNodeByTerminalId(sessionId);
+      if (node) {
+        console.info(`[AppStore] Auto-migrated ${type} tab: sessionId=${sessionId} → nodeId=${node.id}`);
+        options = { ...options, nodeId: node.id };
+      } else {
+        console.warn(`[AppStore] Creating ${type} tab without nodeId (no node found for sessionId=${sessionId}). Tab may not survive reconnects.`);
       }
     }
 
@@ -528,17 +524,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
 
       // Try to get shell name from localTerminalStore
-      // Import dynamically to avoid circular dependency
       let shellLabel = 'Local';
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { useLocalTerminalStore } = require('./localTerminalStore');
-        const terminalInfo = useLocalTerminalStore.getState().getTerminal(sessionId);
-        if (terminalInfo?.shell?.label) {
-          shellLabel = terminalInfo.shell.label;
-        }
-      } catch {
-        // Fallback to default
+      const terminalInfo = useLocalTerminalStore.getState().getTerminal(sessionId);
+      if (terminalInfo?.shell?.label) {
+        shellLabel = terminalInfo.shell.label;
       }
 
       const newTab: Tab = {

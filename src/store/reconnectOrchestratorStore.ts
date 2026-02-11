@@ -692,13 +692,17 @@ async function phaseSshConnect(nodeId: string): Promise<boolean> {
     return true;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const isRetryable =
-      msg.includes('CHAIN_LOCK_BUSY') ||
-      msg.includes('NODE_LOCK_BUSY') ||
-      msg.includes('ConnectionTimeout') ||
-      msg.includes('Timeout');
 
-    if (isRetryable && (job.attempt + 1) < job.maxAttempts) {
+    // Non-retryable whitelist: these errors won't resolve by retrying
+    const isNonRetryable =
+      msg.includes('Authentication failed') ||
+      msg.includes('HostKeyMismatch') ||
+      msg.includes('host key') ||
+      msg.includes('Permission denied') ||
+      msg.includes('USER_CANCELLED') ||
+      msg.includes('cancelled');
+
+    if (!isNonRetryable && (job.attempt + 1) < job.maxAttempts) {
       const delay = calculateBackoff(job.attempt + 1);
       console.log(`[Orchestrator] Retryable error, will retry in ${delay}ms (attempt ${job.attempt + 1}/${job.maxAttempts})`);
       await sleep(delay);

@@ -24,6 +24,9 @@ use crate::ssh::{
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 /// Heartbeat timeout - consider connection dead if no response (seconds)
 const HEARTBEAT_TIMEOUT_SECS: u64 = 90;
+/// WebSocket send timeout - disconnect if a single frame cannot be delivered (seconds)
+/// Raised from 5s to tolerate mobile/VPN network jitter
+const WS_SEND_TIMEOUT_SECS: u64 = 15;
 /// WebSocket accept timeout (seconds)
 /// Extended to 60s to handle font loading and multiple concurrent terminals
 const WS_ACCEPT_TIMEOUT_SECS: u64 = 60;
@@ -639,7 +642,7 @@ impl WsBridge {
             while let Some(data) = frame_rx.recv().await {
                 // Use timeout to detect dead clients (prevents deadlock)
                 match tokio::time::timeout(
-                    Duration::from_secs(5),
+                    Duration::from_secs(WS_SEND_TIMEOUT_SECS),
                     ws_sender.send(Message::Binary(data.to_vec())),
                 )
                 .await
@@ -653,7 +656,8 @@ impl WsBridge {
                     }
                     Err(_) => {
                         warn!(
-                            "WebSocket send timeout after 5s - client unresponsive, disconnecting"
+                            "WebSocket send timeout after {}s - client unresponsive, disconnecting",
+                            WS_SEND_TIMEOUT_SECS
                         );
                         break;
                     }
@@ -1068,7 +1072,7 @@ impl WsBridge {
             while let Some(frame) = frame_rx.recv().await {
                 // Use timeout to detect dead clients (prevents deadlock)
                 match tokio::time::timeout(
-                    Duration::from_secs(5),
+                    Duration::from_secs(WS_SEND_TIMEOUT_SECS),
                     ws_sender.send(Message::Binary(frame.to_vec())),
                 )
                 .await
@@ -1082,7 +1086,8 @@ impl WsBridge {
                     }
                     Err(_) => {
                         warn!(
-                            "WebSocket send timeout after 5s - client unresponsive, disconnecting"
+                            "WebSocket send timeout after {}s - client unresponsive, disconnecting",
+                            WS_SEND_TIMEOUT_SECS
                         );
                         break;
                     }
@@ -1341,7 +1346,7 @@ impl WsBridge {
         let mut sender_task = tokio::spawn(async move {
             while let Some(frame) = frame_rx.recv().await {
                 match tokio::time::timeout(
-                    Duration::from_secs(5),
+                    Duration::from_secs(WS_SEND_TIMEOUT_SECS),
                     ws_sender.send(Message::Binary(frame.to_vec())),
                 )
                 .await

@@ -20,6 +20,7 @@ import {
   getBaseName,
   validateFileName,
 } from '../lib/pathUtils';
+import { useSessionTreeStore } from './sessionTreeStore';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // State Gating: IO 操作前校验节点连接状态
@@ -30,9 +31,6 @@ import {
  * 使用 sessionTreeStore 的 getNode() 避免 IPC 开销。
  */
 function assertNodeReady(nodeId: string): void {
-  // 延迟导入避免循环依赖（ideStore ← sessionTreeStore ← appStore 链）
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useSessionTreeStore } = require('./sessionTreeStore');
   const node = useSessionTreeStore.getState().getNode(nodeId);
   if (!node) {
     throw new Error('Node not found in session tree');

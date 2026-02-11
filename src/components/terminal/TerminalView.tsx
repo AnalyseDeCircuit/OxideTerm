@@ -350,19 +350,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const recoverWebSocket = useCallback((reason: string) => {
     if (wsRecoveryInFlightRef.current) return;
-    if (wsRecoveryAttemptsRef.current >= 5) return; // Increased max attempts
+    if (wsRecoveryAttemptsRef.current >= 15) return; // Extended from 5 to 15 for weak networks
     if (connectionStatusRef.current !== 'connected') return;
 
     wsRecoveryInFlightRef.current = true;
     wsRecoveryAttemptsRef.current += 1;
     const attempt = wsRecoveryAttemptsRef.current;
-    
+
     // Fast retry for initial connection failures (backend may not be ready yet)
     // Slower retry for mid-session failures (need to recreate PTY)
     const isInitialFailure = reason.startsWith('initial-') && !reason.includes('opened');
-    const delayMs = isInitialFailure 
-      ? Math.min(200 * attempt, 1000)  // 200ms, 400ms, 600ms, 800ms, 1000ms
-      : Math.min(1000 * attempt, 3000); // 1s, 2s, 3s
+    const delayMs = isInitialFailure
+      ? Math.min(200 * attempt, 1000)  // 200ms, 400ms, ..., 1000ms
+      : Math.min(1000 * attempt, 15000); // 1s, 2s, ..., 15s cap
 
     if (import.meta.env.DEV) {
       console.warn(`[TerminalView ${sessionId}] WS recover attempt #${attempt} (${reason}) in ${delayMs}ms`);
@@ -422,7 +422,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
         // Connection-level failure: silently purge
         if (errorMsg.includes('Connection not found') || errorMsg.includes('Session') && errorMsg.includes('not found')) {
-          wsRecoveryAttemptsRef.current = 5; // Prevent further retries
+          wsRecoveryAttemptsRef.current = 15; // Prevent further retries
           useAppStore.getState().purgeTerminalSession(sessionId);
           return;
         }
@@ -441,6 +441,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
   }, []);
+
+  // Reset WS recovery attempts when network comes back online
+  useEffect(() => {
+    const handleOnline = () => {
+      const ws = wsRef.current;
+      const wsBroken = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+      if (wsBroken && wsRecoveryAttemptsRef.current > 0 && connectionStatusRef.current === 'connected') {
+        console.log(`[TerminalView ${sessionId}] Network restored, resetting WS recovery`);
+        wsRecoveryAttemptsRef.current = 0;
+        recoverWebSocket('network-restored');
+      }
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [sessionId, recoverWebSocket]);
 
   // Get terminal settings from unified store
   const terminalSettings = useSettingsStore((state) => state.settings.terminal);
