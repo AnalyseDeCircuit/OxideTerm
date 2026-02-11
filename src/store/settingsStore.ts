@@ -226,14 +226,14 @@ const defaultTerminalSettings: TerminalSettings = {
   lineHeight: 1.2,
   cursorStyle: 'block',
   cursorBlink: true,
-  scrollback: 5000,
+  scrollback: 3000,
   renderer: isWindows ? 'canvas' : 'auto',
   pasteProtection: true,  // Default enabled for safety
   osc52Clipboard: false,  // Opt-in: user must explicitly enable OSC 52 clipboard bridge
 };
 
 const defaultBufferSettings: BufferSettings = {
-  maxLines: 100000,
+  maxLines: 30000,
   saveOnDisconnect: true,
 };
 

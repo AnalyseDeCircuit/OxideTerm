@@ -753,12 +753,22 @@ export interface BufferStats {
   memory_usage_mb: number;
 }
 
+/** Response from get_all_buffer_lines with truncation metadata */
+export interface BufferLinesResponse {
+  lines: TerminalLine[];
+  total_lines: number;
+  returned_lines: number;
+  truncated: boolean;
+}
+
 // Search Types
 export interface SearchOptions {
   query: string;
   case_sensitive: boolean;
   regex: boolean;
   whole_word: boolean;
+  /** Maximum matches to return (0 = unlimited, default 1000) */
+  max_matches?: number;
 }
 
 export interface SearchMatch {
@@ -773,6 +783,8 @@ export interface SearchResult {
   matches: SearchMatch[];
   total_matches: number;
   duration_ms: number;
+  /** Whether results were truncated due to max_matches limit */
+  truncated?: boolean;
   /** Error message if regex is invalid */
   error?: string;
 }

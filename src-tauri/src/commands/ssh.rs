@@ -237,8 +237,10 @@ pub async fn create_terminal(
 
     // 在 SessionRegistry 创建 session
     let session_id = if let Some(max_lines) = request.max_buffer_lines {
+        // Clamp user-provided value to a safe range to prevent excessive memory use
+        let clamped = max_lines.clamp(10_000, 200_000);
         session_registry
-            .create_session_with_buffer(config.clone(), max_lines)
+            .create_session_with_buffer(config.clone(), clamped)
             .map_err(|e| format!("Failed to create session: {}", e))?
     } else {
         session_registry

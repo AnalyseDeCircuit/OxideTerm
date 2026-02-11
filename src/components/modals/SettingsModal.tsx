@@ -408,10 +408,10 @@ export const SettingsModal = () => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="10000">10,000 lines (~1 MB)</SelectItem>
+                                        <SelectItem value="30000">30,000 lines (~3 MB)</SelectItem>
                                         <SelectItem value="50000">50,000 lines (~5 MB)</SelectItem>
                                         <SelectItem value="100000">100,000 lines (~10 MB)</SelectItem>
-                                        <SelectItem value="500000">500,000 lines (~50 MB)</SelectItem>
-                                        <SelectItem value="1000000">1,000,000 lines (~100 MB)</SelectItem>
+                                        <SelectItem value="200000">200,000 lines (~20 MB)</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-zinc-500">

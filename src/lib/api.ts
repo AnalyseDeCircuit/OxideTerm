@@ -686,8 +686,8 @@ export const api = {
     return invoke('clear_buffer', { sessionId });
   },
 
-  getAllBufferLines: async (sessionId: string): Promise<TerminalLine[]> => {
-    if (USE_MOCK) return [];
+  getAllBufferLines: async (sessionId: string): Promise<import('../types').BufferLinesResponse> => {
+    if (USE_MOCK) return { lines: [], total_lines: 0, returned_lines: 0, truncated: false };
     return invoke('get_all_buffer_lines', { sessionId });
   },
 

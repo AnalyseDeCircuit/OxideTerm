@@ -23,6 +23,13 @@ pub struct SearchOptions {
     pub regex: bool,
     /// Match whole words only
     pub whole_word: bool,
+    /// Maximum matches to return (0 = unlimited, default 1000)
+    #[serde(default = "default_max_matches")]
+    pub max_matches: usize,
+}
+
+fn default_max_matches() -> usize {
+    1000
 }
 
 /// Single search match result
@@ -43,12 +50,15 @@ pub struct SearchMatch {
 /// Search result with all matches and metadata
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResult {
-    /// All matches found
+    /// All matches found (up to max_matches)
     pub matches: Vec<SearchMatch>,
     /// Total number of matches
     pub total_matches: usize,
     /// Search duration in milliseconds
     pub duration_ms: u64,
+    /// Whether results were truncated due to max_matches limit
+    #[serde(default)]
+    pub truncated: bool,
     /// Error message if regex is invalid (None = no error)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -85,31 +95,55 @@ pub fn search_lines(lines: &[TerminalLine], options: SearchOptions) -> SearchRes
                 matches: vec![],
                 total_matches: 0,
                 duration_ms: start.elapsed().as_millis() as u64,
+                truncated: false,
                 error: Some(format!("Invalid regex: {}", e)),
             };
         }
     };
 
+    // Effective limit: 0 means unlimited
+    let limit = if options.max_matches == 0 { usize::MAX } else { options.max_matches };
+    let mut total_matches: usize = 0;
+    let capped = limit < usize::MAX;
+
     // Search through all lines
-    for (line_number, line) in lines.iter().enumerate() {
-        // Find all matches in this line
+    for (_line_number, line) in lines.iter().enumerate() {
+        // Find all matches in this line; share line_content across matches on the same line
+        let mut line_content_cached: Option<String> = None;
         for cap in regex.find_iter(&line.text) {
-            matches.push(SearchMatch {
-                line_number,
-                column_start: cap.start(),
-                column_end: cap.end(),
-                matched_text: cap.as_str().to_string(),
-                line_content: line.text.clone(),
-            });
+            total_matches += 1;
+            if matches.len() < limit {
+                let line_content = match &line_content_cached {
+                    Some(c) => c.clone(),
+                    None => {
+                        let c = line.text.clone();
+                        line_content_cached = Some(c.clone());
+                        c
+                    }
+                };
+                matches.push(SearchMatch {
+                    line_number: _line_number,
+                    column_start: cap.start(),
+                    column_end: cap.end(),
+                    matched_text: cap.as_str().to_string(),
+                    line_content,
+                });
+            } else if !capped {
+                // Unlimited mode: should not happen, but break defensively
+                break;
+            }
+            // When capped, keep counting but skip pushing
         }
     }
 
+    let truncated = total_matches > matches.len();
     let duration_ms = start.elapsed().as_millis() as u64;
 
     SearchResult {
-        total_matches: matches.len(),
+        total_matches,
         matches,
         duration_ms,
+        truncated,
         error: None,
     }
 }
@@ -134,7 +168,7 @@ mod tests {
             query: "Hello".to_string(),
             case_sensitive: true,
             regex: false,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -155,7 +189,7 @@ mod tests {
             query: "hello".to_string(),
             case_sensitive: false,
             regex: false,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -174,7 +208,7 @@ mod tests {
             query: "hello".to_string(),
             case_sensitive: false,
             regex: false,
-            whole_word: true,
+            whole_word: true, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -196,7 +230,7 @@ mod tests {
             query: r"^Error:".to_string(),
             case_sensitive: true,
             regex: true,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -213,7 +247,7 @@ mod tests {
             query: "test".to_string(),
             case_sensitive: true,
             regex: false,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -228,7 +262,7 @@ mod tests {
             query: "Rust".to_string(),
             case_sensitive: true,
             regex: false,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -244,7 +278,7 @@ mod tests {
             query: "[invalid(".to_string(),
             case_sensitive: true,
             regex: true,
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);
@@ -261,7 +295,7 @@ mod tests {
             query: "file.txt".to_string(),
             case_sensitive: true,
             regex: false, // Literal search, dot should be escaped
-            whole_word: false,
+            whole_word: false, max_matches: 0,
         };
 
         let result = search_lines(&lines, options);

@@ -45,17 +45,48 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const decoderRef = useRef<TextDecoder>(new TextDecoder());
   const carryRef = useRef<string>('');
-  const [lines, setLines] = useState<string[]>([]);
+  // Chunk-based line storage — O(1) append, no flat copy
+  const chunksRef = useRef<string[][]>([]);
+  // Cumulative line count at the end of each chunk for O(log n) indexed access
+  const chunkOffsetsRef = useRef<number[]>([]);
+  const [lineCount, setLineCount] = useState<number>(0);
   const [offset, setOffset] = useState<number>(0);
   const [eof, setEof] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [scrollTop, setScrollTop] = useState<number>(0);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
 
+  // Indexed access into chunked storage — O(log n) via binary search on offsets
+  const getLine = useCallback((index: number): string => {
+    const offsets = chunkOffsetsRef.current;
+    const chunks = chunksRef.current;
+    // Binary search for the chunk containing `index`
+    let lo = 0, hi = offsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (offsets[mid] <= index) lo = mid + 1;
+      else hi = mid;
+    }
+    const chunkIdx = lo;
+    const prevOffset = chunkIdx > 0 ? offsets[chunkIdx - 1] : 0;
+    return chunks[chunkIdx]?.[index - prevOffset] ?? '';
+  }, []);
+
+  // Slice a range from chunked storage without flattening everything
+  const sliceLines = useCallback((start: number, end: number): string[] => {
+    const result: string[] = [];
+    for (let i = start; i < end; i++) {
+      result.push(getLine(i));
+    }
+    return result;
+  }, [getLine]);
+
   const linePx = useMemo(() => Math.max(14, Math.round(fontSize * lineHeight)), [fontSize, lineHeight]);
 
   const reset = useCallback(() => {
-    setLines([]);
+    chunksRef.current = [];
+    chunkOffsetsRef.current = [];
+    setLineCount(0);
     setOffset(0);
     setEof(false);
     carryRef.current = '';
@@ -67,16 +98,25 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
     const parts = combined.split('\n');
 
     if (!isEof) {
-      // 保留最后一个不完整的行（可能跨越 chunk 边界）
       carryRef.current = parts.pop() ?? '';
-      // 添加完整的行
       if (parts.length > 0) {
-        setLines(prev => [...prev, ...parts]);
+        chunksRef.current.push(parts);
+        const prevTotal = chunkOffsetsRef.current.length > 0
+          ? chunkOffsetsRef.current[chunkOffsetsRef.current.length - 1]
+          : 0;
+        chunkOffsetsRef.current.push(prevTotal + parts.length);
+        setLineCount(prev => prev + parts.length);
       }
     } else {
-      // 文件结束：添加所有剩余行
       carryRef.current = '';
-      setLines(prev => [...prev, ...parts]);
+      if (parts.length > 0) {
+        chunksRef.current.push(parts);
+        const prevTotal = chunkOffsetsRef.current.length > 0
+          ? chunkOffsetsRef.current[chunkOffsetsRef.current.length - 1]
+          : 0;
+        chunkOffsetsRef.current.push(prevTotal + parts.length);
+        setLineCount(prev => prev + parts.length);
+      }
     }
   }, []);
 
@@ -143,11 +183,16 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
 
   const visibleRange = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / linePx) - OVERSCAN_LINES);
-    const end = Math.min(lines.length, Math.ceil((scrollTop + viewportHeight) / linePx) + OVERSCAN_LINES);
+    const end = Math.min(lineCount, Math.ceil((scrollTop + viewportHeight) / linePx) + OVERSCAN_LINES);
     return { start, end };
-  }, [scrollTop, viewportHeight, lines.length, linePx]);
+  }, [scrollTop, viewportHeight, lineCount, linePx]);
 
-  const visibleLines = useMemo(() => lines.slice(visibleRange.start, visibleRange.end), [lines, visibleRange]);
+  // Only slice the visible window from chunks — no full flatten
+  const visibleLines = useMemo(
+    () => sliceLines(visibleRange.start, visibleRange.end),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleRange.start, visibleRange.end, lineCount, sliceLines],
+  );
 
   const highlightedLines = useMemo(() => {
     if (!highlight || !language) {
@@ -169,13 +214,13 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   }, [highlight, language, visibleLines]);
 
   const paddingTop = visibleRange.start * linePx;
-  const paddingBottom = Math.max(0, (lines.length - visibleRange.end) * linePx);
-  const gutterWidth = Math.max(lines.length.toString().length, 2);
+  const paddingBottom = Math.max(0, (lineCount - visibleRange.end) * linePx);
+  const gutterWidth = Math.max(lineCount.toString().length, 2);
 
   return (
     <div
       ref={containerRef}
-      className={`overflow-auto bg-zinc-950 ${className || ''}`}
+      className={`overflow-auto bg-zinc-950 min-h-0 ${className || ''}`}
       onScroll={onScroll}
       style={{
         fontFamily: getFontFamilyCSS(fontFamily),
@@ -212,7 +257,7 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
           <div className="text-xs text-zinc-500 py-2">{t('fileManager.loadingMore', 'Loading...')}</div>
         )}
 
-        {!loading && eof && lines.length === 0 && (
+        {!loading && eof && lineCount === 0 && (
           <div className="text-xs text-zinc-500 py-2">{t('fileManager.emptyFile', 'Empty file')}</div>
         )}
       </div>

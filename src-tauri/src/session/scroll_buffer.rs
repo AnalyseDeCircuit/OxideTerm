@@ -146,6 +146,16 @@ impl ScrollBuffer {
         lines.iter().cloned().collect()
     }
 
+    /// Atomically get capped tail lines plus the true total count in a single lock.
+    /// Returns (lines, total_in_buffer). If total <= cap, all lines are returned.
+    pub async fn get_capped(&self, cap: usize) -> (Vec<TerminalLine>, usize) {
+        let lines = self.lines.read().await;
+        let total = lines.len();
+        let start = total.saturating_sub(cap);
+        let result = lines.iter().skip(start).cloned().collect();
+        (result, total)
+    }
+
     /// Get buffer statistics
     pub async fn stats(&self) -> BufferStats {
         let lines = self.lines.read().await;
@@ -237,6 +247,7 @@ impl ScrollBuffer {
                 matches: vec![],
                 total_matches: 0,
                 duration_ms: 0,
+                truncated: false,
                 error: Some("Search task failed".to_string()),
             })
     }
