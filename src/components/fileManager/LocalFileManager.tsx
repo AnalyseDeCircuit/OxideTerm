@@ -30,7 +30,7 @@ import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo, Che
 
 // Preview imports
 import { readFile, stat, writeTextFile, copyFile } from '@tauri-apps/plugin-fs';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 // File extension categorization
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'cfg', 'env']);
@@ -42,6 +42,8 @@ const CODE_EXTENSIONS = new Set([
 ]);
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp']);
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'mkv', 'avi', 'm4v']);
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus']);
 const FONT_EXTENSIONS = new Set(['ttf', 'otf', 'woff', 'woff2', 'eot']);
 const PDF_EXTENSIONS = new Set(['pdf']);
 const OFFICE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'odp']);
@@ -228,6 +230,28 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
                         ext === 'bmp' ? 'image/bmp' : 'image/jpeg';
         const base64 = uint8ArrayToBase64(content);
         data = `data:${mimeType};base64,${base64}`;
+      } else if (VIDEO_EXTENSIONS.has(ext)) {
+        // Authorize file in asset protocol scope, then stream from disk
+        previewType = 'video';
+        mimeType = ext === 'mp4' || ext === 'm4v' ? 'video/mp4' :
+                   ext === 'webm' ? 'video/webm' :
+                   ext === 'ogv' ? 'video/ogg' :
+                   ext === 'mov' ? 'video/quicktime' :
+                   ext === 'mkv' ? 'video/x-matroska' :
+                   ext === 'avi' ? 'video/x-msvideo' : 'video/mp4';
+        const resolvedVideo = await invoke<string>('allow_asset_file', { path: filePath });
+        data = convertFileSrc(resolvedVideo);
+      } else if (AUDIO_EXTENSIONS.has(ext)) {
+        // Authorize file in asset protocol scope, then stream from disk
+        previewType = 'audio';
+        mimeType = ext === 'mp3' ? 'audio/mpeg' :
+                   ext === 'wav' ? 'audio/wav' :
+                   ext === 'ogg' || ext === 'opus' ? 'audio/ogg' :
+                   ext === 'flac' ? 'audio/flac' :
+                   ext === 'aac' || ext === 'm4a' ? 'audio/mp4' :
+                   ext === 'wma' ? 'audio/x-ms-wma' : 'audio/mpeg';
+        const resolvedAudio = await invoke<string>('allow_asset_file', { path: filePath });
+        data = convertFileSrc(resolvedAudio);
       } else if (FONT_EXTENSIONS.has(ext)) {
         previewType = 'font';
         // Read font and convert to base64 data URL

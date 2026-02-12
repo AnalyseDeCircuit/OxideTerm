@@ -407,6 +407,7 @@ pub fn run() {
         commands::local_read_file_range,
         commands::local_calculate_checksum,
         commands::local_dir_stats,
+        commands::allow_asset_file,
         // Session commands (v2 with registry)
         commands::disconnect_v2,
         commands::list_sessions_v2,

@@ -842,3 +842,25 @@ pub async fn local_dir_stats(path: String) -> Result<DirStatsResult, String> {
         total_size,
     })
 }
+
+/// Dynamically allow a single file for the asset protocol scope.
+/// This avoids a blanket `**` scope by authorizing files one at a time
+/// right before the renderer needs to stream them.
+/// Symlinks are resolved via canonicalize; only the canonical path is authorized.
+/// Returns the canonical path so the frontend uses it for the asset URL.
+#[tauri::command]
+pub fn allow_asset_file(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    use tauri::Manager;
+    let file_path = std::path::PathBuf::from(&path);
+    // Resolve symlinks to the real path — only the canonical target is authorized
+    // to prevent TOCTOU races if the symlink is retargeted.
+    let canonical = std::fs::canonicalize(&file_path)
+        .map_err(|e| format!("Failed to resolve path '{}': {}", path, e))?;
+    app.asset_protocol_scope()
+        .allow_file(&canonical)
+        .map_err(|e| format!("Failed to allow asset file: {}", e))?;
+    canonical
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Canonical path contains invalid UTF-8".to_string())
+}

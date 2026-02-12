@@ -58,33 +58,47 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   const generationRef = useRef<number>(0);
   const [eof, setEof] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [scrollTop, setScrollTop] = useState<number>(0);
+  // Quantized line index — only updates on line boundary crossings, not sub-line pixel scrolls
+  const firstLineRef = useRef<number>(0);
+  const [firstLine, setFirstLine] = useState<number>(0);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
 
-  // Indexed access into chunked storage — O(log n) via binary search on offsets
-  const getLine = useCallback((index: number): string => {
+  // Slice a range from chunked storage without flattening everything
+  // Uses contiguous chunk iteration instead of per-index binary search
+  const sliceLines = useCallback((start: number, end: number): string[] => {
+    if (start >= end) return [];
     const offsets = chunkOffsetsRef.current;
     const chunks = chunksRef.current;
-    // Binary search for the chunk containing `index`
+    if (offsets.length === 0) return [];
+
+    // Find starting chunk via binary search
     let lo = 0, hi = offsets.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >>> 1;
-      if (offsets[mid] <= index) lo = mid + 1;
+      if (offsets[mid] <= start) lo = mid + 1;
       else hi = mid;
     }
-    const chunkIdx = lo;
-    const prevOffset = chunkIdx > 0 ? offsets[chunkIdx - 1] : 0;
-    return chunks[chunkIdx]?.[index - prevOffset] ?? '';
-  }, []);
 
-  // Slice a range from chunked storage without flattening everything
-  const sliceLines = useCallback((start: number, end: number): string[] => {
     const result: string[] = [];
-    for (let i = start; i < end; i++) {
-      result.push(getLine(i));
+    let chunkIdx = lo;
+    let chunkStart = chunkIdx > 0 ? offsets[chunkIdx - 1] : 0;
+    let posInChunk = start - chunkStart;
+
+    while (result.length < end - start && chunkIdx < chunks.length) {
+      const chunk = chunks[chunkIdx];
+      const remaining = end - start - result.length;
+      const available = chunk.length - posInChunk;
+      const take = Math.min(remaining, available);
+
+      for (let i = 0; i < take; i++) {
+        result.push(chunk[posInChunk + i]);
+      }
+
+      chunkIdx++;
+      posInChunk = 0;
     }
     return result;
-  }, [getLine]);
+  }, []);
 
   const linePx = useMemo(() => Math.max(14, Math.round(fontSize * lineHeight)), [fontSize, lineHeight]);
 
@@ -95,10 +109,12 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
     offsetRef.current = 0;
     eofRef.current = false;
     loadingRef.current = false;
+    highlightCacheRef.current = new Map();
     setLineCount(0);
     setEof(false);
     setLoading(false);
-    setScrollTop(0);
+    firstLineRef.current = 0;
+    setFirstLine(0);
     carryRef.current = '';
     decoderRef.current = new TextDecoder();
   }, []);
@@ -198,23 +214,33 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  // Scroll handler + prefetch
+  // Scroll handler + prefetch (throttled via rAF, quantized to line boundary)
+  const scrollRafRef = useRef<number>(0);
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    const nextTop = target.scrollTop;
-    setScrollTop(nextTop);
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      const nextTop = target.scrollTop;
+      // Quantize to line index — skip re-render for sub-line pixel scrolls
+      const lineIdx = Math.floor(nextTop / linePx);
+      if (lineIdx !== firstLineRef.current) {
+        firstLineRef.current = lineIdx;
+        setFirstLine(lineIdx);
+      }
 
-    const remaining = target.scrollHeight - (nextTop + target.clientHeight);
-    if (remaining < linePx * PREFETCH_LINES) {
-      loadMore();
-    }
+      const remaining = target.scrollHeight - (nextTop + target.clientHeight);
+      if (remaining < linePx * PREFETCH_LINES) {
+        loadMore();
+      }
+    });
   }, [linePx, loadMore]);
 
+  const linesInView = Math.ceil(viewportHeight / linePx);
   const visibleRange = useMemo(() => {
-    const start = Math.max(0, Math.floor(scrollTop / linePx) - OVERSCAN_LINES);
-    const end = Math.min(lineCount, Math.ceil((scrollTop + viewportHeight) / linePx) + OVERSCAN_LINES);
+    const start = Math.max(0, firstLine - OVERSCAN_LINES);
+    const end = Math.min(lineCount, firstLine + linesInView + OVERSCAN_LINES);
     return { start, end };
-  }, [scrollTop, viewportHeight, lineCount, linePx]);
+  }, [firstLine, linesInView, lineCount]);
 
   // Only slice the visible window from chunks — no full flatten
   const visibleLines = useMemo(
@@ -222,6 +248,12 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibleRange.start, visibleRange.end, lineCount, sliceLines],
   );
+
+  // Highlight cache: keyed by line number, stores {source, html}
+  // Bounded to a window around the viewport to prevent unbounded growth
+  // Cleared on path change via reset
+  const highlightCacheRef = useRef<Map<number, { src: string; html: string }>>(new Map());
+  const HIGHLIGHT_CACHE_WINDOW = 500; // max lines to keep cached around viewport
 
   const highlightedLines = useMemo(() => {
     if (!highlight || !language) {
@@ -233,18 +265,67 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
       return visibleLines.map(line => escapeHtml(line || ' '));
     }
 
-    return visibleLines.map(line => {
+    const cache = highlightCacheRef.current;
+    const result = visibleLines.map((line, idx) => {
+      const lineNum = visibleRange.start + idx;
+      const src = line || ' ';
+      const cached = cache.get(lineNum);
+      if (cached && cached.src === src) return cached.html;
       try {
-        return Prism.highlight(line || ' ', grammar, language);
+        const html = Prism.highlight(src, grammar, language);
+        cache.set(lineNum, { src, html });
+        return html;
       } catch {
-        return escapeHtml(line || ' ');
+        const html = escapeHtml(src);
+        cache.set(lineNum, { src, html });
+        return html;
       }
     });
-  }, [highlight, language, visibleLines]);
+
+    // Evict entries outside the retention window around the current viewport
+    if (cache.size > HIGHLIGHT_CACHE_WINDOW * 2) {
+      const retainLo = visibleRange.start - HIGHLIGHT_CACHE_WINDOW;
+      const retainHi = visibleRange.end + HIGHLIGHT_CACHE_WINDOW;
+      for (const key of cache.keys()) {
+        if (key < retainLo || key > retainHi) {
+          cache.delete(key);
+        }
+      }
+    }
+
+    return result;
+  }, [highlight, language, visibleLines, visibleRange.start, visibleRange.end]);
+
+  // Single HTML blob for code column — 1 DOM mutation replaces N per-line elements
+  const codeHtml = useMemo(() => highlightedLines.join('\n'), [highlightedLines]);
+
+  // Line number text for gutter column — single text node
+  const gutterText = useMemo(() => {
+    if (!showLineNumbers) return '';
+    const len = visibleRange.end - visibleRange.start;
+    const lines = new Array(len);
+    for (let i = 0; i < len; i++) {
+      lines[i] = String(visibleRange.start + i + 1);
+    }
+    return lines.join('\n');
+  }, [showLineNumbers, visibleRange.start, visibleRange.end]);
 
   const paddingTop = visibleRange.start * linePx;
   const paddingBottom = Math.max(0, (lineCount - visibleRange.end) * linePx);
   const gutterWidth = Math.max(lineCount.toString().length, 2);
+
+  // Memoize style objects to avoid per-render allocations
+  const gutterStyle = useMemo(() => ({
+    width: `${gutterWidth + 1}ch`,
+    color: 'rgba(255, 255, 255, 0.3)',
+    whiteSpace: 'pre' as const,
+    lineHeight: `${linePx}px`,
+  }), [gutterWidth, linePx]);
+
+  const codeStyle = useMemo(() => ({
+    whiteSpace: 'pre' as const,
+    lineHeight: `${linePx}px`,
+  }), [linePx]);
 
   return (
     <div
@@ -258,29 +339,21 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
       }}
     >
       <div style={{ paddingTop, paddingBottom }}>
-        {highlightedLines.map((lineHtml, idx) => {
-          const lineNumber = visibleRange.start + idx + 1;
-          return (
-            <div key={lineNumber} className="flex" style={{ minHeight: `${linePx}px` }}>
-              {showLineNumbers && (
-                <span
-                  className="flex-shrink-0 text-right select-none pr-3"
-                  style={{
-                    width: `${gutterWidth + 1}ch`,
-                    color: 'rgba(255, 255, 255, 0.3)',
-                  }}
-                >
-                  {lineNumber}
-                </span>
-              )}
-              <span
-                className="flex-1"
-                style={{ whiteSpace: 'pre' }}
-                dangerouslySetInnerHTML={{ __html: lineHtml }}
-              />
+        <div style={{ display: 'flex' }}>
+          {showLineNumbers && (
+            <div
+              className="flex-shrink-0 select-none text-right pr-3"
+              style={gutterStyle}
+            >
+              {gutterText}
             </div>
-          );
-        })}
+          )}
+          <div
+            className="flex-1"
+            style={codeStyle}
+            dangerouslySetInnerHTML={{ __html: codeHtml }}
+          />
+        </div>
 
         {loading && (
           <div className="text-xs text-zinc-500 py-2">{t('fileManager.loadingMore', 'Loading...')}</div>

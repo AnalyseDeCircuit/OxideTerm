@@ -27,7 +27,9 @@ import {
   HardDrive,
   Shield,
   Info,
-  Type
+  Type,
+  Film,
+  Music
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -62,6 +64,10 @@ const getPreviewIcon = (type: PreviewType) => {
       return <FileText className="h-4 w-4" />;
     case 'font':
       return <Type className="h-4 w-4" />;
+    case 'video':
+      return <Film className="h-4 w-4" />;
+    case 'audio':
+      return <Music className="h-4 w-4" />;
     case 'archive':
       return <Archive className="h-4 w-4" />;
     default:
@@ -346,6 +352,39 @@ export const QuickLook: React.FC<QuickLookProps> = ({
               className="flex-1 p-6 md-content max-w-none"
               dangerouslySetInnerHTML={{ __html: markdownHtml }}
             />
+          )}
+
+          {/* Video Preview */}
+          {preview.type === 'video' && (
+            <div className="flex-1 flex items-center justify-center min-h-[300px] p-4 bg-black">
+              <video
+                src={preview.data}
+                controls
+                autoPlay={false}
+                className="max-w-full max-h-full"
+                style={{ maxHeight: 'calc(90vh - 160px)' }}
+                {...(preview.mimeType ? { type: preview.mimeType } : {})}
+              >
+                {t('fileManager.videoNotSupported', 'Your browser does not support this video format.')}
+              </video>
+            </div>
+          )}
+
+          {/* Audio Preview */}
+          {preview.type === 'audio' && (
+            <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] p-8 gap-6">
+              <Music className="h-20 w-20 text-zinc-600" />
+              <p className="text-sm text-zinc-400">{preview.name}</p>
+              <audio
+                src={preview.data}
+                controls
+                autoPlay={false}
+                className="w-full max-w-md"
+                {...(preview.mimeType ? { type: preview.mimeType } : {})}
+              >
+                {t('fileManager.audioNotSupported', 'Your browser does not support this audio format.')}
+              </audio>
+            </div>
           )}
 
           {/* Code Preview with Syntax Highlighting */}
