@@ -396,7 +396,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           <div className="text-xs text-theme-text-muted px-3 py-1 bg-theme-bg sticky top-0">
             {t('terminal.search.click_to_jump')}
           </div>
-          {deepSearchState.matches.slice(0, 100).map((match, idx) => (
+          {deepSearchState.matches.map((match, idx) => (
             <button
               key={`${match.line_number}-${match.column_start}-${idx}`}
               className="w-full text-left px-3 py-2 hover:bg-theme-bg-hover border-b border-theme-border transition-colors"
@@ -410,7 +410,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               </div>
             </button>
           ))}
-          {deepSearchState.matches.length > 100 && (
+          {deepSearchState.totalMatches > deepSearchState.matches.length && (
             <div className="text-xs text-theme-text-muted px-3 py-2 text-center">
               {t('terminal.search.showing_first', { total: deepSearchState.totalMatches })}
             </div>

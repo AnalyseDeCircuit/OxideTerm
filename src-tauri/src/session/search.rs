@@ -29,7 +29,7 @@ pub struct SearchOptions {
 }
 
 fn default_max_matches() -> usize {
-    1000
+    100
 }
 
 /// Single search match result

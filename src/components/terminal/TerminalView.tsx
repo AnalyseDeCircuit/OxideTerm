@@ -1698,6 +1698,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         case_sensitive: options.caseSensitive || false,
         regex: options.regex || false,
         whole_word: options.wholeWord || false,
+        max_matches: 100,
       });
       
       setDeepSearchState({

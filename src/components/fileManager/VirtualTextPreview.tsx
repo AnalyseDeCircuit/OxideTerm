@@ -50,7 +50,12 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   // Cumulative line count at the end of each chunk for O(log n) indexed access
   const chunkOffsetsRef = useRef<number[]>([]);
   const [lineCount, setLineCount] = useState<number>(0);
-  const [offset, setOffset] = useState<number>(0);
+  // Use refs for mutable load state so loadMore has a stable identity
+  const offsetRef = useRef<number>(0);
+  const eofRef = useRef<boolean>(false);
+  const loadingRef = useRef<boolean>(false);
+  // Generation token: incremented on reset, used to discard stale async responses
+  const generationRef = useRef<number>(0);
   const [eof, setEof] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [scrollTop, setScrollTop] = useState<number>(0);
@@ -84,11 +89,16 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   const linePx = useMemo(() => Math.max(14, Math.round(fontSize * lineHeight)), [fontSize, lineHeight]);
 
   const reset = useCallback(() => {
+    generationRef.current += 1;
     chunksRef.current = [];
     chunkOffsetsRef.current = [];
+    offsetRef.current = 0;
+    eofRef.current = false;
+    loadingRef.current = false;
     setLineCount(0);
-    setOffset(0);
     setEof(false);
+    setLoading(false);
+    setScrollTop(0);
     carryRef.current = '';
     decoderRef.current = new TextDecoder();
   }, []);
@@ -121,39 +131,58 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   }, []);
 
   const loadMore = useCallback(async () => {
-    if (loading || eof) return;
+    if (loadingRef.current || eofRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
+    const gen = generationRef.current;
 
     try {
-      const length = Math.min(CHUNK_SIZE, Math.max(0, size - offset));
+      const currentOffset = offsetRef.current;
+      const length = Math.min(CHUNK_SIZE, Math.max(0, size - currentOffset));
       if (length <= 0) {
+        eofRef.current = true;
         setEof(true);
         return;
       }
 
       const chunk = await invoke<FileChunk>('local_read_file_range', {
         path,
-        offset,
+        offset: currentOffset,
         length,
       });
+
+      // Discard stale response if path changed during the await
+      if (gen !== generationRef.current) return;
 
       const bytes = new Uint8Array(chunk.data);
       const decoded = decoderRef.current.decode(bytes, { stream: !chunk.eof });
       appendChunk(decoded, chunk.eof);
-      setOffset(prev => prev + bytes.length);
-      if (chunk.eof || bytes.length === 0) setEof(true);
+      offsetRef.current = currentOffset + bytes.length;
+      if (chunk.eof || bytes.length === 0) {
+        eofRef.current = true;
+        setEof(true);
+      }
     } catch (err) {
+      if (gen !== generationRef.current) return;
       console.error('Stream preview load error:', err);
+      eofRef.current = true;
       setEof(true);
     } finally {
-      setLoading(false);
+      if (gen === generationRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [appendChunk, eof, loading, offset, path, size]);
+  }, [appendChunk, path, size]);
 
-  // Initial load and reset on path change
+  // Initial load on path change — only depends on path (stable loadMore via refs)
   useEffect(() => {
     reset();
-    loadMore();
+    // Use rAF to ensure reset state is flushed before loading
+    const id = requestAnimationFrame(() => {
+      loadMore();
+    });
+    return () => cancelAnimationFrame(id);
   }, [path, reset, loadMore]);
 
   // Resize observer for viewport height
@@ -220,7 +249,7 @@ export const VirtualTextPreview: React.FC<VirtualTextPreviewProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`overflow-auto bg-zinc-950 min-h-0 ${className || ''}`}
+      className={`overflow-y-scroll overflow-x-auto bg-zinc-950 min-h-0 scrollbar-visible ${className || ''}`}
       onScroll={onScroll}
       style={{
         fontFamily: getFontFamilyCSS(fontFamily),
