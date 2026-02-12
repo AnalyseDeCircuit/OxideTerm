@@ -132,6 +132,8 @@
     "propTotalSize": "總大小",
     "propChecksum": "校驗和",
     "propCalculating": "計算中...",
-    "propCalcChecksum": "計算 MD5 / SHA-256"
+    "propCalcChecksum": "計算 MD5 / SHA-256",
+    "progressFile": "正在複製 {{name}}...",
+    "progressPreparing": "準備中..."
   }
 }

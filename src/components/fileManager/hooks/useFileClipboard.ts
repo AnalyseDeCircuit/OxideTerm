@@ -7,9 +7,21 @@ import { useState, useCallback } from 'react';
 import { copyFile, rename, mkdir, readDir, stat } from '@tauri-apps/plugin-fs';
 import type { FileInfo, ClipboardData, ClipboardMode } from '../types';
 
+export interface PasteProgress {
+  /** Currently processing file index (1-based) */
+  current: number;
+  /** Total file count (including files inside directories) */
+  total: number;
+  /** Name of the file currently being processed */
+  fileName: string;
+  /** Whether the operation is in progress */
+  active: boolean;
+}
+
 export interface UseFileClipboardOptions {
   onSuccess?: (message: string) => void;
   onError?: (title: string, message: string) => void;
+  onProgress?: (progress: PasteProgress) => void;
 }
 
 export interface UseFileClipboardReturn {
@@ -23,7 +35,7 @@ export interface UseFileClipboardReturn {
 }
 
 export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFileClipboardReturn {
-  const { onSuccess, onError } = options;
+  const { onSuccess, onError, onProgress } = options;
   const [clipboard, setClipboard] = useState<ClipboardData | null>(null);
 
   // Copy files to clipboard
@@ -49,8 +61,64 @@ export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFile
     setClipboard(null);
   }, []);
 
-  // Recursively copy a directory
-  const copyDirectory = async (srcPath: string, destPath: string): Promise<void> => {
+  // Count total files recursively (for progress tracking)
+  const countFiles = async (files: FileInfo[]): Promise<number> => {
+    let count = 0;
+    for (const file of files) {
+      if (file.file_type === 'Directory') {
+        count += await countDirFiles(file.path);
+      } else {
+        count++;
+      }
+    }
+    return count;
+  };
+
+  const countDirFiles = async (dirPath: string): Promise<number> => {
+    let count = 0;
+    try {
+      const entries = await readDir(dirPath);
+      for (const entry of entries) {
+        if (entry.isDirectory) {
+          count += await countDirFiles(`${dirPath}/${entry.name}`);
+        } else {
+          count++;
+        }
+      }
+    } catch {
+      // If we can't read, count as 1 to not block progress
+      count = 1;
+    }
+    return count;
+  };
+
+  // Mutable progress tracker shared across a single paste operation.
+  // emitProgress throttles onProgress calls to at most once per PROGRESS_THROTTLE_MS
+  // to avoid a full-pane rerender on every copied file.
+  const PROGRESS_THROTTLE_MS = 100;
+
+  const emitProgress = (
+    tracker: { done: number; total: number; fileName: string; lastEmit: number },
+    force?: boolean,
+  ) => {
+    const now = performance.now();
+    if (force || now - tracker.lastEmit >= PROGRESS_THROTTLE_MS) {
+      tracker.lastEmit = now;
+      onProgress?.({
+        current: tracker.done,
+        total: tracker.total,
+        fileName: tracker.fileName,
+        active: true,
+      });
+    }
+  };
+
+  // Recursively copy a directory (with progress tracking)
+  const copyDirectory = async (
+    srcPath: string,
+    destPath: string,
+    tracker: { done: number; total: number; fileName: string; lastEmit: number },
+  ): Promise<void> => {
     // Create destination directory
     await mkdir(destPath, { recursive: true });
     
@@ -62,9 +130,12 @@ export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFile
       const destChildPath = `${destPath}/${entry.name}`;
       
       if (entry.isDirectory) {
-        await copyDirectory(srcChildPath, destChildPath);
+        await copyDirectory(srcChildPath, destChildPath, tracker);
       } else {
         await copyFile(srcChildPath, destChildPath);
+        tracker.done++;
+        tracker.fileName = entry.name;
+        emitProgress(tracker);
       }
     }
   };
@@ -107,6 +178,15 @@ export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFile
     let errorCount = 0;
     let firstError: string | null = null;
 
+    // Count total files for progress (only for copy; move is atomic per top-level item)
+    const totalFiles = mode === 'copy'
+      ? await countFiles(files)
+      : files.length;
+    const tracker = { done: 0, total: totalFiles, fileName: '', lastEmit: 0 };
+
+    // Signal progress start (force — always render the initial 0%)
+    emitProgress(tracker, true);
+
     for (const file of files) {
       try {
         // Check if pasting to same directory
@@ -121,20 +201,29 @@ export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFile
         
         if (file.file_type === 'Directory') {
           if (mode === 'copy') {
-            await copyDirectory(file.path, destFilePath);
+            await copyDirectory(file.path, destFilePath, tracker);
           } else {
             // Cut = move
             if (!isSameDir) {
               await rename(file.path, destFilePath);
+              tracker.done++;
+              tracker.fileName = file.name;
+              emitProgress(tracker);
             }
           }
         } else {
           if (mode === 'copy') {
             await copyFile(file.path, destFilePath);
+            tracker.done++;
+            tracker.fileName = file.name;
+            emitProgress(tracker);
           } else {
             // Cut = move
             if (!isSameDir) {
               await rename(file.path, destFilePath);
+              tracker.done++;
+              tracker.fileName = file.name;
+              emitProgress(tracker);
             }
           }
         }
@@ -144,8 +233,15 @@ export function useFileClipboard(options: UseFileClipboardOptions = {}): UseFile
         console.error(`Failed to ${mode} file:`, file.name, err);
         if (!firstError) firstError = `${file.name}: ${String(err)}`;
         errorCount++;
+        // Still advance tracker on error so bar doesn't stall
+        tracker.done++;
+        tracker.fileName = file.name;
+        emitProgress(tracker);
       }
     }
+
+    // Signal progress end (force — always render the final 100% / dismiss)
+    onProgress?.({ current: totalFiles, total: totalFiles, fileName: '', active: false });
 
     // Clear clipboard after cut operation
     if (mode === 'cut') {

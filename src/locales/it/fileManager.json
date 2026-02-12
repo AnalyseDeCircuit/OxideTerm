@@ -132,6 +132,8 @@
     "propTotalSize": "Dimensione totale",
     "propChecksum": "Checksum",
     "propCalculating": "Calcolo in corso...",
-    "propCalcChecksum": "Calcola MD5 / SHA-256"
+    "propCalcChecksum": "Calcola MD5 / SHA-256",
+    "progressFile": "Copia di {{name}}...",
+    "progressPreparing": "Preparazione..."
   }
 }

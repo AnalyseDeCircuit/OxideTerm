@@ -26,6 +26,8 @@ import {
   DialogFooter
 } from '../ui/dialog';
 import { cn } from '../../lib/utils';
+import { FileOperationProgress } from './FileOperationProgress';
+import type { PasteProgress } from './hooks/useFileClipboard';
 import type { FileInfo, FilePreview, PreviewType, FileMetadata, ArchiveInfo, ChecksumResult, DirStatsResult, DriveInfo } from './types';
 
 // Preview imports
@@ -147,9 +149,11 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
   const localFiles = useLocalFiles();
   const selection = useFileSelection({ files: localFiles.displayFiles });
   const bookmarksHook = useBookmarks();
+  const [pasteProgress, setPasteProgress] = useState<PasteProgress | null>(null);
   const fileClipboard = useFileClipboard({
     onSuccess: (msg) => toastSuccess(t('fileManager.operationSuccess'), msg),
     onError: (title, msg) => toastError(title, msg),
+    onProgress: setPasteProgress,
   });
   const fileArchive = useFileArchive({
     onSuccess: (msg) => toastSuccess(t('fileManager.operationSuccess'), msg),
@@ -746,7 +750,7 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
       </div>
       
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Toolbar */}
         <div className="flex items-center gap-2 p-2 bg-theme-bg-panel border-b border-theme-border">
           <span className="text-sm font-medium text-zinc-300">{t('fileManager.title')}</span>
@@ -901,6 +905,9 @@ export const LocalFileManager: React.FC<LocalFileManagerProps> = ({ className })
             t={t}
           />
         </div>
+        
+        {/* Paste Progress */}
+        <FileOperationProgress progress={pasteProgress} />
       </div>
       
       {/* Quick Look Preview */}

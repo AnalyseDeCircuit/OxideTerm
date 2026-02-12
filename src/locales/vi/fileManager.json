@@ -132,6 +132,8 @@
     "propTotalSize": "Tổng kích thước",
     "propChecksum": "Mã kiểm tra",
     "propCalculating": "Đang tính...",
-    "propCalcChecksum": "Tính MD5 / SHA-256"
+    "propCalcChecksum": "Tính MD5 / SHA-256",
+    "progressFile": "Đang sao chép {{name}}...",
+    "progressPreparing": "Đang chuẩn bị..."
   }
 }

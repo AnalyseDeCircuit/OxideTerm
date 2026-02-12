@@ -132,6 +132,8 @@
     "propTotalSize": "전체 크기",
     "propChecksum": "체크섬",
     "propCalculating": "계산 중...",
-    "propCalcChecksum": "MD5 / SHA-256 계산"
+    "propCalcChecksum": "MD5 / SHA-256 계산",
+    "progressFile": "{{name}} 복사 중...",
+    "progressPreparing": "준비 중..."
   }
 }
