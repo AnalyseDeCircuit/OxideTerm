@@ -647,6 +647,22 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [hexLoadingMore, setHexLoadingMore] = useState(false);
   const [sftpPdfZoom, setSftpPdfZoom] = useState(1);
+  const [mediaBlobUrl, setMediaBlobUrl] = useState<string | null>(null);
+
+  // Convert base64 audio/video data to Blob URL to avoid WKWebView data-URL playback bugs
+  useEffect(() => {
+    if (!previewFile || (previewFile.type !== 'audio' && previewFile.type !== 'video')) {
+      setMediaBlobUrl(null);
+      return;
+    }
+    const binary = atob(previewFile.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: previewFile.mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    setMediaBlobUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [previewFile]);
 
   // Dialog States
   const [renameDialog, setRenameDialog] = useState<{oldName: string, isRemote: boolean} | null>(null);
@@ -1909,12 +1925,12 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
                 )}
                 
                 {/* Video Preview */}
-                {!previewLoading && previewFile?.type === 'video' && (
+                {!previewLoading && previewFile?.type === 'video' && mediaBlobUrl && (
                     <div className="flex items-center justify-center h-full p-4">
                         <video 
                             controls
                             className="max-w-full max-h-full"
-                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                            src={mediaBlobUrl}
                         >
                             {t('sftp.preview.video_unsupported')}
                         </video>
@@ -1922,14 +1938,14 @@ export const SFTPView = ({ nodeId }: { nodeId: string }) => {
                 )}
                 
                 {/* Audio Preview */}
-                {!previewLoading && previewFile?.type === 'audio' && (
+                {!previewLoading && previewFile?.type === 'audio' && mediaBlobUrl && (
                     <div className="flex flex-col items-center justify-center h-full p-4 gap-4">
                         <div className="text-6xl">🎵</div>
                         <div className="text-zinc-400">{previewFile.name}</div>
                         <audio 
                             controls
                             className="w-full max-w-md"
-                            src={`data:${previewFile.mimeType};base64,${previewFile.data}`}
+                            src={mediaBlobUrl}
                         >
                             {t('sftp.preview.audio_unsupported')}
                         </audio>

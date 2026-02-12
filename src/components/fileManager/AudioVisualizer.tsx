@@ -146,6 +146,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     const el = audioRef.current;
     if (!el) return;
     el.volume = volume;
+    // Reset playback state when src changes (e.g. re-opening same file)
+    el.load();
+    setPlaying(false);
+    setCurrent(0);
+    setDuration(0);
     const onTime = () => setCurrent(el.currentTime);
     const onMeta = () => setDuration(el.duration);
     const onEnd = () => setPlaying(false);
@@ -153,11 +158,12 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
     el.addEventListener('loadedmetadata', onMeta);
     el.addEventListener('ended', onEnd);
     return () => {
+      el.pause();
       el.removeEventListener('timeupdate', onTime);
       el.removeEventListener('loadedmetadata', onMeta);
       el.removeEventListener('ended', onEnd);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const displayTitle = meta?.title || name.replace(/\.[^.]+$/, '');
