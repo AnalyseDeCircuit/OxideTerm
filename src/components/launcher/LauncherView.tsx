@@ -9,8 +9,9 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Terminal, RefreshCw, AlertCircle, Loader2, ExternalLink, AppWindow } from 'lucide-react';
+import { Search, Terminal, RefreshCw, AlertCircle, Loader2, ExternalLink, AppWindow, Rocket, HardDrive, ShieldCheck, Power } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { appDataDir } from '@tauri-apps/api/path';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -26,30 +27,39 @@ const AppIcon: React.FC<{
 }> = React.memo(({ app, onLaunch }) => {
   const [iconError, setIconError] = useState(false);
 
-  // Construct the asset URL directly — the icon cache directory
-  // is already granted on the asset protocol scope by the backend.
-  const iconUrl = app.iconPath ? convertFileSrc(app.iconPath) : null;
+  // Memoize asset URL to avoid re-computing convertFileSrc on every render
+  const iconUrl = useMemo(
+    () => (app.iconPath ? convertFileSrc(app.iconPath) : null),
+    [app.iconPath],
+  );
+
+  const handleClick = useCallback(() => onLaunch(app.path), [onLaunch, app.path]);
+  const handleImgError = useCallback(() => setIconError(true), []);
 
   return (
     <button
       className={cn(
         "flex flex-col items-center gap-2 p-2 rounded-xl",
         "hover:bg-white/[0.06] active:scale-[0.92]",
-        "transition-all duration-150 cursor-pointer group",
+        "transition-[background-color,transform] duration-150 cursor-pointer group",
         "outline-none focus-visible:ring-2 focus-visible:ring-theme-accent/50",
       )}
-      onClick={() => onLaunch(app.path)}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '92px 100px', contain: 'layout style paint' }}
+      onClick={handleClick}
       title={app.name}
     >
       {/* Icon — larger, matching native Launchpad size */}
-      <div className="w-16 h-16 rounded-[14px] overflow-hidden flex items-center justify-center drop-shadow-md group-hover:drop-shadow-lg transition-all">
+      <div className="w-16 h-16 rounded-[14px] overflow-hidden flex items-center justify-center shadow-md shadow-black/20">
         {iconUrl && !iconError ? (
           <img
             src={iconUrl}
             alt={app.name}
+            width={64}
+            height={64}
             className="w-full h-full object-contain"
-            onError={() => setIconError(true)}
+            onError={handleImgError}
             loading="lazy"
+            decoding="async"
             draggable={false}
           />
         ) : (
@@ -105,23 +115,42 @@ const WslDistroRow: React.FC<{
 export const LauncherView: React.FC = () => {
   const { t } = useTranslation();
   const {
+    enabled,
     apps,
     wslDistros,
     searchQuery,
     loading,
     error,
+    enableLauncher,
+    disableLauncher,
     loadApps,
     launchApp,
     launchWsl,
     setSearch,
   } = useLauncherStore();
 
-  // Load on mount
+  // Resolve the cache path to show in the consent screen
+  const [cachePath, setCachePath] = useState<string | null>(null);
   useEffect(() => {
+    if (platform.isMac) {
+      appDataDir().then(dir => setCachePath(`${dir}launcher_icons/`)).catch(() => {});
+    }
+  }, []);
+
+  // Disable confirmation state
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+  const handleDisable = useCallback(async () => {
+    await disableLauncher();
+    setShowDisableConfirm(false);
+  }, [disableLauncher]);
+
+  // Load on mount (macOS requires opt-in; Windows always auto-loads)
+  useEffect(() => {
+    if (platform.isMac && !enabled) return;
     if (apps.length === 0 && wslDistros.length === 0) {
       loadApps();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = useCallback(() => {
     useLauncherStore.setState({ apps: [], wslDistros: [], iconDir: null, error: null });
@@ -149,6 +178,61 @@ export const LauncherView: React.FC = () => {
   // ── macOS Launchpad View ────────────────────────────────────────────────
 
   if (platform.isMac) {
+    // ── Consent screen: shown before first scan ───────────────────────────
+    if (!enabled) {
+      return (
+        <div className="flex flex-col h-full bg-theme-bg">
+          <div className="flex-1 flex items-center justify-center px-8">
+            <div className="max-w-sm w-full space-y-6 text-center">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-theme-accent/10 flex items-center justify-center">
+                <Rocket className="h-7 w-7 text-theme-accent" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-base font-semibold text-theme-text">
+                  {t('launcher.consentTitle')}
+                </h2>
+                <p className="text-sm text-theme-text-secondary leading-relaxed">
+                  {t('launcher.consentDescription')}
+                </p>
+              </div>
+              <div className="space-y-2 text-left bg-white/[0.03] rounded-lg p-3 border border-white/[0.06]">
+                <div className="flex items-start gap-2.5">
+                  <Search className="h-4 w-4 text-theme-text-muted mt-0.5 shrink-0" />
+                  <span className="text-xs text-theme-text-muted leading-relaxed">
+                    {t('launcher.consentScan')}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <HardDrive className="h-4 w-4 text-theme-text-muted mt-0.5 shrink-0" />
+                  <span className="text-xs text-theme-text-muted leading-relaxed">
+                    {t('launcher.consentCache')}
+                    {cachePath && (
+                      <span className="block mt-1 font-mono text-[10px] text-theme-text-muted/60 break-all">
+                        {cachePath}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-theme-text-muted mt-0.5 shrink-0" />
+                  <span className="text-xs text-theme-text-muted leading-relaxed">
+                    {t('launcher.consentPrivacy')}
+                  </span>
+                </div>
+              </div>
+              <Button
+                onClick={enableLauncher}
+                className="w-full"
+                size="sm"
+              >
+                {t('launcher.consentEnable')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col h-full bg-theme-bg">
         {/* Search bar — centered at top, like native Launchpad */}
@@ -162,7 +246,7 @@ export const LauncherView: React.FC = () => {
               className="pl-9 h-8 text-sm bg-white/[0.06] border-white/[0.08] rounded-lg placeholder:text-theme-text-muted/40 focus:bg-white/[0.08]"
               autoFocus
             />
-            {/* App count + refresh inline */}
+            {/* App count + refresh + disable inline */}
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               <span className="text-[10px] font-mono text-theme-text-muted/50 tabular-nums">
                 {filteredApps.length !== apps.length ? `${filteredApps.length}/` : ''}{apps.length}
@@ -177,12 +261,49 @@ export const LauncherView: React.FC = () => {
               >
                 <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 opacity-50 hover:opacity-100 hover:text-red-400"
+                onClick={() => setShowDisableConfirm(true)}
+                title={t('launcher.disable')}
+              >
+                <Power className="h-3 w-3" />
+              </Button>
             </div>
           </div>
         </div>
 
+        {/* Disable confirmation banner */}
+        {showDisableConfirm && (
+          <div className="mx-6 mb-3 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-3">
+            <span className="text-xs text-red-400 flex-1">
+              {t('launcher.disableConfirm')}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-xs text-theme-text-muted hover:text-theme-text"
+              onClick={() => setShowDisableConfirm(false)}
+            >
+              {t('launcher.disableCancel')}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-6 text-xs"
+              onClick={handleDisable}
+            >
+              {t('launcher.disableAction')}
+            </Button>
+          </div>
+        )}
+
         {/* App grid */}
-        <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-zinc-700/50 scrollbar-track-transparent">
+        <div
+          className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-zinc-700/50 scrollbar-track-transparent"
+          style={{ willChange: 'scroll-position', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+        >
           {loading && apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <Loader2 className="h-8 w-8 text-theme-accent/60 animate-spin" />
@@ -209,7 +330,10 @@ export const LauncherView: React.FC = () => {
             </div>
           ) : (
             <div className="px-6 pb-6 pt-1">
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-2 gap-y-1 justify-items-center">
+              <div
+                className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-2 gap-y-1 justify-items-center"
+                style={{ contain: 'layout style' }}
+              >
                 {filteredApps.map((app) => (
                   <AppIcon key={app.path} app={app} onLaunch={launchApp} />
                 ))}

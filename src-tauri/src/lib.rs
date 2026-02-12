@@ -635,6 +635,7 @@ pub fn run() {
         launcher::launcher_list_apps,
         launcher::launcher_launch_app,
         launcher::launcher_wsl_launch,
+        launcher::launcher_clear_cache,
     ]);
     #[cfg(not(feature = "local-terminal"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -861,6 +862,7 @@ pub fn run() {
         launcher::launcher_list_apps,
         launcher::launcher_launch_app,
         launcher::launcher_wsl_launch,
+        launcher::launcher_clear_cache,
     ]);
 
     builder

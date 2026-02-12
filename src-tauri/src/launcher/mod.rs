@@ -109,3 +109,33 @@ pub async fn launcher_wsl_launch(distro: String) -> Result<(), String> {
         Err("WSL is only available on Windows".into())
     }
 }
+
+/// Clear the icon cache directory.
+/// Called when the user disables the launcher.
+///
+/// NOTE: We intentionally do NOT call `forbid_directory()` here.
+/// Tauri scope semantics give forbidden paths permanent precedence over later
+/// `allow_directory()` calls in the same process, so a forbid would break
+/// re-enabling the launcher until the app is restarted.
+/// Deleting the files is sufficient — the directory grant becomes a no-op
+/// when there are no files to serve.
+#[tauri::command]
+pub async fn launcher_clear_cache(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let icon_cache_dir = macos::get_icon_cache_dir(&app)
+            .map_err(|e| format!("Failed to get icon cache dir: {}", e))?;
+
+        // Delete cached icons only — do NOT forbid the directory scope
+        if icon_cache_dir.exists() {
+            std::fs::remove_dir_all(&icon_cache_dir)
+                .map_err(|e| format!("Failed to clear icon cache: {}", e))?;
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}

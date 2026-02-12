@@ -12,6 +12,16 @@
     "searchWsl": "Buscar distribuciones WSL…",
     "loadingWsl": "Cargando distribuciones WSL…",
     "noWslResults": "No se encontraron distribuciones WSL coincidentes.",
-    "noWsl": "No hay distribuciones WSL disponibles. Asegúrese de que WSL esté instalado."
+    "noWsl": "No hay distribuciones WSL disponibles. Asegúrese de que WSL esté instalado.",
+    "consentTitle": "Activar lanzador de apps",
+    "consentDescription": "El lanzador escanea las aplicaciones instaladas en tu Mac y almacena en caché sus iconos localmente para una navegación rápida.",
+    "consentScan": "Escanea /Applications y otros directorios en busca de bundles .app instalados",
+    "consentCache": "Almacena en caché los iconos de apps como archivos PNG en el directorio:",
+    "consentPrivacy": "Todos los datos se mantienen locales — nada se envía a ningún servidor",
+    "consentEnable": "Activar lanzador",
+    "disable": "Desactivar lanzador",
+    "disableConfirm": "Se eliminarán todos los iconos en caché y se desactivará el lanzador. Puede reactivarlo en cualquier momento.",
+    "disableCancel": "Cancelar",
+    "disableAction": "Desactivar"
   }
 }

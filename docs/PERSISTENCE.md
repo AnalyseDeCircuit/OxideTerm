@@ -85,7 +85,7 @@
   - 哈希算法：`std::collections::hash_map::DefaultHasher`
 - **缓存策略**
   - **提取来源**：通过 Swift `NSWorkspace.shared.icon(forFile:)` 批量提取（支持 `.icns` 和 Asset Catalog）
-  - **尺寸规格**：128×128 PNG
+  - **尺寸规格**：64×64 PNG（匹配前端 64px 显示尺寸，解码后每图标仅 ~16KB bitmap）
   - **缓存时效**：已存在且修改时间 < 7 天的图标会复用，无需重新提取
   - **懒加载**：仅在首次打开 Launcher 时扫描 `/Applications` 并提取缺失图标
 - **Asset Protocol 授权**

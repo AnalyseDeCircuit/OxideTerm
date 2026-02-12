@@ -211,7 +211,7 @@ fn batch_extract_icons(entries: &mut [AppEntry], icon_cache_dir: &Path) {
     let mut swift_lines = Vec::new();
     swift_lines.push("import AppKit".to_string());
     swift_lines.push("let ws = NSWorkspace.shared".to_string());
-    swift_lines.push("let size = NSSize(width: 128, height: 128)".to_string());
+    swift_lines.push("let size = NSSize(width: 64, height: 64)".to_string());
 
     for (_idx, app_path, png_path) in &needed {
         let app_escaped = app_path.replace('\\', "\\\\").replace('"', "\\\"");
@@ -223,7 +223,7 @@ fn batch_extract_icons(entries: &mut [AppEntry], icon_cache_dir: &Path) {
             r#"do {{
   let img = ws.icon(forFile: "{app}")
   img.size = size
-  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 128, pixelsHigh: 128, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
   img.draw(in: NSRect(origin: .zero, size: size))
@@ -261,7 +261,9 @@ fn batch_extract_icons(entries: &mut [AppEntry], icon_cache_dir: &Path) {
 }
 
 /// Get the icon cache directory under Tauri's app data dir.
-fn get_icon_cache_dir(
+///
+/// Public so that `mod.rs` can also reference it (e.g. for cache cleanup).
+pub fn get_icon_cache_dir(
     app: &tauri::AppHandle,
 ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let data_dir = app
