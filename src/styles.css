@@ -483,6 +483,73 @@
   --theme-accent-hover: #E879F9;
 }
 
+/* Fairy Floss Theme */
+[data-theme="fairy-floss"] {
+  --theme-bg: #5a5475;
+  /* Purple Haze */
+  --theme-bg-panel: #463c57;
+  --theme-bg-hover: #605770;
+  --theme-border: #605770;
+  --theme-text: #f8f8f2;
+  --theme-text-muted: #e6c000;
+  /* Yellow for contrast */
+  --theme-accent: #ff857f;
+  /* Salmon/Pink */
+  --theme-accent-hover: #ffb8d9;
+  /* Hot Pink */
+}
+
+/* Sakura Theme */
+[data-theme="sakura"] {
+  --theme-bg: #2c242a;
+  /* Dark Cherry */
+  --theme-bg-panel: #3f3238;
+  --theme-bg-hover: #5c434f;
+  --theme-border: #5c434f;
+  --theme-text: #e6d2d9;
+  --theme-text-muted: #958189;
+  --theme-accent: #ff79c6;
+  /* Pink */
+  --theme-accent-hover: #ff92df;
+  /* Bright Pink */
+}
+
+/* Hot Pink Theme - Light/Pastel Variant (Softer) */
+[data-theme="hot-pink"] {
+  --theme-bg: #efdfe5;
+  /* Slightly darker/warmer pink */
+  --theme-bg-panel: #fcebf1;
+  /* Lighter panel as requested */
+  --theme-bg-hover: #ebcbd6;
+  /* Soft hover */
+  --theme-border: #dcbcc6;
+  /* Subtle border */
+  --theme-text: #8a3a5b;
+  /* Softer dark pink for text (readable but not harsh) */
+  --theme-text-muted: #b0708a;
+  --theme-accent: #e60073;
+  /* Slightly deeper pink accent */
+  --theme-accent-hover: #c20061;
+}
+
+/* Spring Green Theme - Light/Fresh Variant (Refined) */
+[data-theme="spring-green"] {
+  --theme-bg: #e2f5e9;
+  /* Softer, slightly darker mint green */
+  --theme-bg-panel: #d1efdb;
+  /* Darker panel */
+  --theme-bg-hover: #bfe9cc;
+  /* Soft hover */
+  --theme-border: #a3d9b5;
+  /* Muted border */
+  --theme-text: #1a4d33;
+  /* Dark Green Text */
+  --theme-text-muted: #3b7a5a;
+  --theme-accent: #16a34a;
+  /* Green 600 */
+  --theme-accent-hover: #15803d;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

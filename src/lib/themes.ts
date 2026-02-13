@@ -574,4 +574,92 @@ export const themes: Record<string, ITheme> = {
     brightCyan: '#22D3EE',
     brightWhite: '#FFFFFF',
   },
+  'fairy-floss': {
+    background: '#5a5475', // Purple haze
+    foreground: '#f8f8f2',
+    cursor: '#ffb86c',
+    selectionBackground: '#8076aa',
+    black: '#463c57',
+    red: '#ff857f',
+    green: '#8cfccf', // Mint
+    yellow: '#e6c000',
+    blue: '#c5a3ff',
+    magenta: '#ff857f', // Pinkish
+    cyan: '#c2ffdf',
+    white: '#f8f8f0',
+    brightBlack: '#605770',
+    brightRed: '#ffb8d9', // Hot Pink
+    brightGreen: '#8cfccf',
+    brightYellow: '#e6c000',
+    brightBlue: '#c5a3ff',
+    brightMagenta: '#ffb8d9',
+    brightCyan: '#c2ffdf',
+    brightWhite: '#f8f8f0',
+  },
+  sakura: {
+    background: '#2c242a', // Dark warm grey/pink
+    foreground: '#e6d2d9',
+    cursor: '#ff79c6',     // Bright pink
+    selectionBackground: '#5c434f',
+    black: '#3f3238',
+    red: '#f55d7a', // Sakura Red
+    green: '#9ece6a',
+    yellow: '#f9f871',
+    blue: '#82aaff',
+    magenta: '#ff79c6', // Pink
+    cyan: '#8be9fd',
+    white: '#f8f8f2',
+    brightBlack: '#5c434f',
+    brightRed: '#ff5555',
+    brightGreen: '#50fa7b',
+    brightYellow: '#f1fa8c',
+    brightBlue: '#6272a4',
+    brightMagenta: '#ff92df',
+    brightCyan: '#8be9fd',
+    brightWhite: '#ffffff',
+  },
+  'hot-pink': {
+    background: '#efdfe5', // Softer/Darker pink for comfort
+    foreground: '#8a3a5b', // Readable maroon/pink
+    cursor: '#e60073',     // Hot pink
+    selectionBackground: 'rgba(230, 0, 115, 0.2)',
+    black: '#efdfe5',
+    red: '#d00055',
+    green: '#00aa55',
+    yellow: '#bfa000',
+    blue: '#0066cc',
+    magenta: '#cc00aa',
+    cyan: '#0099aa',
+    white: '#8a3a5b',
+    brightBlack: '#a05070',
+    brightRed: '#ff3388',
+    brightGreen: '#33cc88',
+    brightYellow: '#dcb000',
+    brightBlue: '#3399ff',
+    brightMagenta: '#ff66cc',
+    brightCyan: '#33ccdd',
+    brightWhite: '#401020',
+  },
+  'spring-green': {
+    background: '#e2f5e9', // Warmer/Softer Mint
+    foreground: '#1a4d33', // Softer Dark Green
+    cursor: '#16a34a',     // Vivid Green
+    selectionBackground: 'rgba(22, 163, 74, 0.2)',
+    black: '#e2f5e9',
+    red: '#dc2626',
+    green: '#15803d',
+    yellow: '#b45309',
+    blue: '#2563eb',
+    magenta: '#7c3aed',
+    cyan: '#0891b2',
+    white: '#1a4d33',
+    brightBlack: '#a3d9b5',
+    brightRed: '#ef4444',
+    brightGreen: '#22c55e',
+    brightYellow: '#f59e0b',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#8b5cf6',
+    brightCyan: '#06b6d4',
+    brightWhite: '#052e16',
+  },
 };
