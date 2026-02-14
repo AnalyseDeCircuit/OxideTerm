@@ -103,6 +103,40 @@
       "focus_previous": "Focus Previous Pane",
       "cannot_close_last": "Cannot close the last pane"
     },
-    "mouse_mode_hint": "⇧ Shift + drag to select"
+    "mouse_mode_hint": "⇧ Shift + drag to select",
+    "recording": {
+      "start": "Record Session",
+      "stop": "Stop Recording",
+      "pause": "Pause Recording",
+      "resume": "Resume Recording",
+      "discard": "Discard Recording",
+      "save": "Save Recording",
+      "recording": "REC",
+      "paused": "PAUSED",
+      "elapsed": "{{time}}",
+      "events": "{{count}} events",
+      "confirm_stop_title": "Stop Recording?",
+      "confirm_stop_message": "Save the recording as an asciicast (.cast) file?",
+      "confirm_discard_title": "Discard Recording?",
+      "confirm_discard_message": "This will discard the current recording. This cannot be undone.",
+      "saved": "Recording saved",
+      "open_cast": "Open Cast File",
+      "security_warning": "Recording may contain sensitive data (passwords, tokens). Review before sharing.",
+      "player": {
+        "title": "Cast Player",
+        "play": "Play",
+        "pause": "Pause",
+        "speed": "Speed",
+        "seek": "Seek",
+        "duration": "Duration",
+        "search": "Search in recording...",
+        "no_results": "No matches found",
+        "matches": "{{count}} matches",
+        "jump_to": "Jump to match",
+        "loading": "Building snapshots...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "Close Player"
+      }
+    }
   }
 }

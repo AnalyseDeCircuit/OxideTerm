@@ -17,6 +17,8 @@ import { initializePluginSystem } from './lib/plugin/pluginLoader';
 import { setupConnectionBridge, setupNodeStateBridge, pluginEventBridge } from './lib/plugin/pluginEventBridge';
 import { useToastStore } from './hooks/useToast';
 import { PluginConfirmDialog } from './components/plugin/PluginConfirmDialog';
+import { CastPlayer } from './components/terminal/CastPlayer';
+import { useRecordingStore } from './store/recordingStore';
 
 function App() {
   // Initialize global event listeners
@@ -24,6 +26,10 @@ function App() {
   useNetworkStatus();
   useConnectionEvents();
   
+  // Recording player modal state
+  const playerModal = useRecordingStore((s) => s.playerModal);
+  const closePlayer = useRecordingStore((s) => s.closePlayer);
+
   // Shell launcher state
   const [shellLauncherOpen, setShellLauncherOpen] = useState(false);
   const { createTerminal, loadShells, shellsLoaded } = useLocalTerminalStore();
@@ -219,6 +225,13 @@ function App() {
         open={shellLauncherOpen} 
         onOpenChange={setShellLauncherOpen} 
       />
+      {playerModal.open && playerModal.content && (
+        <CastPlayer
+          content={playerModal.content}
+          fileName={playerModal.fileName}
+          onClose={closePlayer}
+        />
+      )}
     </ErrorBoundary>
   );
 }

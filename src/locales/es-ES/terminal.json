@@ -103,6 +103,40 @@
       "focus_previous": "Panel anterior",
       "cannot_close_last": "No se puede cerrar el último panel"
     },
-    "mouse_mode_hint": "⇧ Shift + arrastrar para seleccionar"
+    "mouse_mode_hint": "⇧ Shift + Arrastrar para seleccionar",
+    "recording": {
+      "start": "Grabar sesión",
+      "stop": "Detener grabación",
+      "pause": "Pausar grabación",
+      "resume": "Reanudar grabación",
+      "discard": "Descartar grabación",
+      "save": "Guardar grabación",
+      "recording": "GRAB",
+      "paused": "PAUSADO",
+      "elapsed": "{{time}}",
+      "events": "{{count}} eventos",
+      "confirm_stop_title": "¿Detener grabación?",
+      "confirm_stop_message": "¿Guardar la grabación como archivo asciicast (.cast)?",
+      "confirm_discard_title": "¿Descartar grabación?",
+      "confirm_discard_message": "Esto descartará la grabación actual. Esta acción no se puede deshacer.",
+      "saved": "Grabación guardada",
+      "open_cast": "Abrir archivo Cast",
+      "security_warning": "Las grabaciones pueden contener datos sensibles (contraseñas, tokens). Verifique antes de compartir.",
+      "player": {
+        "title": "Reproductor Cast",
+        "play": "Reproducir",
+        "pause": "Pausar",
+        "speed": "Velocidad",
+        "seek": "Buscar",
+        "duration": "Duración",
+        "search": "Buscar en grabación...",
+        "no_results": "No se encontraron resultados",
+        "matches": "{{count}} coincidencias",
+        "jump_to": "Ir a coincidencia",
+        "loading": "Construyendo instantáneas...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "Cerrar reproductor"
+      }
+    }
   }
 }

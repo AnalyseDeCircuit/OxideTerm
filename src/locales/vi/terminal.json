@@ -103,6 +103,40 @@
       "focus_previous": "Khung trước",
       "cannot_close_last": "Không thể đóng khung cuối cùng"
     },
-    "mouse_mode_hint": "⇧ Shift + kéo để chọn"
+    "mouse_mode_hint": "⇧ Shift + Kéo để chọn",
+    "recording": {
+      "start": "Ghi phiên",
+      "stop": "Dừng ghi",
+      "pause": "Tạm dừng ghi",
+      "resume": "Tiếp tục ghi",
+      "discard": "Hủy bản ghi",
+      "save": "Lưu bản ghi",
+      "recording": "GHI",
+      "paused": "TẠM DỬNG",
+      "elapsed": "{{time}}",
+      "events": "{{count}} sự kiện",
+      "confirm_stop_title": "Dừng ghi?",
+      "confirm_stop_message": "Lưu bản ghi thành tệp asciicast (.cast)?",
+      "confirm_discard_title": "Hủy bản ghi?",
+      "confirm_discard_message": "Hành động này sẽ hủy bản ghi hiện tại. Không thể hoàn tác.",
+      "saved": "Bản ghi đã lưu",
+      "open_cast": "Mở tệp Cast",
+      "security_warning": "Bản ghi có thể chứa dữ liệu nhạy cảm (mật khẩu, token). Kiểm tra trước khi chia sẻ.",
+      "player": {
+        "title": "Trình phát Cast",
+        "play": "Phát",
+        "pause": "Tạm dừng",
+        "speed": "Tốc độ",
+        "seek": "Tìm kiếm",
+        "duration": "Thời lượng",
+        "search": "Tìm trong bản ghi...",
+        "no_results": "Không có kết quả",
+        "matches": "{{count}} kết quả",
+        "jump_to": "Nhảy đến kết quả",
+        "loading": "Xây dựng snapshot...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "Đóng trình phát"
+      }
+    }
   }
 }

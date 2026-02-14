@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.11.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -262,7 +262,7 @@ Malgré des sources d’état différentes, la logique de rendu est unifiée via
 
 | Catégorie | Fonctionnalités |
 |---|---|
-| **Terminal** | PTY local, SSH distant, panneaux divisés (H/V), contexte IA cross-pane, rendu WebGL, galerie d'images d'arrière-plan |
+| **Terminal** | PTY local, SSH distant, panneaux divisés (H/V), enregistrement/lecture de session (asciicast v2), contexte IA cross-pane, rendu WebGL, galerie d'images d'arrière-plan |
 | **SSH** | Pool de connexions, multiplexage, ProxyJump (∞ sauts), graphe topologique, pipeline auto-reconnexion |
 | **Auth** | Mot de passe, clé SSH (RSA/Ed25519/ECDSA), SSH Agent, certificat, Keyboard-Interactive (2FA), Known Hosts |
 | **Fichiers** | Navigateur SFTP double panneau, glisser-déposer, aperçu (images/vidéo/audio/PDF/code/hex), file de transfert |

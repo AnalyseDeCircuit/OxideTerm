@@ -98,6 +98,18 @@
       ]
     },
     {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$HOME" },
+        { "path": "$HOME/*" },
+        { "path": "$HOME/**/*" },
+        { "path": "/*" },
+        { "path": "/**/*" },
+        { "path": "[A-Z]:/*" },
+        { "path": "[A-Z]:/**/*" }
+      ]
+    },
+    {
       "identifier": "fs:allow-remove",
       "allow": [
         { "path": "$HOME" },

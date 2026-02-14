@@ -289,6 +289,8 @@
       "default_key_desc": "Utiliser la clé SSH par défaut (ex. ~/.ssh/id_rsa, ~/.ssh/id_ed25519)",
       "agent_desc": "S'authentifier en utilisant l'agent SSH système",
       "agent_hint": "Assurez-vous que l'agent SSH est en cours d'exécution et que les clés requises sont chargées",
+      "agent_detected": "Agent SSH détecté",
+      "agent_not_detected": "Agent SSH non détecté",
       "private_key": "Clé privée",
       "certificate": "Certificat",
       "certificate_placeholder": "~/.ssh/id_ed25519-cert.pub",

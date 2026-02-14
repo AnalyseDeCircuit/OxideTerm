@@ -103,6 +103,40 @@
       "focus_previous": "聚焦上一面板",
       "cannot_close_last": "无法关闭最后一个面板"
     },
-    "mouse_mode_hint": "⇧ Shift + 拖拽以选择文本"
+    "mouse_mode_hint": "⇧ Shift + 拖拽以选择文本",
+    "recording": {
+      "start": "录制会话",
+      "stop": "停止录制",
+      "pause": "暂停录制",
+      "resume": "恢复录制",
+      "discard": "丢弃录制",
+      "save": "保存录制",
+      "recording": "录制中",
+      "paused": "已暂停",
+      "elapsed": "{{time}}",
+      "events": "{{count}} 个事件",
+      "confirm_stop_title": "停止录制？",
+      "confirm_stop_message": "是否将录制保存为 asciicast (.cast) 文件？",
+      "confirm_discard_title": "丢弃录制？",
+      "confirm_discard_message": "将丢弃当前录制，此操作不可撤销。",
+      "saved": "录制已保存",
+      "open_cast": "打开 Cast 文件",
+      "security_warning": "录制内容可能包含敏感信息（密码、令牌）。分享前请仔细检查。",
+      "player": {
+        "title": "Cast 播放器",
+        "play": "播放",
+        "pause": "暂停",
+        "speed": "速度",
+        "seek": "跳转",
+        "duration": "时长",
+        "search": "在录制中搜索...",
+        "no_results": "未找到匹配",
+        "matches": "{{count}} 个匹配",
+        "jump_to": "跳转到匹配",
+        "loading": "正在构建快照...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "关闭播放器"
+      }
+    }
   }
 }

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.10.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.11.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -262,7 +262,7 @@ CodeMirror 6 编辑器通过 SFTP 操作远程文件——服务器端无需任�
 
 | 分类 | 功能 |
 |---|---|
-| **终端** | 本地 PTY、SSH 远程、分屏 (水平/垂直)、跨分屏 AI 上下文、WebGL 渲染、背景图片画廊 |
+| **终端** | 本地 PTY、SSH 远程、分屏 (水平/垂直)、会话录制/回放 (asciicast v2)、跨分屏 AI 上下文、WebGL 渲染、背景图片画廊 |
 | **SSH** | 连接池、多路复用、ProxyJump (∞ 跳)、拓扑图、自动重连管道 |
 | **认证** | 密码、SSH 密钥 (RSA/Ed25519/ECDSA)、SSH Agent、证书、Keyboard-Interactive (2FA)、Known Hosts |
 | **文件** | 双面板 SFTP 浏览器、拖放传输、预览 (图片/视频/音频/PDF/代码/Hex)、传输队列 |

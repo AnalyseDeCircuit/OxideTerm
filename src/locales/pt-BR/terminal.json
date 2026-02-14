@@ -103,6 +103,40 @@
       "focus_previous": "Painel anterior",
       "cannot_close_last": "Não é possível fechar o último painel"
     },
-    "mouse_mode_hint": "⇧ Shift + arrastar para selecionar"
+    "mouse_mode_hint": "⇧ Shift + Arraste para selecionar",
+    "recording": {
+      "start": "Gravar sessão",
+      "stop": "Parar gravação",
+      "pause": "Pausar gravação",
+      "resume": "Retomar gravação",
+      "discard": "Descartar gravação",
+      "save": "Salvar gravação",
+      "recording": "GRAV",
+      "paused": "PAUSADO",
+      "elapsed": "{{time}}",
+      "events": "{{count}} eventos",
+      "confirm_stop_title": "Parar gravação?",
+      "confirm_stop_message": "Salvar a gravação como arquivo asciicast (.cast)?",
+      "confirm_discard_title": "Descartar gravação?",
+      "confirm_discard_message": "Isto descartará a gravação atual. Esta ação não pode ser desfeita.",
+      "saved": "Gravação salva",
+      "open_cast": "Abrir arquivo Cast",
+      "security_warning": "Gravações podem conter dados sensíveis (senhas, tokens). Verifique antes de compartilhar.",
+      "player": {
+        "title": "Player Cast",
+        "play": "Reproduzir",
+        "pause": "Pausar",
+        "speed": "Velocidade",
+        "seek": "Navegar",
+        "duration": "Duração",
+        "search": "Buscar na gravação...",
+        "no_results": "Nenhum resultado encontrado",
+        "matches": "{{count}} correspondências",
+        "jump_to": "Ir para correspondência",
+        "loading": "Construindo snapshots...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "Fechar player"
+      }
+    }
   }
 }

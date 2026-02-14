@@ -103,6 +103,40 @@
       "focus_previous": "Vorheriger Bereich",
       "cannot_close_last": "Letzter Bereich kann nicht geschlossen werden"
     },
-    "mouse_mode_hint": "⇧ Shift + Ziehen zum Auswählen"
+    "mouse_mode_hint": "⇧ Shift + Ziehen zum Auswählen",
+    "recording": {
+      "start": "Sitzung aufnehmen",
+      "stop": "Aufnahme stoppen",
+      "pause": "Aufnahme pausieren",
+      "resume": "Aufnahme fortsetzen",
+      "discard": "Aufnahme verwerfen",
+      "save": "Aufnahme speichern",
+      "recording": "REC",
+      "paused": "PAUSIERT",
+      "elapsed": "{{time}}",
+      "events": "{{count}} Ereignisse",
+      "confirm_stop_title": "Aufnahme stoppen?",
+      "confirm_stop_message": "Aufnahme als Asciicast-Datei (.cast) speichern?",
+      "confirm_discard_title": "Aufnahme verwerfen?",
+      "confirm_discard_message": "Dies verwirft die aktuelle Aufnahme. Dieser Vorgang kann nicht rückgängig gemacht werden.",
+      "saved": "Aufnahme gespeichert",
+      "open_cast": "Cast-Datei öffnen",
+      "security_warning": "Aufnahme kann sensible Daten enthalten (Passwörter, Token). Vor dem Teilen überprüfen.",
+      "player": {
+        "title": "Cast-Player",
+        "play": "Abspielen",
+        "pause": "Pause",
+        "speed": "Geschwindigkeit",
+        "seek": "Spulen",
+        "duration": "Dauer",
+        "search": "In Aufnahme suchen...",
+        "no_results": "Keine Treffer gefunden",
+        "matches": "{{count}} Treffer",
+        "jump_to": "Zu Treffer springen",
+        "loading": "Erstelle Snapshots...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "Player schließen"
+      }
+    }
   }
 }

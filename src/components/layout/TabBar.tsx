@@ -10,6 +10,7 @@ import { Tab, PaneNode } from '../../types';
 import { topologyResolver } from '../../lib/topologyResolver';
 import { resolvePluginIcon } from '../../lib/plugin/pluginIconResolver';
 import { ReconnectTimeline } from '../connections/ReconnectTimeline';
+import { TabBarTerminalActions } from './TabBarTerminalActions';
 
 /** Count leaf panes in a pane tree */
 function countPanes(node: PaneNode): number {
@@ -374,6 +375,15 @@ export const TabBar = () => {
           })}
         </div>
       </div>
+
+      {/* Right-fixed area: terminal-specific actions (recording, cast) */}
+      {(() => {
+        const activeTab = tabs.find(tab => tab.id === activeTabId);
+        if (activeTab && (activeTab.type === 'terminal' || activeTab.type === 'local_terminal')) {
+          return <TabBarTerminalActions activeTab={activeTab} />;
+        }
+        return null;
+      })()}
     </div>
   );
 };

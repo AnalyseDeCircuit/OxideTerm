@@ -103,6 +103,40 @@
       "focus_previous": "前のペインにフォーカス",
       "cannot_close_last": "最後のペインは閉じられません"
     },
-    "mouse_mode_hint": "⇧ Shift + ドラッグで選択"
+    "mouse_mode_hint": "⇧ Shift + ドラッグで選択",
+    "recording": {
+      "start": "セッション録画",
+      "stop": "録画停止",
+      "pause": "録画一時停止",
+      "resume": "録画再開",
+      "discard": "録画破棄",
+      "save": "録画保存",
+      "recording": "REC",
+      "paused": "一時停止中",
+      "elapsed": "{{time}}",
+      "events": "{{count}} イベント",
+      "confirm_stop_title": "録画を停止しますか？",
+      "confirm_stop_message": "録画をasciicast (.cast)ファイルとして保存しますか？",
+      "confirm_discard_title": "録画を破棄しますか？",
+      "confirm_discard_message": "現在の録画を破棄します。この操作は元に戻せません。",
+      "saved": "録画を保存しました",
+      "open_cast": "Castファイルを開く",
+      "security_warning": "録画には機密データ（パスワード、トークン）が含まれる可能性があります。共有する前に確認してください。",
+      "player": {
+        "title": "Castプレーヤー",
+        "play": "再生",
+        "pause": "一時停止",
+        "speed": "速度",
+        "seek": "シーク",
+        "duration": "再生時間",
+        "search": "録画を検索...",
+        "no_results": "一致が見つかりません",
+        "matches": "{{count}} 件の一致",
+        "jump_to": "一致にジャンプ",
+        "loading": "スナップショット構築中...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "プレーヤーを閉じる"
+      }
+    }
   }
 }

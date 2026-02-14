@@ -103,6 +103,40 @@
       "focus_previous": "이전 창으로 포커스",
       "cannot_close_last": "마지막 창은 닫을 수 없음"
     },
-    "mouse_mode_hint": "⇧ Shift + 드래그로 선택"
+    "mouse_mode_hint": "⇧ Shift + 드래그하여 선택",
+    "recording": {
+      "start": "세션 녹화",
+      "stop": "녹화 중지",
+      "pause": "녹화 일시 정지",
+      "resume": "녹화 재개",
+      "discard": "녹화 삭제",
+      "save": "녹화 저장",
+      "recording": "녹화 중",
+      "paused": "일시 정지됨",
+      "elapsed": "{{time}}",
+      "events": "{{count}} 이벤트",
+      "confirm_stop_title": "녹화를 중지하시겠습니까?",
+      "confirm_stop_message": "녹화를 asciicast (.cast) 파일로 저장하시겠습니까?",
+      "confirm_discard_title": "녹화를 삭제하시겠습니까?",
+      "confirm_discard_message": "현재 녹화를 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+      "saved": "녹화가 저장되었습니다",
+      "open_cast": "Cast 파일 열기",
+      "security_warning": "녹화에는 민감한 데이터(비밀번호, 토큰)가 포함될 수 있습니다. 공유하기 전에 확인하세요.",
+      "player": {
+        "title": "Cast 플레이어",
+        "play": "재생",
+        "pause": "일시 정지",
+        "speed": "속도",
+        "seek": "탐색",
+        "duration": "재생 시간",
+        "search": "녹화에서 검색...",
+        "no_results": "결과 없음",
+        "matches": "{{count}}개 일치",
+        "jump_to": "일치항목으로 이동",
+        "loading": "스냅샷 구축 중...",
+        "dimensions": "{{cols}}×{{rows}}",
+        "close": "플레이어 닫기"
+      }
+    }
   }
 }

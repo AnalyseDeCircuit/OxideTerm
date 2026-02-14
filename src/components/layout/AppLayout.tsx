@@ -7,7 +7,6 @@ import { useAppStore, getSession } from '../../store/appStore';
 import { TerminalView } from '../terminal/TerminalView';
 import { LocalTerminalView } from '../terminal/LocalTerminalView';
 import { SplitTerminalContainer } from '../terminal/SplitTerminalContainer';
-import { SplitPaneToolbar } from '../terminal/SplitPaneToolbar';
 import { Button } from '../ui/button';
 import { NewConnectionModal } from '../modals/NewConnectionModal';
 import { ConnectionPoolMonitor } from '../connections/ConnectionPoolMonitor';
@@ -130,9 +129,6 @@ export const AppLayout = () => {
                   {/* Terminal tabs: Support split panes via rootPane, fallback to single terminal */}
                   {(tab.type === 'terminal' || tab.type === 'local_terminal') && (
                     <div className="relative h-full w-full group/terminal">
-                      {/* Split pane toolbar - floating in top-right */}
-                      <SplitPaneToolbar tabId={tab.id} />
-
                       {tab.rootPane ? (
                         // Split pane mode - use recursive container
                         <SplitTerminalContainer

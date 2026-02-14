@@ -155,6 +155,7 @@ export function useTerminalViewShortcuts(
     onCloseSearch?: () => void;
     onOpenAiPanel?: () => void;
     onCloseAiPanel?: () => void;
+    onToggleRecording?: () => void;
     onFocusTerminal?: () => void;
     searchOpen: boolean;
     aiPanelOpen: boolean;
@@ -195,6 +196,20 @@ export function useTerminalViewShortcuts(
         e.preventDefault();
         e.stopPropagation();
         h.onOpenAiPanel();
+        return;
+      }
+      
+      // === Recording toggle shortcut ===
+      // Windows: Ctrl+Shift+R
+      // Mac/Linux: Cmd+Shift+R
+      const isRecordingShortcut = platform.isWindows
+        ? (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r')
+        : (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'r');
+      
+      if (isRecordingShortcut && h.onToggleRecording) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onToggleRecording();
         return;
       }
       

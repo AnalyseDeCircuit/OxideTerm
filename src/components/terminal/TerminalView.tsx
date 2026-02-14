@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { triggerGitRefresh } from '../../store/ideStore';
 import { api } from '../../lib/api';
 import { themes } from '../../lib/themes';
+import { getFontFamily } from '../../lib/fontFamily';
 import { platform } from '../../lib/platform';
 import { useTerminalViewShortcuts } from '../../hooks/useTerminalKeyboard';
 import { SearchBar, DeepSearchState } from './SearchBar';
@@ -35,6 +36,8 @@ import { runInputPipeline, runOutputPipeline } from '../../lib/plugin/pluginTerm
 import { useSessionTreeStore } from '../../store/sessionTreeStore';
 import type { BackgroundFit } from '../../store/settingsStore';
 import { installTerminalClipboardSupport } from '../../lib/clipboardSupport';
+import { useTerminalRecording } from '../../hooks/useTerminalRecording';
+import { RecordingControls } from './RecordingControls';
 
 const PREFILL_REPLAY_LINE_COUNT = 50; // Keep aligned with backend replay count
 
@@ -238,6 +241,42 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Track last connected ws_url for reconnection detection
   const lastWsUrlRef = useRef<string | null>(null);
+
+  // ── Session Recording ──────────────────────────────────────────────────
+  const {
+    startRecording,
+    feedOutput,
+    feedInput,
+    feedResize,
+    handleRecordingStop,
+    handleRecordingDiscard,
+    isRecording: isSessionRecording,
+  } = useTerminalRecording({
+    sessionId,
+    terminalType: 'ssh',
+    label: sessionId,
+  });
+
+  // ── Listen for TabBar recording events ──────────────────────────────────
+  useEffect(() => {
+    const onStartRec = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.sessionId !== sessionId) return;
+      const term = terminalRef.current;
+      if (term && !isSessionRecording) startRecording(term.cols, term.rows);
+    };
+    const onRecStopped = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.sessionId !== sessionId) return;
+      if (detail?.content) handleRecordingStop(detail.content);
+    };
+    window.addEventListener('oxide:start-recording', onStartRec);
+    window.addEventListener('oxide:recording-stopped', onRecStopped);
+    return () => {
+      window.removeEventListener('oxide:start-recording', onStartRec);
+      window.removeEventListener('oxide:recording-stopped', onRecStopped);
+    };
+  }, [sessionId, isSessionRecording, startRecording, handleRecordingStop]);
   
   // === Standby Mode State (Input Lock during reconnection) ===
   const [inputLocked, setInputLocked] = useState(false);
@@ -349,6 +388,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         // Plugin output pipeline (fail-open: exceptions pass original data through)
         payloadCopy = runOutputPipeline(payloadCopy, sessionId, nodeId);
         maybeLoadImageAddon(payloadCopy);
+
+        // Feed recording (after plugin pipeline, before terminal write)
+        feedOutput(payloadCopy);
 
         if (platform.isWindows) {
           // Windows: branch on IME composition state
@@ -932,48 +974,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   }, [session?.ws_url, recoverWebSocket, cleanupWebSocket, connectionStatus]);
 
-  /**
-   * 字体双轨制 - Font Family Resolver
-   * 
-   * 预设轨道: 返回内置字体栈（系统优先 → 内置 woff2 兜底）
-   * 自定义轨道: 返回用户输入的字体栈 + monospace 兜底
-   * 
-   * 🎯 CJK 策略: 所有字体都 fallback 到 Maple Mono NF CN
-   *    拉丁字母 → 用户选择的字体
-   *    中日韩字符 → Maple Mono NF CN
-   */
-  const getFontFamily = (fontFamily: string, customFontFamily?: string): string => {
-    // CJK fallback: Maple Mono NF CN 提供完美的中日韩字符支持
-    const CJK_FALLBACK = '"Maple Mono NF CN (Subset)"';
-    
-    // 自定义轨道: 用户输入优先，添加 CJK fallback
-    if (fontFamily === 'custom' && customFontFamily?.trim()) {
-      const stack = customFontFamily.trim();
-      // 如果已有 monospace，在其前插入 CJK fallback
-      if (stack.toLowerCase().includes('monospace')) {
-        return stack.replace(/,?\s*monospace\s*$/i, `, ${CJK_FALLBACK}, monospace`);
-      }
-      return `${stack}, ${CJK_FALLBACK}, monospace`;
-    }
-    
-    // 预设轨道: 拉丁字符用选定字体，CJK 字符 fallback 到 Maple Mono
-    switch(fontFamily) {
-      case 'jetbrains':
-        return `"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF (Subset)", "JetBrains Mono", ${CJK_FALLBACK}, monospace`;
-      case 'meslo':
-        return `"MesloLGM Nerd Font", "MesloLGM Nerd Font Mono", "MesloLGM NF (Subset)", "Meslo LG M", ${CJK_FALLBACK}, monospace`;
-      case 'maple':
-        return '"Maple Mono NF CN (Subset)", "Maple Mono NF", "Maple Mono", monospace';
-      case 'cascadia':
-        return `"Cascadia Code NF", "Cascadia Mono NF", "Cascadia Code", "Cascadia Mono", ${CJK_FALLBACK}, monospace`;
-      case 'consolas':
-        return `Consolas, "Courier New", ${CJK_FALLBACK}, monospace`;
-      case 'menlo':
-        return `Menlo, Monaco, "Courier New", ${CJK_FALLBACK}, monospace`;
-      default:
-        return `"JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrains Mono NF (Subset)", "JetBrains Mono", ${CJK_FALLBACK}, monospace`;
-    }
-  };
+  // Font family resolver — see src/lib/fontFamily.ts
 
   useEffect(() => {
     if (!containerRef.current || terminalRef.current) return;
@@ -1443,6 +1444,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         const processed = runInputPipeline(data, sessionId, nodeId);
         if (processed === null) return;
 
+        // Feed recording (user input)
+        feedInput(processed);
+
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
             // Encode as Wire Protocol v1 Data frame
@@ -1470,6 +1474,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     onResizeDisposableRef.current = term.onResize((size) => {
         // Don't send resize when in Standby mode
         if (inputLockedRef.current) return;
+
+        // Feed recording (resize)
+        feedResize(size.cols, size.rows);
         
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -2108,6 +2115,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         }
       },
       onCloseAiPanel: handleCloseAiPanel,
+      onToggleRecording: () => {
+        if (!isSessionRecording) {
+          const term = terminalRef.current;
+          if (term) {
+            startRecording(term.cols, term.rows);
+          }
+        }
+        // Stop is handled by RecordingControls overlay
+      },
       onFocusTerminal: () => terminalRef.current?.focus(),
       searchOpen,
       aiPanelOpen,
@@ -2225,6 +2241,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
          sessionId={sessionId}
          terminalType="terminal"
        />
+
+       {/* Recording status overlay (shown only during active recording) */}
+       {isSessionRecording && (
+         <RecordingControls
+           sessionId={sessionId}
+           onStop={handleRecordingStop}
+           onDiscard={handleRecordingDiscard}
+         />
+       )}
 
        {/* Mouse mode indicator */}
        {mouseMode && (
