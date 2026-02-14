@@ -1,11 +1,11 @@
 # Third-Party Notices (Backend / Rust)
 
 This file lists third-party crates used by the Rust backend and their detected licenses (including transitive dependencies).
-Generated: 2026-02-12T19:01:09.919Z
+Generated: 2026-02-14T18:32:59.829Z
 
 ## Summary
-- MIT: 618
-- Apache-2.0: 466
+- MIT: 621
+- Apache-2.0: 469
 - Zlib: 20
 - Unicode-3.0: 19
 - BSD-3-Clause: 12
@@ -182,6 +182,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | fiat-crypto | 0.2.9 | MIT, Apache-2.0, BSD-1-Clause | registry+https://github.com/rust-lang/crates.io-index |
 | field-offset | 0.3.6 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | filedescriptor | 0.8.3 | MIT | registry+https://github.com/rust-lang/crates.io-index |
+| filetime | 0.2.27 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | find-msvc-tools | 0.1.9 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | flate2 | 1.1.8 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | flurry | 0.5.2 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
@@ -510,6 +511,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | system-deps | 6.2.2 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | tao | 0.34.5 | Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | tao-macros | 0.1.3 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
+| tar | 0.4.44 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | target-lexicon | 0.12.16 | Apache-2.0 WITH LLVM-exception | registry+https://github.com/rust-lang/crates.io-index |
 | tauri | 2.10.0 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | tauri-build | 2.5.4 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
@@ -677,6 +679,7 @@ This report does not attempt to interpret SPDX boolean logic beyond simple group
 | wry | 0.54.1 | Apache-2.0, MIT | registry+https://github.com/rust-lang/crates.io-index |
 | x11 | 2.21.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
 | x11-dl | 2.21.0 | MIT | registry+https://github.com/rust-lang/crates.io-index |
+| xattr | 1.6.1 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | xz2 | 0.1.7 | MIT, Apache-2.0 | registry+https://github.com/rust-lang/crates.io-index |
 | yoke | 0.8.1 | Unicode-3.0 | registry+https://github.com/rust-lang/crates.io-index |
 | yoke-derive | 0.8.1 | Unicode-3.0 | registry+https://github.com/rust-lang/crates.io-index |

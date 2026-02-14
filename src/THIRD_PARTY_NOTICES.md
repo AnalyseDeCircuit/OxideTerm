@@ -1,13 +1,13 @@
 # Third-Party Notices (Frontend)
 
 This file lists third-party components used by the frontend (including transitive production dependencies) and their declared licenses.
-Generated: 2026-02-12T19:01:01.469Z
+Generated: 2026-02-14T18:33:06.481Z
 
 ## Summary
-- MIT: 217
+- MIT: 219
 - ISC: 34
 - Apache-2.0: 18
-- BSD-3-Clause: 7
+- BSD-3-Clause: 8
 - MIT OR Apache-2.0: 4
 - BSD-2-Clause: 4
 - MPL-2.0: 1
@@ -162,9 +162,11 @@ Generated: 2026-02-12T19:01:01.469Z
 | @xmldom/xmldom | 0.8.11 | MIT | https://github.com/xmldom/xmldom |
 | @xterm/addon-attach | 0.12.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-canvas | 0.8.0-beta.48 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
+| @xterm/addon-clipboard | 0.1.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-fit | 0.11.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-image | 0.9.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-search | 0.16.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
+| @xterm/addon-serialize | 0.14.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-unicode11 | 0.9.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-web-links | 0.12.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
 | @xterm/addon-webgl | 0.19.0 | MIT | https://github.com/xtermjs/xterm.js/tree/master#readme |
@@ -244,6 +246,7 @@ Generated: 2026-02-12T19:01:01.469Z
 | inherits | 2.0.4 | ISC | https://github.com/isaacs/inherits#readme |
 | internmap | 1.0.1, 2.0.3 | ISC | https://github.com/mbostock/internmap/ |
 | isarray | 1.0.0 | MIT | https://github.com/juliangruber/isarray |
+| js-base64 | 3.7.8 | BSD-3-Clause | https://github.com/dankogai/js-base64#readme |
 | jszip | 3.10.1 | (MIT OR GPL-3.0-or-later) | https://github.com/Stuk/jszip#readme |
 | katex | 0.16.28 | MIT | https://katex.org |
 | khroma | 2.1.0 | MIT | https://github.com/fabiospampinato/khroma#readme |
