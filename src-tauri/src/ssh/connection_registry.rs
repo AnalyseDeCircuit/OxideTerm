@@ -2398,6 +2398,85 @@ impl SshConnectionRegistry {
             .get(connection_id)
             .map(|e| e.value().clone())
     }
+
+    /// 主动探测所有 Active/Idle 状态的连接，返回已死连接的 ID 列表。
+    ///
+    /// 对每个活跃连接发送 SSH keepalive 探测。如果探测失败（IoError），
+    /// 将连接标记为 LinkDown 并发射 `connection_status_changed` 事件。
+    ///
+    /// 此方法用于前端在以下场景主动触发：
+    /// - 笔记本从休眠唤醒（visibilitychange）
+    /// - 网络从 offline 恢复为 online
+    ///
+    /// 返回值：已标记 link_down 的 connection_id 列表
+    pub async fn probe_active_connections(self: &Arc<Self>) -> Vec<String> {
+        let entries: Vec<(String, Arc<ConnectionEntry>)> = self
+            .connections
+            .iter()
+            .map(|e| (e.key().clone(), e.value().clone()))
+            .collect();
+
+        let mut dead_connections = Vec::new();
+
+        for (connection_id, entry) in entries {
+            let state = entry.state().await;
+            // 只探测 Active 和 Idle 状态的连接
+            if !matches!(state, ConnectionState::Active | ConnectionState::Idle) {
+                continue;
+            }
+
+            // 快速检查 handle 是否还活着
+            if !entry.handle_controller.is_connected() {
+                info!("Probe: connection {} handle already dead, marking link_down", connection_id);
+                entry.set_state(ConnectionState::LinkDown).await;
+                self.emit_connection_status_changed(&connection_id, "link_down").await;
+                dead_connections.push(connection_id);
+                continue;
+            }
+
+            // 主动 SSH keepalive 探测
+            let ping_result = entry.handle_controller.ping().await;
+            match ping_result {
+                super::handle_owner::PingResult::Ok => {
+                    debug!("Probe: connection {} alive", connection_id);
+                    entry.reset_heartbeat_failures();
+                    entry.update_activity();
+                }
+                super::handle_owner::PingResult::IoError => {
+                    info!("Probe: connection {} dead (IoError), marking link_down", connection_id);
+                    entry.set_state(ConnectionState::LinkDown).await;
+                    self.emit_connection_status_changed(&connection_id, "link_down").await;
+                    dead_connections.push(connection_id);
+                }
+                super::handle_owner::PingResult::Timeout => {
+                    // 单次超时不立刻判定死亡，给一次二次探测机会
+                    warn!("Probe: connection {} timeout, retrying once", connection_id);
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                    let retry = entry.handle_controller.ping().await;
+                    match retry {
+                        super::handle_owner::PingResult::Ok => {
+                            debug!("Probe: connection {} recovered on retry", connection_id);
+                            entry.reset_heartbeat_failures();
+                        }
+                        _ => {
+                            info!("Probe: connection {} dead after retry, marking link_down", connection_id);
+                            entry.set_state(ConnectionState::LinkDown).await;
+                            self.emit_connection_status_changed(&connection_id, "link_down").await;
+                            dead_connections.push(connection_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if !dead_connections.is_empty() {
+            info!("Probe completed: {} dead connection(s) out of total", dead_connections.len());
+        } else {
+            debug!("Probe completed: all connections alive");
+        }
+
+        dead_connections
+    }
 }
 
 #[cfg(test)]

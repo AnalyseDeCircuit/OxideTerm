@@ -451,8 +451,6 @@ fn drain_pending_commands(cmd_rx: &mut mpsc::Receiver<HandleCommand>) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // TODO: Add unit tests
     // - HandleController sends commands and receives replies
     // - HandleController drop causes task exit

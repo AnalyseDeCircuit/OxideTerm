@@ -563,6 +563,7 @@ pub fn run() {
         commands::cleanup_sftp_preview_temp,
         // Network and reconnect commands
         commands::network_status_changed,
+        commands::probe_connections,
         commands::cancel_reconnect,
         commands::is_reconnecting,
         // Keyboard-Interactive (2FA) commands - completely isolated from connect_v2
@@ -801,6 +802,7 @@ pub fn run() {
         commands::cleanup_sftp_preview_temp,
         // Network and reconnect commands
         commands::network_status_changed,
+        commands::probe_connections,
         commands::cancel_reconnect,
         commands::is_reconnecting,
         // Keyboard-Interactive (2FA) commands - completely isolated from connect_v2

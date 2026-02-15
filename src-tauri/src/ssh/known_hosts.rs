@@ -362,7 +362,6 @@ pub fn get_known_hosts() -> &'static KnownHostsStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_normalize_hostname() {

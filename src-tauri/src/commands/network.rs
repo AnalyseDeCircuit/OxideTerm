@@ -7,6 +7,7 @@ use tauri::State;
 use tracing::info;
 
 use crate::session::AutoReconnectService;
+use crate::ssh::SshConnectionRegistry;
 
 /// Handle network status change from frontend
 #[tauri::command]
@@ -19,10 +20,29 @@ pub async fn network_status_changed(
     reconnect_service.set_network_status(online);
 
     // 🛑 后端禁止自动重连：只记录状态，不做决策
-    // ❌ 已删除: reconnect_service.reconnect_all_disconnected().await;
     // 前端监听网络状态变化事件，自行决定是否重连
 
     Ok(())
+}
+
+/// 主动探测所有活跃 SSH 连接的健康状态。
+///
+/// 对每个 Active/Idle 状态的连接发送 SSH keepalive 探测。
+/// 已死连接会被标记为 link_down 并发射 `connection_status_changed` 事件，
+/// 前端 useConnectionEvents 自动接收并调度 orchestrator 重连。
+///
+/// 使用场景：
+/// - 笔记本从休眠唤醒（visibilitychange）
+/// - 网络从 offline 恢复为 online
+///
+/// 返回已死连接的 connection_id 列表。
+#[tauri::command]
+pub async fn probe_connections(
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<Vec<String>, String> {
+    info!("Probing all active connections for health check");
+    let dead = connection_registry.probe_active_connections().await;
+    Ok(dead)
 }
 
 /// Cancel reconnection for a session

@@ -675,6 +675,19 @@ export const api = {
     return invoke('network_status_changed', { online });
   },
 
+  /**
+   * 主动探测所有活跃 SSH 连接的健康状态。
+   *
+   * 对每个 Active/Idle 连接发送 SSH keepalive。
+   * 死连接会被标记 link_down 并通过 connection_status_changed 事件通知前端。
+   *
+   * @returns 已死连接的 connection_id 列表
+   */
+  probeConnections: async (): Promise<string[]> => {
+    if (USE_MOCK) return [];
+    return invoke('probe_connections');
+  },
+
   cancelReconnect: async (sessionId: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('cancel_reconnect', { sessionId });

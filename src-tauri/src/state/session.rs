@@ -210,8 +210,7 @@ impl SessionPersistence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::types::{AuthMethod, SessionConfig};
-    use std::path::PathBuf;
+    use crate::session::types::SessionConfig;
     use tempfile::TempDir;
 
     fn create_test_store() -> (TempDir, Arc<StateStore>) {
