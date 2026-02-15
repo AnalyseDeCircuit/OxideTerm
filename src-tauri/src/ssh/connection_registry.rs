@@ -1832,9 +1832,17 @@ impl SshConnectionRegistry {
             connection_id, keep_alive
         );
 
-        // 如果当前是空闲状态且 keep_alive=true，取消计时器
-        if keep_alive && conn.state().await == ConnectionState::Idle {
-            conn.cancel_idle_timer().await;
+        // 如果当前是空闲状态：
+        //   keep_alive=true  → 取消空闲计时器
+        //   keep_alive=false → 引用计数为0时启动空闲计时器
+        if conn.state().await == ConnectionState::Idle {
+            if keep_alive {
+                conn.cancel_idle_timer().await;
+            } else if conn.ref_count() == 0 {
+                let conn_arc = entry.value().clone();
+                drop(entry); // 释放 DashMap 锁
+                self.start_idle_timer(&conn_arc).await;
+            }
         }
 
         Ok(())
