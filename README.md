@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.11.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.11.3-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -136,6 +136,8 @@ Reference-counted `SshConnectionRegistry` with DashMap:
 - Multiple terminals, SFTP, port forwards share **one physical SSH connection**
 - Independent state machines per connection (connecting → active → idle → link_down → reconnecting)
 - Idle timeout (30 min), keep-alive (15s), heartbeat failure detection
+- WsBridge local heartbeat: 30s interval, 5 min timeout (tolerates App Nap)
+- Idle timeout disconnect emits `connection_status_changed` to notify frontend
 - Cascade propagation: jump host down → all downstream nodes marked `link_down`
 - **Intelligent detection**: `visibilitychange` + `online` event → proactive SSH probe (~2s vs 15-30s passive)
 - **Grace Period**: 30s window to recover existing connection before destructive reconnect (preserves TUI apps like yazi/vim)

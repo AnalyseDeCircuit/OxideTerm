@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.11.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.11.3-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
   <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blueviolet" alt="License">
   <img src="https://img.shields.io/badge/rust-1.75+-orange" alt="Rust">
@@ -136,6 +136,8 @@ impl Signer for AgentSigner { /* 通过 Agent IPC 完成挑战-响应签名 */ }
 - 多终端、SFTP、端口转发共享**同一条物理 SSH 连接**
 - 每连接独立状态机（connecting → active → idle → link_down → reconnecting）
 - 空闲超时 (30 分钟)、心跳保活 (15 秒)、心跳驱动的故障检测
+- WsBridge 本地心跳：30 秒间隔、5 分钟超时（容忍 App Nap）
+- 空闲超时断连发 `connection_status_changed` 事件通知前端
 - 级联传播：跳板机断连 → 所有下游节点标记 `link_down`
 - **智能感知**：`visibilitychange` + `online` 事件 → 主动 SSH 探测（~2 秒 vs 被动 15-30 秒）
 - **宽限期**：30 秒窗口尝试恢复现有连接，避免破坏性重连杀死 TUI 应用（yazi/vim/htop）

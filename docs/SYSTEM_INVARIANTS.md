@@ -329,6 +329,8 @@ queued → snapshot → grace-period → ssh-connect → await-terminal → rest
 - **探测成功（`"alive"`）必须清除 `link_down` 状态并跳过后续所有破坏性阶段**
 - **探测超时（30 秒）后才允许进入 `ssh-connect` 阶段（焦土重连）**
 - **`probe_single_connection` 必须支持 `LinkDown` 状态连接的恢复（IoError → Timeout 均可重试）**
+- **空闲超时断连必须发 `connection_status_changed` 事件**（`start_idle_timer` 内部）
+- **`set_keep_alive(false)` 在连接已 Idle 且 ref_count=0 时必须启动空闲计时器**
 
 **Orchestrator 常量**：
 | 常量 | 值 | 说明 |
@@ -343,6 +345,7 @@ queued → snapshot → grace-period → ssh-connect → await-terminal → rest
 | `MAX_PHASE_HISTORY` | 64 | 阶段历史环形缓冲区上限 |
 | `GRACE_PERIOD_MS` | 30,000 | 宽限期最大等待时间 |
 | `GRACE_PROBE_INTERVAL_MS` | 3,000 | 宽限期内探测间隔 |
+| `HEARTBEAT_TIMEOUT_SECS` (WsBridge) | 300 | 本地 WebSocket 心跳超时（容忍 App Nap）|
 
 - Snapshot 必须在 `reconnectCascade` 之前执行（`resetNodeState` 会销毁 forward 规则）
 - Terminal 恢复由 Key-Driven Reset 自动处理，不在管道内
@@ -396,6 +399,7 @@ Disconnected 是终态，必须移除 Session
 | `Active → LinkDown` | `connection_status_changed` | `link_down` |
 | `Active → Idle` | `connection_status_changed` | `idle` |
 | `* → Disconnected` | `connection_status_changed` | `disconnected` |
+| `Idle → Disconnected (idle timeout)` | `connection_status_changed` | `disconnected` |
 | `* → Error` | `connection_status_changed` | `error` |
 
 ---
