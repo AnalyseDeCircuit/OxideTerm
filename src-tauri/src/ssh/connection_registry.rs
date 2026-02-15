@@ -2399,6 +2399,116 @@ impl SshConnectionRegistry {
             .map(|e| e.value().clone())
     }
 
+    /// 探测单个连接的健康状态。
+    ///
+    /// 如果连接处于 LinkDown 状态且探测成功，自动恢复为 Active。
+    /// 恢复后重启心跳监控并发射 `connection_status_changed: connected` 事件，
+    /// 使前端能无损还原（不销毁旧 SSH session，TUI 应用得以保留）。
+    ///
+    /// 返回值：
+    /// - `"alive"` — 连接存活（如果原为 LinkDown 则已自动恢复）
+    /// - `"dead"`  — 连接已死
+    /// - `"not_found"` — 连接不存在
+    /// - `"not_applicable"` — 连接状态不适用于探测
+    pub async fn probe_single_connection(
+        self: &Arc<Self>,
+        connection_id: &str,
+    ) -> String {
+        let entry = match self.connections.get(connection_id) {
+            Some(e) => e.value().clone(),
+            None => return "not_found".to_string(),
+        };
+
+        let state = entry.state().await;
+
+        match state {
+            ConnectionState::LinkDown => {
+                // 关键场景：尝试恢复 LinkDown 连接
+                // 先检查 handle 是否还活着
+                if !entry.handle_controller.is_connected() {
+                    debug!(
+                        "probe_single: connection {} handle dead, remains link_down",
+                        connection_id
+                    );
+                    return "dead".to_string();
+                }
+
+                let ping_result = entry.handle_controller.ping().await;
+                match ping_result {
+                    super::handle_owner::PingResult::Ok => {
+                        // 连接恢复！
+                        info!(
+                            "probe_single: connection {} RECOVERED from LinkDown!",
+                            connection_id
+                        );
+                        entry.set_state(ConnectionState::Active).await;
+                        entry.reset_heartbeat_failures();
+                        entry.update_activity();
+
+                        // 发射 connected 事件 → 前端 useConnectionEvents 收到后清除 link_down 标记
+                        self.emit_connection_status_changed(connection_id, "connected")
+                            .await;
+
+                        // 重启心跳监控（旧心跳 task 在检测到 LinkDown 时已退出）
+                        self.start_heartbeat(connection_id);
+
+                        "alive".to_string()
+                    }
+                    super::handle_owner::PingResult::Timeout => {
+                        // 单次超时，给一次重试机会
+                        debug!(
+                            "probe_single: connection {} timeout, retrying once",
+                            connection_id
+                        );
+                        tokio::time::sleep(Duration::from_millis(1500)).await;
+                        let retry = entry.handle_controller.ping().await;
+                        match retry {
+                            super::handle_owner::PingResult::Ok => {
+                                info!(
+                                    "probe_single: connection {} RECOVERED on retry",
+                                    connection_id
+                                );
+                                entry.set_state(ConnectionState::Active).await;
+                                entry.reset_heartbeat_failures();
+                                entry.update_activity();
+                                self.emit_connection_status_changed(
+                                    connection_id,
+                                    "connected",
+                                )
+                                .await;
+                                self.start_heartbeat(connection_id);
+                                "alive".to_string()
+                            }
+                            _ => {
+                                debug!(
+                                    "probe_single: connection {} still dead after retry",
+                                    connection_id
+                                );
+                                "dead".to_string()
+                            }
+                        }
+                    }
+                    super::handle_owner::PingResult::IoError => {
+                        debug!(
+                            "probe_single: connection {} IoError, confirmed dead",
+                            connection_id
+                        );
+                        "dead".to_string()
+                    }
+                }
+            }
+            ConnectionState::Active | ConnectionState::Idle => {
+                // 活跃连接 — 只检查不恢复
+                let ping_result = entry.handle_controller.ping().await;
+                match ping_result {
+                    super::handle_owner::PingResult::Ok => "alive".to_string(),
+                    _ => "dead".to_string(),
+                }
+            }
+            _ => "not_applicable".to_string(),
+        }
+    }
+
     /// 主动探测所有 Active/Idle 状态的连接，返回已死连接的 ID 列表。
     ///
     /// 对每个活跃连接发送 SSH keepalive 探测。如果探测失败（IoError），

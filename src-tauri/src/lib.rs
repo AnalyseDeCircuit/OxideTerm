@@ -564,6 +564,7 @@ pub fn run() {
         // Network and reconnect commands
         commands::network_status_changed,
         commands::probe_connections,
+        commands::probe_single_connection,
         commands::cancel_reconnect,
         commands::is_reconnecting,
         // Keyboard-Interactive (2FA) commands - completely isolated from connect_v2
@@ -803,6 +804,7 @@ pub fn run() {
         // Network and reconnect commands
         commands::network_status_changed,
         commands::probe_connections,
+        commands::probe_single_connection,
         commands::cancel_reconnect,
         commands::is_reconnecting,
         // Keyboard-Interactive (2FA) commands - completely isolated from connect_v2

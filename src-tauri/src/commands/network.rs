@@ -45,6 +45,22 @@ pub async fn probe_connections(
     Ok(dead)
 }
 
+/// 探测单个连接的健康状态。
+///
+/// 如果连接处于 LinkDown 且探测成功，自动恢复为 Active 并重启心跳监控。
+/// 返回 "alive"（已恢复/存活）、"dead"（确认死亡）、"not_found"、"not_applicable"。
+#[tauri::command]
+pub async fn probe_single_connection(
+    connection_id: String,
+    connection_registry: State<'_, Arc<SshConnectionRegistry>>,
+) -> Result<String, String> {
+    info!("Probing single connection {} for recovery", connection_id);
+    let result = connection_registry
+        .probe_single_connection(&connection_id)
+        .await;
+    Ok(result)
+}
+
 /// Cancel reconnection for a session
 #[tauri::command]
 pub async fn cancel_reconnect(

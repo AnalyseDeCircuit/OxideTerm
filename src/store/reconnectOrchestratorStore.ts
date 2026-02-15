@@ -29,6 +29,7 @@ import type { ForwardRule, IncompleteTransferInfo } from '../types';
 export type ReconnectPhase =
   | 'queued'
   | 'snapshot'
+  | 'grace-period'
   | 'ssh-connect'
   | 'await-terminal'
   | 'restore-forwards'
@@ -57,6 +58,8 @@ export type ReconnectSnapshot = {
     oldSessionId: string;
     transfers: IncompleteTransferInfo[];
   }>;
+  /** Per-node mapping of old SSH connectionIds for grace period recovery probing */
+  oldConnectionIds: Map<string, string>;
   /** IDE state if the IDE was open for a node in this subtree */
   ideSnapshot?: {
     projectPath: string;
@@ -114,6 +117,24 @@ const MAX_ATTEMPTS = 5;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 15_000;
 const BACKOFF_MULTIPLIER = 1.5;
+
+/**
+ * Grace Period: 在销毁旧 SSH session 前尝试复用已有连接。
+ *
+ * 核心价值：如果网络只是短暂中断（WiFi 切换、VPN 重连、短暂抖动），
+ * SSH 连接可能仍然存活。通过 grace period 探测，可以无损恢复连接，
+ * TUI 应用（yazi、vim、htop）和终端状态得以保留。
+ *
+ * 流程：
+ *   1. link_down → Orchestrator 开始管道
+ *   2. Phase 0: Snapshot（捕获旧状态、旧 connectionId）
+ *   3. Phase NEW: Grace Period — 每 GRACE_PROBE_INTERVAL_MS 探测一次旧连接
+ *      a) 如果探测返回 "alive" → 连接恢复！跳过 ssh-connect，直接标记 done
+ *      b) 如果 GRACE_PERIOD_MS 超时 → 连接确认死亡，进入焦土重连
+ *   4. Phase 1+: 原有的 ssh-connect → await-terminal → ... 焦土重连流程
+ */
+const GRACE_PERIOD_MS = 30_000;
+const GRACE_PROBE_INTERVAL_MS = 3_000;
 
 /** Max completed/failed/cancelled jobs to retain before auto-eviction */
 const MAX_RETAINED_JOBS = 200;
@@ -429,6 +450,7 @@ function flushPending() {
         oldTerminalSessionIds: [],
         perNodeOldSessionIds: new Map(),
         incompleteTransfers: [],
+        oldConnectionIds: new Map(),
       },
       abortController: new AbortController(),
       restoredCount: 0,
@@ -476,7 +498,18 @@ async function runPipeline(nodeId: string) {
     if (signal.aborted) return markCancelled(nodeId);
     await phaseSnapshot(nodeId);
 
-    // Phase 1: SSH Connect
+    // Phase 0.5: Grace Period — 尝试复用旧连接（保留 TUI 应用）
+    if (signal.aborted) return markCancelled(nodeId);
+    const recovered = await phaseGracePeriod(nodeId);
+    if (recovered) {
+      // 连接已恢复！跳过焦土重连，TUI 应用得以保留
+      updateJob(nodeId, { status: 'done', endedAt: Date.now() });
+      toast('connections.reconnect.recovered', 'success');
+      console.log(`[Orchestrator] 🎉 Connection RECOVERED during grace period for ${nodeId} — TUI apps preserved`);
+      return;
+    }
+
+    // Phase 1: SSH Connect (Grace Period 未能恢复 → 焦土重连)
     if (signal.aborted) return markCancelled(nodeId);
     const sshOk = await phaseSshConnect(nodeId);
     if (!sshOk) return; // Already marked failed with retry logic
@@ -656,6 +689,15 @@ async function phaseSnapshot(nodeId: string) {
     }
   }
 
+  // Snapshot old SSH connectionIds for grace period recovery probing
+  const oldConnectionIds = new Map<string, string>();
+  for (const n of allNodes) {
+    const unifiedNode = treeStore.getNode(n.id);
+    if (unifiedNode?.runtime.connectionId) {
+      oldConnectionIds.set(n.id, unifiedNode.runtime.connectionId);
+    }
+  }
+
   updateJob(nodeId, {
     snapshot: {
       nodeId,
@@ -664,12 +706,138 @@ async function phaseSnapshot(nodeId: string) {
       oldTerminalSessionIds,
       perNodeOldSessionIds,
       incompleteTransfers,
+      oldConnectionIds,
       ideSnapshot,
     },
   });
   const fwCount = forwardRules.reduce((s, e) => s + e.rules.length, 0);
   const txCount = incompleteTransfers.reduce((s, e) => s + e.transfers.length, 0);
-  exitPhase(nodeId, 'ok', `${fwCount} forwards, ${txCount} transfers, ${ideSnapshot ? 'IDE' : 'no IDE'}`);
+  exitPhase(nodeId, 'ok', `${fwCount} forwards, ${txCount} transfers, ${oldConnectionIds.size} connections, ${ideSnapshot ? 'IDE' : 'no IDE'}`);
+}
+
+// ─── Phase 0.5: Grace Period ─────────────────────────────────────────────────
+
+/**
+ * Grace Period: 在销毁旧 SSH session 前，反复探测旧连接是否恢复。
+ *
+ * 核心价值：
+ *   - WiFi 切换、VPN 重连、短暂网络抖动 → SSH 连接可能仍然存活
+ *   - 如果连接恢复 → 跳过焦土重连，TUI 应用（yazi、vim、htop）和终端缓冲区完整保留
+ *   - 如果超时 → 进入 ssh-connect 焦土重连（现有行为）
+ *
+ * 探测机制：
+ *   每 GRACE_PROBE_INTERVAL_MS 对旧 connectionId 发送 SSH keepalive。
+ *   后端 `probe_single_connection` 对 LinkDown 连接做 ping：
+ *   - 成功 → 自动恢复为 Active，重启心跳，发射 `connected` 事件
+ *   - 失败 → 保持 LinkDown
+ *
+ * @returns true = 连接已恢复（跳过焦土重连），false = 超时（继续焦土重连）
+ */
+async function phaseGracePeriod(nodeId: string): Promise<boolean> {
+  const job = getJob(nodeId);
+  if (!job) return false;
+
+  // 获取旧 connectionId（snapshot 阶段已捕获）
+  const rootConnectionId = job.snapshot.oldConnectionIds.get(nodeId);
+  if (!rootConnectionId) {
+    console.log(`[Orchestrator] Grace period: no old connectionId for ${nodeId}, skipping`);
+    return false;
+  }
+
+  enterPhase(nodeId, 'grace-period');
+  console.log(`[Orchestrator] Phase: grace-period for ${nodeId} (max ${GRACE_PERIOD_MS / 1000}s, probe every ${GRACE_PROBE_INTERVAL_MS / 1000}s)`);
+
+  const signal = job.abortController.signal;
+  const startedAt = Date.now();
+  let probeCount = 0;
+
+  while (Date.now() - startedAt < GRACE_PERIOD_MS) {
+    if (signal.aborted) {
+      exitPhase(nodeId, 'failed', 'cancelled');
+      return false;
+    }
+
+    probeCount++;
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+
+    try {
+      slog({
+        component: 'Orchestrator',
+        event: 'grace:probe',
+        nodeId,
+        detail: `probe #${probeCount} at ${elapsed}s`,
+      });
+
+      const result = await api.probeSingleConnection(rootConnectionId);
+
+      if (result === 'alive') {
+        // 连接恢复！后端已自动转为 Active 并重启心跳
+        slog({
+          component: 'Orchestrator',
+          event: 'grace:recovered',
+          nodeId,
+          outcome: 'ok',
+          detail: `recovered after ${probeCount} probes (${elapsed}s)`,
+        });
+        console.log(`[Orchestrator] ✅ Grace period: connection ${rootConnectionId} RECOVERED after ${probeCount} probes (${elapsed}s)`);
+
+        // 也探测子节点的连接（级联恢复）
+        const allConnectionIds = Array.from(job.snapshot.oldConnectionIds.entries());
+        let childRecovered = 0;
+        for (const [childNodeId, childConnectionId] of allConnectionIds) {
+          if (childNodeId === nodeId) continue; // 根节点已恢复
+          try {
+            const childResult = await api.probeSingleConnection(childConnectionId);
+            if (childResult === 'alive') childRecovered++;
+          } catch {
+            // 子节点恢复失败不影响整体
+          }
+        }
+        if (childRecovered > 0) {
+          console.log(`[Orchestrator] Grace period: ${childRecovered} child connection(s) also recovered`);
+        }
+
+        // 清除所有受影响节点的 link-down 标记
+        const treeStore = useSessionTreeStore.getState();
+        treeStore.clearLinkDown(nodeId);
+        const descendants = treeStore.getDescendants(nodeId);
+        for (const desc of descendants) {
+          treeStore.clearLinkDown(desc.id);
+        }
+
+        exitPhase(nodeId, 'ok', `recovered after ${probeCount} probes (${elapsed}s)`);
+        return true;
+      }
+
+      if (result === 'not_found') {
+        // 连接已被清理，无需继续等待
+        console.log(`[Orchestrator] Grace period: connection ${rootConnectionId} not found, stopping probe`);
+        exitPhase(nodeId, 'failed', 'connection not found');
+        return false;
+      }
+
+      // result === 'dead' or 'not_applicable' → 继续等待
+      console.debug(`[Orchestrator] Grace period: probe #${probeCount} → ${result} (${elapsed}s/${GRACE_PERIOD_MS / 1000}s)`);
+    } catch (e) {
+      console.warn(`[Orchestrator] Grace period: probe #${probeCount} error:`, e);
+    }
+
+    // 等待下一次探测
+    await sleep(GRACE_PROBE_INTERVAL_MS);
+  }
+
+  // 超时 → 连接确认死亡
+  const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
+  console.log(`[Orchestrator] Grace period expired for ${nodeId} after ${probeCount} probes (${totalElapsed}s) → proceeding to scorched-earth reconnect`);
+  slog({
+    component: 'Orchestrator',
+    event: 'grace:expired',
+    nodeId,
+    outcome: 'error',
+    detail: `${probeCount} probes over ${totalElapsed}s`,
+  });
+  exitPhase(nodeId, 'failed', `expired after ${probeCount} probes (${totalElapsed}s)`);
+  return false;
 }
 
 // ─── Phase 1: SSH Connect ────────────────────────────────────────────────────

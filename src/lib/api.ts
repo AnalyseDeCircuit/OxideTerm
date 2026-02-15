@@ -688,6 +688,19 @@ export const api = {
     return invoke('probe_connections');
   },
 
+  /**
+   * 探测单个连接的健康状态（支持 LinkDown 恢复）。
+   *
+   * 如果连接处于 LinkDown 且探测成功，后端自动恢复为 Active 并重启心跳。
+   * 用于 Grace Period 机制：在销毁旧 SSH session 前，尝试复用已有连接。
+   *
+   * @returns "alive" | "dead" | "not_found" | "not_applicable"
+   */
+  probeSingleConnection: async (connectionId: string): Promise<string> => {
+    if (USE_MOCK) return 'not_found';
+    return invoke('probe_single_connection', { connectionId });
+  },
+
   cancelReconnect: async (sessionId: string): Promise<void> => {
     if (USE_MOCK) return;
     return invoke('cancel_reconnect', { sessionId });

@@ -69,13 +69,15 @@
       "completed": "Conexão restaurada, {{count}} serviço(s) recuperado(s)",
       "failed": "Falha na reconexão: {{error}}",
       "cancelled": "Reconexão cancelada",
+      "recovered": "Conexão recuperada — sessão preservada",
       "phase": {
         "snapshot": "Instantâneo",
         "ssh_connect": "Conexão SSH",
         "await_terminal": "Aguardar terminal",
         "restore_forwards": "Restaurar encaminhamentos",
         "resume_transfers": "Retomar transferências",
-        "restore_ide": "Restaurar IDE"
+        "restore_ide": "Restaurar IDE",
+        "grace_period": "Período de carência"
       },
       "result": {
         "ok": "Concluído",
