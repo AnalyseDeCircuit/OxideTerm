@@ -3,20 +3,26 @@
 //! Samples remote host resources (CPU, memory, load, network) via a persistent SSH shell channel.
 //! Uses a single long-lived channel to avoid MaxSessions exhaustion.
 //!
+//! Also performs **smart port detection**: scans remote listening ports each cycle, detects
+//! changes (new ports / closed ports), and emits `port-detected:{connectionId}` events so
+//! the frontend can offer one-click forwarding (similar to VS Code SSH Remote).
+//!
 //! # Design
 //! - One `ResourceProfiler` per connection, bound to SSH lifecycle via `subscribe_disconnect()`
 //! - Opens ONE shell channel at startup, reuses it for all sampling cycles
 //! - Collects `/proc/stat`, `/proc/meminfo`, `/proc/loadavg`, `/proc/net/dev` via stdin commands
 //! - CPU% and network rates require delta between two samples (first sample returns None)
 //! - Non-Linux hosts gracefully degrade to `MetricsSource::RttOnly`
+//! - Port detection commands are platform-dispatched based on `os_type`
 //!
 //! # Invariants
 //! - P1: Profiler does not hold strong references to the connection
 //! - P2: SSH disconnect → profiler auto-stops via `disconnect_rx`
 //! - P3: Only 1 shell channel held for the entire profiler lifetime
 //! - P5: First sample returns None for CPU/network (no delta baseline)
+//! - P6: First port scan is silent (establishes baseline, no event emitted)
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -34,8 +40,8 @@ use crate::ssh::HandleController;
 /// Maximum number of history points kept (ring buffer)
 const HISTORY_CAPACITY: usize = 60;
 
-/// Maximum output size from a single sample (8KB — slimmed command output is ~1KB)
-const MAX_OUTPUT_SIZE: usize = 8_192;
+/// Maximum output size from a single sample (64KB — includes ss/netstat + docker ps)
+const MAX_OUTPUT_SIZE: usize = 65_536;
 
 /// Timeout for reading a single sample's output from the shell channel
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -49,14 +55,75 @@ const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 /// Timeout for opening the initial shell channel
 const CHANNEL_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Slimmed sampling command — only reads the minimum data needed:
-/// - `head -1 /proc/stat` → CPU total line only (~80 bytes, skips per-core lines)
-/// - `grep` MemTotal + MemAvailable → 2 lines (~60 bytes, skips full meminfo)
-/// - `/proc/loadavg` → 1 line (~30 bytes)
-/// - `/proc/net/dev` is small and needed in full for multi-interface aggregation
-/// - `nproc` → 1 number
-/// Total output: ~500-1500 bytes (was ~10-30KB with full /proc/stat + /proc/meminfo)
-const SAMPLE_COMMAND: &str = "echo '===STAT==='; head -1 /proc/stat 2>/dev/null; echo '===MEMINFO==='; grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null; echo '===LOADAVG==='; cat /proc/loadavg 2>/dev/null; echo '===NETDEV==='; cat /proc/net/dev 2>/dev/null; echo '===NPROC==='; nproc 2>/dev/null; echo '===END==='\n";
+/// Slimmed sampling command (Linux only) — reads /proc pseudo-files for metrics.
+/// The full command is now built dynamically by `build_sample_command()` based on `os_type`,
+/// appending a platform-specific port scan after the metrics section.
+const METRICS_COMMAND_LINUX: &str = "echo '===STAT==='; head -1 /proc/stat 2>/dev/null; echo '===MEMINFO==='; grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null; echo '===LOADAVG==='; cat /proc/loadavg 2>/dev/null; echo '===NETDEV==='; cat /proc/net/dev 2>/dev/null; echo '===NPROC==='; nproc 2>/dev/null";
+
+// ─── Port Detection: Platform-Dispatched Commands ─────────────────────────
+
+/// Linux: Use `ss` (modern) with `netstat` fallback.
+/// Output: one line per listening socket with addr:port and optional process info.
+const PORT_CMD_LINUX: &str = "echo '===PORTS==='; ((ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null) | grep -i listen || true); echo '===PORTS_END==='; echo '===DOCKER==='; ((docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null || sudo -n docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null) || true); echo '===DOCKER_END==='";
+
+/// macOS: Use `lsof` to list listening TCP sockets.
+const PORT_CMD_MACOS: &str = "echo '===PORTS==='; ((lsof -iTCP -sTCP:LISTEN -nP 2>/dev/null | tail -n +2) || true); echo '===PORTS_END==='; echo '===DOCKER==='; ((docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null || sudo -n docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null) || true); echo '===DOCKER_END==='";
+
+/// Windows (PowerShell): `Get-NetTCPConnection` → CSV-like output.
+const PORT_CMD_WINDOWS: &str = "echo '===PORTS==='; powershell -NoProfile -Command \"Get-NetTCPConnection -State Listen 2>$null | Select-Object LocalAddress,LocalPort,OwningProcess | Format-Table -HideTableHeaders\" 2>/dev/null; echo '===PORTS_END==='";
+
+/// FreeBSD: Use `sockstat` to list listening TCP sockets.
+const PORT_CMD_FREEBSD: &str = "echo '===PORTS==='; sockstat -4 -6 -l -P tcp 2>/dev/null | tail -n +2; echo '===PORTS_END==='";
+
+/// Build the complete sampling command including port scan for the given OS.
+/// Returns a String with a trailing newline, ready to send to the shell channel.
+fn build_sample_command(os_type: &str) -> String {
+    let metrics = match os_type {
+        "Linux" | "linux" | "Windows_MinGW" | "Windows_MSYS" | "Windows_Cygwin" => {
+            METRICS_COMMAND_LINUX
+        }
+        // Non-Linux: metrics will degrade to RttOnly, but port scan still runs
+        _ => METRICS_COMMAND_LINUX,
+    };
+
+    let port_cmd = match os_type {
+        "Linux" | "linux" | "Windows_MinGW" | "Windows_MSYS" | "Windows_Cygwin" => PORT_CMD_LINUX,
+        "macOS" | "macos" | "Darwin" => PORT_CMD_MACOS,
+        "Windows" | "windows" => PORT_CMD_WINDOWS,
+        "FreeBSD" | "freebsd" | "OpenBSD" | "NetBSD" => PORT_CMD_FREEBSD,
+        _ => PORT_CMD_LINUX, // Fallback to Linux commands
+    };
+
+    format!("{}; {}; echo '===END==='\n", metrics, port_cmd)
+}
+
+// ─── Port Detection Data Structures ───────────────────────────────────────
+
+/// A detected listening port on the remote host.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DetectedPort {
+    /// The port number
+    pub port: u16,
+    /// Bind address (e.g. "0.0.0.0", "127.0.0.1", "::")
+    pub bind_addr: String,
+    /// Process name if available (e.g. "node", "python3")
+    pub process_name: Option<String>,
+    /// Process ID if available
+    pub pid: Option<u32>,
+}
+
+/// Event emitted when new listening ports are detected on the remote host.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortDetectionEvent {
+    /// Connection this event belongs to
+    pub connection_id: String,
+    /// Newly detected ports (not in previous scan)
+    pub new_ports: Vec<DetectedPort>,
+    /// Ports that were closed since last scan
+    pub closed_ports: Vec<DetectedPort>,
+    /// Full list of currently listening ports
+    pub all_ports: Vec<DetectedPort>,
+}
 
 /// Raw CPU counters from /proc/stat
 #[derive(Debug, Clone, Default)]
@@ -120,6 +187,10 @@ pub struct ResourceProfiler {
     history: Arc<RwLock<VecDeque<ResourceMetrics>>>,
     /// Sender to signal the sampling loop to stop
     stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    /// Ports the user has dismissed / ignored (not shown again until restart)
+    ignored_ports: Arc<RwLock<HashSet<u16>>>,
+    /// Latest detected listening ports
+    detected_ports: Arc<RwLock<Vec<DetectedPort>>>,
 }
 
 impl ResourceProfiler {
@@ -132,10 +203,13 @@ impl ResourceProfiler {
         connection_id: String,
         controller: HandleController,
         app_handle: tauri::AppHandle,
+        os_type: String,
     ) -> Self {
         let state = Arc::new(RwLock::new(ProfilerState::Running));
         let latest = Arc::new(RwLock::new(None));
         let history = Arc::new(RwLock::new(VecDeque::with_capacity(HISTORY_CAPACITY)));
+        let ignored_ports = Arc::new(RwLock::new(HashSet::new()));
+        let detected_ports = Arc::new(RwLock::new(Vec::new()));
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
 
         let profiler = Self {
@@ -144,6 +218,8 @@ impl ResourceProfiler {
             latest: latest.clone(),
             history: history.clone(),
             stop_tx: Some(stop_tx),
+            ignored_ports: ignored_ports.clone(),
+            detected_ports: detected_ports.clone(),
         };
 
         // Subscribe to SSH disconnect
@@ -165,6 +241,9 @@ impl ResourceProfiler {
                 stop_rx,
                 &mut disconnect_rx,
                 app_handle,
+                os_type,
+                ignored_ports,
+                detected_ports,
             )
             .await;
         });
@@ -198,12 +277,25 @@ impl ResourceProfiler {
     pub fn connection_id(&self) -> &str {
         &self.connection_id
     }
+
+    /// Get the latest detected listening ports
+    pub fn detected_ports(&self) -> Vec<DetectedPort> {
+        self.detected_ports.read().unwrap().clone()
+    }
+
+    /// Add a port to the ignore list (user dismissed the notification)
+    pub fn ignore_port(&self, port: u16) {
+        self.ignored_ports.write().unwrap().insert(port);
+    }
 }
 
 /// The main sampling loop. Runs until stopped or disconnected.
 ///
 /// Opens ONE persistent shell channel at startup and reuses it for all samples.
 /// This avoids MaxSessions exhaustion on servers with low limits.
+///
+/// Also performs port detection: parses `===PORTS===...===PORTS_END===` from each sample,
+/// diffs against previous scan, and emits `port-detected:{connectionId}` on changes.
 async fn sampling_loop(
     connection_id: String,
     controller: HandleController,
@@ -213,6 +305,9 @@ async fn sampling_loop(
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
     disconnect_rx: &mut broadcast::Receiver<()>,
     app_handle: tauri::AppHandle,
+    os_type: String,
+    ignored_ports: Arc<RwLock<HashSet<u16>>>,
+    detected_ports: Arc<RwLock<Vec<DetectedPort>>>,
 ) {
     let mut prev_sample: Option<PreviousSample> = None;
     let mut consecutive_failures: u32 = 0;
@@ -220,10 +315,20 @@ async fn sampling_loop(
     // Skip the immediate first tick
     interval.tick().await;
 
-    debug!("Resource profiler started for connection {}", connection_id);
+    // Port detection state
+    let mut prev_ports: HashSet<u16> = HashSet::new();
+    let mut is_initial_scan = true;
+
+    // Build the sample command once (includes port scan for this OS)
+    let sample_command = build_sample_command(&os_type);
+
+    debug!(
+        "Resource profiler started for connection {} (os_type={})",
+        connection_id, os_type
+    );
 
     // Open persistent shell channel
-    let mut shell_channel = match open_shell_channel(&controller).await {
+    let mut shell_channel = match open_shell_channel(&controller, &os_type).await {
         Ok(ch) => ch,
         Err(e) => {
             warn!(
@@ -259,7 +364,7 @@ async fn sampling_loop(
                 }
 
                 // Execute sampling command on persistent shell
-                match shell_sample(&mut shell_channel).await {
+                match shell_sample(&mut shell_channel, &sample_command).await {
                     Ok(output) => {
                         consecutive_failures = 0;
                         let metrics = parse_metrics(&output, &prev_sample);
@@ -275,6 +380,90 @@ async fn sampling_loop(
                         store_metrics(&latest, &history, &metrics);
                         emit_metrics(&app_handle, &connection_id, &metrics);
                         trace!("Profiler sample for {}: source={:?}", connection_id, metrics.source);
+
+                        // ── Port Detection ──
+                        // Skip port diff if sample was truncated (no ===END=== marker),
+                        // as partial output would produce false closed/new diffs.
+                        let sample_complete = output.contains("===END===");
+                        if !sample_complete {
+                            warn!("Profiler sample for {} was truncated, skipping port diff", connection_id);
+                        }
+
+                        if sample_complete {
+                        let current_ports = parse_listening_ports(&output, &os_type);
+                        let current_port_numbers: HashSet<u16> =
+                            current_ports.iter().map(|p| p.port).collect();
+
+                        if is_initial_scan {
+                            // P6: first scan is silent — establish baseline
+                            prev_ports = current_port_numbers;
+                            *detected_ports.write().unwrap() = current_ports;
+                            is_initial_scan = false;
+                            trace!("Port detection baseline for {}: {} ports", connection_id, prev_ports.len());
+                        } else {
+                            // Diff: find new and closed ports
+                            let new_port_numbers: Vec<u16> = current_port_numbers
+                                .difference(&prev_ports)
+                                .copied()
+                                .collect();
+                            let closed_port_numbers: Vec<u16> = prev_ports
+                                .difference(&current_port_numbers)
+                                .copied()
+                                .collect();
+
+                            if !new_port_numbers.is_empty() || !closed_port_numbers.is_empty() {
+                                // Filter out ignored ports and port 22 (SSH)
+                                let ignored = ignored_ports.read().unwrap();
+                                let new_ports: Vec<DetectedPort> = current_ports
+                                    .iter()
+                                    .filter(|p| {
+                                        new_port_numbers.contains(&p.port)
+                                            && p.port != 22
+                                            && !ignored.contains(&p.port)
+                                    })
+                                    .cloned()
+                                    .collect();
+                                let closed_ports: Vec<DetectedPort> = prev_ports
+                                    .iter()
+                                    .filter(|port| closed_port_numbers.contains(port))
+                                    .map(|&port| DetectedPort {
+                                        port,
+                                        bind_addr: String::new(),
+                                        process_name: None,
+                                        pid: None,
+                                    })
+                                    .collect();
+                                drop(ignored);
+
+                                // Only emit if there are actually visible new ports
+                                if !new_ports.is_empty() || !closed_ports.is_empty() {
+                                    let event = PortDetectionEvent {
+                                        connection_id: connection_id.clone(),
+                                        new_ports,
+                                        closed_ports,
+                                        all_ports: current_ports.clone(),
+                                    };
+                                    let event_name =
+                                        format!("port-detected:{}", connection_id);
+                                    if let Err(e) = app_handle.emit(&event_name, &event) {
+                                        warn!("Failed to emit port detection event: {}", e);
+                                    }
+                                    debug!(
+                                        "Port detection for {}: {} new, {} closed",
+                                        connection_id,
+                                        event.new_ports.len(),
+                                        event.closed_ports.len()
+                                    );
+                                }
+                            }
+
+                            // Always update snapshot: port numbers for diff baseline,
+                            // and full DetectedPort data for metadata freshness
+                            // (bind_addr / process_name / pid may change even if port set is stable)
+                            prev_ports = current_port_numbers;
+                            *detected_ports.write().unwrap() = current_ports;
+                        }
+                        } // end if sample_complete
                     }
                     Err(e) => {
                         consecutive_failures += 1;
@@ -284,7 +473,7 @@ async fn sampling_loop(
                         );
 
                         // Try to reopen the shell channel once
-                        if let Ok(new_ch) = open_shell_channel(&controller).await {
+                        if let Ok(new_ch) = open_shell_channel(&controller, &os_type).await {
                             shell_channel = new_ch;
                             debug!("Profiler reopened shell channel for {}", connection_id);
                         }
@@ -313,7 +502,10 @@ async fn sampling_loop(
 }
 
 /// Open a persistent shell channel for sampling
-async fn open_shell_channel(controller: &HandleController) -> Result<Channel<Msg>, String> {
+async fn open_shell_channel(
+    controller: &HandleController,
+    os_type: &str,
+) -> Result<Channel<Msg>, String> {
     let channel = timeout(CHANNEL_OPEN_TIMEOUT, controller.open_session_channel())
         .await
         .map_err(|_| "Timeout opening shell channel".to_string())?
@@ -325,8 +517,16 @@ async fn open_shell_channel(controller: &HandleController) -> Result<Channel<Msg
         .await
         .map_err(|e| format!("Failed to request shell: {}", e))?;
 
-    // Disable echo and prompt to get clean output
-    let init_cmd = "export PS1=''; export PS2=''; stty -echo 2>/dev/null; export LANG=C\n";
+    // Platform-specific init command:
+    // - Unix: disable echo/prompt via stty, set C locale
+    // - Windows: stty not available, but prompt should still be suppressed
+    let init_cmd = match os_type {
+        "Windows" | "windows" => {
+            // PowerShell / cmd.exe: set prompt to empty
+            "set PROMPT=\r\n"
+        }
+        _ => "export PS1=''; export PS2=''; stty -echo 2>/dev/null; export LANG=C\n",
+    };
     channel
         .data(init_cmd.as_bytes())
         .await
@@ -339,10 +539,10 @@ async fn open_shell_channel(controller: &HandleController) -> Result<Channel<Msg
 }
 
 /// Send the sampling command to the persistent shell and read output until ===END===
-async fn shell_sample(channel: &mut Channel<Msg>) -> Result<String, String> {
+async fn shell_sample(channel: &mut Channel<Msg>, command: &str) -> Result<String, String> {
     // Write command to stdin
     channel
-        .data(SAMPLE_COMMAND.as_bytes())
+        .data(command.as_bytes())
         .await
         .map_err(|e| format!("Failed to write to shell: {}", e))?;
 
@@ -353,15 +553,17 @@ async fn shell_sample(channel: &mut Channel<Msg>) -> Result<String, String> {
             match channel.wait().await {
                 Some(ChannelMsg::Data { data }) => {
                     stdout.extend_from_slice(&data);
-                    if stdout.len() > MAX_OUTPUT_SIZE {
-                        stdout.truncate(MAX_OUTPUT_SIZE);
-                        break;
-                    }
-                    // Check if we've received the end marker
+                    // Check if we've received the end marker (always preferred over truncation)
                     if let Ok(s) = std::str::from_utf8(&stdout) {
                         if s.contains("===END===") {
                             break;
                         }
+                    }
+                    // Safety cap: prevent unbounded memory growth
+                    if stdout.len() > MAX_OUTPUT_SIZE {
+                        warn!("Profiler output exceeded {}KB, truncating", MAX_OUTPUT_SIZE / 1024);
+                        stdout.truncate(MAX_OUTPUT_SIZE);
+                        break;
                     }
                 }
                 Some(ChannelMsg::ExtendedData { .. }) => {}
@@ -622,6 +824,380 @@ fn parse_nproc(output: &str) -> Option<u32> {
     section.lines().next()?.trim().parse().ok()
 }
 
+// ─── Port Detection Parsers ──────────────────────────────────────────────
+
+/// Parse listening ports from the ===PORTS=== section, dispatching by OS type.
+fn parse_listening_ports(output: &str, os_type: &str) -> Vec<DetectedPort> {
+    let section = match extract_section(output, "PORTS") {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+
+    // Strip the ===PORTS_END=== residual if present
+    let section = section
+        .strip_suffix("===PORTS_END===")
+        .unwrap_or(section)
+        .trim();
+
+    if section.is_empty() {
+        return Vec::new();
+    }
+
+    let mut ports = match os_type {
+        "Linux" | "linux" | "Windows_MinGW" | "Windows_MSYS" | "Windows_Cygwin" => {
+            parse_ports_ss(section)
+        }
+        "macOS" | "macos" | "Darwin" => parse_ports_lsof(section),
+        "Windows" | "windows" => parse_ports_powershell(section),
+        "FreeBSD" | "freebsd" | "OpenBSD" | "NetBSD" => parse_ports_sockstat(section),
+        _ => parse_ports_ss(section), // fallback
+    };
+
+    // Merge Docker-mapped ports (handles iptables DNAT where ss can't see them)
+    let docker_ports = parse_ports_docker(output);
+    if !docker_ports.is_empty() {
+        let mut seen: HashSet<u16> = ports.iter().map(|p| p.port).collect();
+        for dp in docker_ports {
+            if seen.insert(dp.port) {
+                ports.push(dp);
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse `ss -tlnp` or `netstat -tlnp` output.
+///
+/// `ss` output example:
+/// ```text
+/// LISTEN  0  128  0.0.0.0:8080  0.0.0.0:*  users:(("node",pid=1234,fd=3))
+/// LISTEN  0  128  [::]:3000     [::]:*     users:(("python3",pid=5678,fd=4))
+/// ```
+///
+/// `netstat -tlnp` output example:
+/// ```text
+/// tcp  0  0  0.0.0.0:22  0.0.0.0:*  LISTEN  1234/sshd
+/// ```
+fn parse_ports_ss(section: &str) -> Vec<DetectedPort> {
+    let mut ports = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        // Try ss format first: LISTEN 0 128 addr:port ...
+        if parts.len() >= 4 && parts[0].eq_ignore_ascii_case("listen") {
+            // addr:port is at index 3
+            if let Some(dp) = parse_addr_port(parts[3]) {
+                // Extract process info from users:(...) if present
+                let mut dp = dp;
+                if let Some(users_part) = parts.iter().find(|p| p.starts_with("users:")) {
+                    dp = extract_process_from_ss_users(users_part, dp);
+                }
+                if seen.insert(dp.port) {
+                    ports.push(dp);
+                }
+            }
+            continue;
+        }
+
+        // Try netstat format: tcp 0 0 addr:port addr:port LISTEN pid/name
+        if parts.len() >= 6 && parts.iter().any(|p| p.eq_ignore_ascii_case("listen")) {
+            // addr:port is at index 3
+            if let Some(mut dp) = parse_addr_port(parts[3]) {
+                // pid/name is the last column
+                if let Some(last) = parts.last() {
+                    if let Some((pid_str, name)) = last.split_once('/') {
+                        dp.pid = pid_str.parse().ok();
+                        dp.process_name = Some(name.to_string());
+                    }
+                }
+                if seen.insert(dp.port) {
+                    ports.push(dp);
+                }
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse `docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}'` output.
+///
+/// Docker Ports column examples:
+/// ```text
+/// 0.0.0.0:8080->80/tcp, :::8080->80/tcp
+/// 0.0.0.0:3306->3306/tcp
+/// 0.0.0.0:5432->5432/tcp, 0.0.0.0:5433->5433/tcp, :::5432->5432/tcp, :::5433->5433/tcp
+/// 80/tcp                      (exposed but not mapped - skip)
+/// ```
+fn parse_ports_docker(output: &str) -> Vec<DetectedPort> {
+    let section = match extract_section(output, "DOCKER") {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+
+    let section = section
+        .strip_suffix("===DOCKER_END===")
+        .unwrap_or(section)
+        .trim();
+
+    if section.is_empty() {
+        return Vec::new();
+    }
+
+    let mut ports = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Format: ID\tNAME\tPORTS
+        let tab_parts: Vec<&str> = line.splitn(3, '\t').collect();
+        if tab_parts.len() < 3 {
+            continue;
+        }
+
+        let container_name = tab_parts[1].trim();
+        let ports_field = tab_parts[2].trim();
+
+        if ports_field.is_empty() {
+            continue;
+        }
+
+        // Split by ", " — each segment is like "0.0.0.0:8080->80/tcp"
+        for segment in ports_field.split(", ") {
+            let segment = segment.trim();
+            // Must contain "->" to be a host-mapped port
+            if !segment.contains("->") {
+                continue;
+            }
+
+            // Split on "->" → left is host side ("0.0.0.0:8080"), right is container ("80/tcp")
+            if let Some((host_part, _container_part)) = segment.split_once("->") {
+                // Extract host port from host_part — last colon-separated value
+                if let Some(last_colon) = host_part.rfind(':') {
+                    let port_str = &host_part[last_colon + 1..];
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        if seen.insert(port) {
+                            let bind_addr = &host_part[..last_colon];
+                            let bind_addr = if bind_addr.is_empty() || bind_addr == "*" {
+                                "0.0.0.0".to_string()
+                            } else {
+                                bind_addr.to_string()
+                            };
+                            ports.push(DetectedPort {
+                                port,
+                                bind_addr,
+                                process_name: Some(format!("docker:{}", container_name)),
+                                pid: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse `lsof -iTCP -sTCP:LISTEN -nP` output (macOS).
+///
+/// Example:
+/// ```text
+/// node    1234  user   23u  IPv4  0x1234  0t0  TCP *:3000 (LISTEN)
+/// python3 5678  user   4u   IPv6  0x5678  0t0  TCP [::1]:8080 (LISTEN)
+/// ```
+fn parse_ports_lsof(section: &str) -> Vec<DetectedPort> {
+    let mut ports = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 9 {
+            continue;
+        }
+
+        let process_name = parts[0].to_string();
+        let pid: Option<u32> = parts[1].parse().ok();
+
+        // TCP field is typically at index 8: "*:3000" or "[::1]:8080"
+        let tcp_field = parts[8];
+        if let Some(dp) = parse_lsof_addr(tcp_field, Some(process_name), pid) {
+            if seen.insert(dp.port) {
+                ports.push(dp);
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse PowerShell `Get-NetTCPConnection` output (Windows).
+///
+/// Expected format (Format-Table -HideTableHeaders):
+/// ```text
+/// 0.0.0.0   8080  1234
+/// ::        3000  5678
+/// ```
+fn parse_ports_powershell(section: &str) -> Vec<DetectedPort> {
+    let mut ports = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let bind_addr = parts[0].to_string();
+        if let Ok(port) = parts[1].parse::<u16>() {
+            let pid = parts.get(2).and_then(|p| p.parse().ok());
+            if seen.insert(port) {
+                ports.push(DetectedPort {
+                    port,
+                    bind_addr,
+                    process_name: None,
+                    pid,
+                });
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse `sockstat` output (FreeBSD).
+///
+/// Example:
+/// ```text
+/// USER  COMMAND  PID  FD  PROTO  LOCAL ADDRESS  FOREIGN ADDRESS
+/// root  sshd     1234  3  tcp4   *:22           *:*
+/// ```
+fn parse_ports_sockstat(section: &str) -> Vec<DetectedPort> {
+    let mut ports = Vec::new();
+    let mut seen = HashSet::new();
+
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 6 {
+            continue;
+        }
+
+        let process_name = parts[1].to_string();
+        let pid: Option<u32> = parts[2].parse().ok();
+        // Local address at index 5: "*:22" or "127.0.0.1:8080"
+        let local_addr = parts[5];
+        if let Some(dp) = parse_addr_port(local_addr) {
+            let dp = DetectedPort {
+                process_name: Some(process_name),
+                pid,
+                ..dp
+            };
+            if seen.insert(dp.port) {
+                ports.push(dp);
+            }
+        }
+    }
+
+    ports
+}
+
+/// Parse "addr:port" format (handles IPv6 bracket notation).
+/// Examples: "0.0.0.0:8080", "[::]:3000", "*:22", ":::80"
+fn parse_addr_port(s: &str) -> Option<DetectedPort> {
+    // IPv6 with brackets: [::1]:8080
+    if let Some(bracket_end) = s.rfind("]:") {
+        let addr = &s[..bracket_end + 1];
+        let port_str = &s[bracket_end + 2..];
+        let port: u16 = port_str.parse().ok()?;
+        return Some(DetectedPort {
+            port,
+            bind_addr: addr.to_string(),
+            process_name: None,
+            pid: None,
+        });
+    }
+
+    // IPv6 without brackets (ss format): :::80 → addr="::", port=80
+    // Also handles *:port
+    if let Some(last_colon) = s.rfind(':') {
+        let port_str = &s[last_colon + 1..];
+        let addr = &s[..last_colon];
+        if let Ok(port) = port_str.parse::<u16>() {
+            let bind_addr = if addr.is_empty() || addr == "*" {
+                "0.0.0.0".to_string()
+            } else {
+                addr.to_string()
+            };
+            return Some(DetectedPort {
+                port,
+                bind_addr,
+                process_name: None,
+                pid: None,
+            });
+        }
+    }
+
+    None
+}
+
+/// Parse lsof TCP field: "*:3000", "[::1]:8080", "127.0.0.1:4000"
+fn parse_lsof_addr(
+    s: &str,
+    process_name: Option<String>,
+    pid: Option<u32>,
+) -> Option<DetectedPort> {
+    let mut dp = parse_addr_port(s)?;
+    dp.process_name = process_name;
+    dp.pid = pid;
+    Some(dp)
+}
+
+/// Extract process name and PID from ss `users:((...))` field.
+/// Format: `users:(("node",pid=1234,fd=3))`
+fn extract_process_from_ss_users(users_field: &str, mut dp: DetectedPort) -> DetectedPort {
+    // Find process name between quotes
+    if let Some(start) = users_field.find("((\"") {
+        let rest = &users_field[start + 3..];
+        if let Some(end) = rest.find('"') {
+            dp.process_name = Some(rest[..end].to_string());
+        }
+    }
+    // Find pid=NNNN
+    if let Some(start) = users_field.find("pid=") {
+        let rest = &users_field[start + 4..];
+        let pid_str: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        dp.pid = pid_str.parse().ok();
+    }
+    dp
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 fn now_ms() -> u64 {
@@ -765,5 +1341,227 @@ Inter-|   Receive                                                |  Transmit
     fn test_empty_output() {
         let metrics = parse_metrics("", &None);
         assert_eq!(metrics.source, MetricsSource::RttOnly);
+    }
+
+    // ─── Port Detection Tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_ports_ss() {
+        let section = r#"LISTEN  0  128  0.0.0.0:8080  0.0.0.0:*  users:(("node",pid=1234,fd=3))
+LISTEN  0  128  [::]:3000  [::]:*  users:(("python3",pid=5678,fd=4))
+LISTEN  0  128  127.0.0.1:5432  0.0.0.0:*  users:(("postgres",pid=999,fd=5))"#;
+        let ports = parse_ports_ss(section);
+        assert_eq!(ports.len(), 3);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[0].bind_addr, "0.0.0.0");
+        assert_eq!(ports[0].process_name.as_deref(), Some("node"));
+        assert_eq!(ports[0].pid, Some(1234));
+        assert_eq!(ports[1].port, 3000);
+        assert_eq!(ports[1].process_name.as_deref(), Some("python3"));
+        assert_eq!(ports[2].port, 5432);
+        assert_eq!(ports[2].bind_addr, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_parse_ports_netstat() {
+        let section = r#"tcp  0  0  0.0.0.0:22  0.0.0.0:*  LISTEN  1234/sshd
+tcp  0  0  0.0.0.0:80  0.0.0.0:*  LISTEN  5678/nginx"#;
+        let ports = parse_ports_ss(section); // ss parser also handles netstat
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 22);
+        assert_eq!(ports[0].process_name.as_deref(), Some("sshd"));
+        assert_eq!(ports[0].pid, Some(1234));
+        assert_eq!(ports[1].port, 80);
+        assert_eq!(ports[1].process_name.as_deref(), Some("nginx"));
+    }
+
+    #[test]
+    fn test_parse_ports_lsof() {
+        let section = r#"node    1234  user   23u  IPv4  0x1234  0t0  TCP *:3000 (LISTEN)
+python3 5678  user   4u   IPv6  0x5678  0t0  TCP [::1]:8080 (LISTEN)"#;
+        let ports = parse_ports_lsof(section);
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 3000);
+        assert_eq!(ports[0].process_name.as_deref(), Some("node"));
+        assert_eq!(ports[0].pid, Some(1234));
+        assert_eq!(ports[1].port, 8080);
+        assert_eq!(ports[1].process_name.as_deref(), Some("python3"));
+    }
+
+    #[test]
+    fn test_parse_ports_powershell() {
+        let section = r#"0.0.0.0   8080  1234
+::        3000  5678
+127.0.0.1 5432  999"#;
+        let ports = parse_ports_powershell(section);
+        assert_eq!(ports.len(), 3);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[0].bind_addr, "0.0.0.0");
+        assert_eq!(ports[0].pid, Some(1234));
+        assert_eq!(ports[1].port, 3000);
+        assert_eq!(ports[1].bind_addr, "::");
+        assert_eq!(ports[2].port, 5432);
+    }
+
+    #[test]
+    fn test_parse_ports_sockstat() {
+        let section = r#"root  sshd   1234  3  tcp4  *:22            *:*
+www   nginx  5678  4  tcp4  *:80            *:*"#;
+        let ports = parse_ports_sockstat(section);
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 22);
+        assert_eq!(ports[0].process_name.as_deref(), Some("sshd"));
+        assert_eq!(ports[0].pid, Some(1234));
+        assert_eq!(ports[1].port, 80);
+        assert_eq!(ports[1].process_name.as_deref(), Some("nginx"));
+    }
+
+    #[test]
+    fn test_parse_addr_port_ipv4() {
+        let dp = parse_addr_port("0.0.0.0:8080").unwrap();
+        assert_eq!(dp.port, 8080);
+        assert_eq!(dp.bind_addr, "0.0.0.0");
+    }
+
+    #[test]
+    fn test_parse_addr_port_ipv6_brackets() {
+        let dp = parse_addr_port("[::]:3000").unwrap();
+        assert_eq!(dp.port, 3000);
+        assert_eq!(dp.bind_addr, "[::]");
+    }
+
+    #[test]
+    fn test_parse_addr_port_wildcard() {
+        let dp = parse_addr_port("*:22").unwrap();
+        assert_eq!(dp.port, 22);
+        assert_eq!(dp.bind_addr, "0.0.0.0");
+    }
+
+    #[test]
+    fn test_parse_addr_port_ipv6_no_brackets() {
+        let dp = parse_addr_port(":::80").unwrap();
+        assert_eq!(dp.port, 80);
+        assert_eq!(dp.bind_addr, "::");
+    }
+
+    #[test]
+    fn test_parse_listening_ports_full_output() {
+        // Simulate full output with metrics + ports section
+        let output = r#"===STAT===
+cpu  10132153 290696 3084719 46828483 16683 0 25195 0 0 0
+===MEMINFO===
+MemTotal:       16384000 kB
+MemAvailable:    8192000 kB
+===LOADAVG===
+0.52 0.58 0.59 2/345 12345
+===NETDEV===
+Inter-|   Receive                                                |  Transmit
+    lo: 1234567     890    0    0    0     0          0         0  1234567     890    0    0    0     0       0          0
+  eth0: 987654321  12345    0    0    0     0          0         0 123456789   6789    0    0    0     0       0          0
+===NPROC===
+4
+===PORTS===
+LISTEN  0  128  0.0.0.0:8080  0.0.0.0:*  users:(("node",pid=1234,fd=3))
+LISTEN  0  128  0.0.0.0:22  0.0.0.0:*  users:(("sshd",pid=1,fd=5))
+===PORTS_END===
+===END==="#;
+
+        let ports = parse_listening_ports(output, "Linux");
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[1].port, 22);
+
+        // Metrics parsing should still work
+        let metrics = parse_metrics(output, &None);
+        assert!(metrics.memory_used.is_some());
+        assert!(metrics.load_avg_1.is_some());
+    }
+
+    #[test]
+    fn test_dedup_ports() {
+        let section = r#"LISTEN  0  128  0.0.0.0:8080  0.0.0.0:*
+LISTEN  0  128  [::]:8080  [::]:*"#;
+        let ports = parse_ports_ss(section);
+        // Same port 8080 on IPv4 and IPv6 — should deduplicate
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 8080);
+    }
+
+    #[test]
+    fn test_parse_ports_docker() {
+        let output = r#"===DOCKER===
+abc123	my-nginx	0.0.0.0:8080->80/tcp, :::8080->80/tcp
+def456	my-postgres	0.0.0.0:5432->5432/tcp
+===DOCKER_END==="#;
+        let ports = parse_ports_docker(output);
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[0].bind_addr, "0.0.0.0");
+        assert_eq!(ports[0].process_name.as_deref(), Some("docker:my-nginx"));
+        assert_eq!(ports[1].port, 5432);
+        assert_eq!(ports[1].process_name.as_deref(), Some("docker:my-postgres"));
+    }
+
+    #[test]
+    fn test_parse_ports_docker_multi_mapping() {
+        let output = r#"===DOCKER===
+aaa111	redis	0.0.0.0:6379->6379/tcp, :::6379->6379/tcp
+bbb222	web-app	0.0.0.0:3000->3000/tcp, 0.0.0.0:3001->3001/tcp
+ccc333	exposed-only	80/tcp
+===DOCKER_END==="#;
+        let ports = parse_ports_docker(output);
+        assert_eq!(ports.len(), 3);
+        assert_eq!(ports[0].port, 6379);
+        assert_eq!(ports[1].port, 3000);
+        assert_eq!(ports[2].port, 3001);
+    }
+
+    #[test]
+    fn test_parse_ports_docker_empty() {
+        let output = "===DOCKER===\n===DOCKER_END===";
+        let ports = parse_ports_docker(output);
+        assert_eq!(ports.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_ports_docker_no_section() {
+        let output = "===PORTS===\nLISTEN 0 128 0.0.0.0:22 0.0.0.0:*\n===PORTS_END===";
+        let ports = parse_ports_docker(output);
+        assert_eq!(ports.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_listening_ports_with_docker_merge() {
+        // ss shows port 22, Docker adds port 8080 (not visible via ss/iptables DNAT)
+        let output = r#"===PORTS===
+LISTEN  0  128  0.0.0.0:22  0.0.0.0:*  users:(("sshd",pid=1,fd=5))
+===PORTS_END===
+===DOCKER===
+abc123	my-app	0.0.0.0:8080->80/tcp
+===DOCKER_END===
+===END==="#;
+        let ports = parse_listening_ports(output, "Linux");
+        assert_eq!(ports.len(), 2);
+        assert_eq!(ports[0].port, 22);
+        assert_eq!(ports[0].process_name.as_deref(), Some("sshd"));
+        assert_eq!(ports[1].port, 8080);
+        assert_eq!(ports[1].process_name.as_deref(), Some("docker:my-app"));
+    }
+
+    #[test]
+    fn test_parse_listening_ports_docker_dedup_with_ss() {
+        // Both ss and docker report port 8080 — should not duplicate
+        let output = r#"===PORTS===
+LISTEN  0  128  0.0.0.0:8080  0.0.0.0:*  users:(("docker-proxy",pid=999,fd=3))
+===PORTS_END===
+===DOCKER===
+abc123	my-app	0.0.0.0:8080->80/tcp
+===DOCKER_END===
+===END==="#;
+        let ports = parse_listening_ports(output, "Linux");
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 8080);
+        // ss result takes precedence (first seen)
+        assert_eq!(ports[0].process_name.as_deref(), Some("docker-proxy"));
     }
 }

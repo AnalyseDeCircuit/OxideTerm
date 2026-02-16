@@ -74,6 +74,20 @@
       "error_title": "Error de reenvío",
       "session_suspended_title": "Sesión desconectada",
       "session_suspended_desc": "{{count}} reenvíos suspendidos. Se recuperarán automáticamente al reconectar."
+    },
+    "detection": {
+      "detected": "Puerto detectado",
+      "port": "Puerto",
+      "forward": "Reenviar",
+      "auto": "detección automática",
+      "forwarded": "Puerto reenviado",
+      "forwardError": "Error al reenviar el puerto",
+      "remotePorts": "Puertos remotos en escucha",
+      "bindAddr": "Dirección de enlace",
+      "process": "Proceso",
+      "action": "Acción",
+      "noPorts": "Aún no se han detectado puertos en escucha",
+      "alreadyForwarded": "Reenviado"
     }
   }
 }

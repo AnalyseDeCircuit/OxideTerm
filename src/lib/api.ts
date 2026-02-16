@@ -33,6 +33,8 @@ import {
   AcceptHostKeyRequest,
   // Resource profiler types
   ResourceMetrics,
+  // Smart port detection types
+  DetectedPort,
   // Remote environment detection
   RemoteEnvInfo,
   // Oxide-Next Node State types
@@ -667,6 +669,17 @@ export const api = {
   getResourceHistory: async (connectionId: string): Promise<ResourceMetrics[]> => {
     if (USE_MOCK) return [];
     return invoke('get_resource_history', { connectionId });
+  },
+
+  // ============ Smart Port Detection ============
+  getDetectedPorts: async (connectionId: string): Promise<DetectedPort[]> => {
+    if (USE_MOCK) return [];
+    return invoke('get_detected_ports', { connectionId });
+  },
+
+  ignoreDetectedPort: async (connectionId: string, port: number): Promise<void> => {
+    if (USE_MOCK) return;
+    return invoke('ignore_detected_port', { connectionId, port });
   },
 
   // ============ Network & Reconnect ============

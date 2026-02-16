@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, Pencil, Activity, X, Loader2 } from 'lucide-react';
+import { Play, Square, RefreshCcw, Plus, Trash2, ArrowRight, Pencil, Activity, X, Loader2, Radio } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { Input } from '../ui/input';
@@ -14,6 +14,9 @@ import { useToast } from '../../hooks/useToast';
 import { useForwardEvents, ForwardStatus as EventForwardStatus } from '../../hooks/useForwardEvents';
 import { useNodeState } from '../../hooks/useNodeState';
 import { useTabBgActive } from '../../hooks/useTabBackground';
+import { usePortDetection } from '../../hooks/usePortDetection';
+import { PortDetectionBanner } from './PortDetectionBanner';
+import { topologyResolver } from '../../lib/topologyResolver';
 
 // Type guard for ForwardType using const type parameter (TS 5.0+)
 const FORWARD_TYPES = ['local', 'remote', 'dynamic'] as const;
@@ -41,6 +44,11 @@ export const ForwardsView = ({ nodeId }: { nodeId: string }) => {
   const { state: nodeState } = useNodeState(nodeId);
   // State Gating: only allow IO when node is ready
   const nodeReady = nodeState.readiness === 'ready';
+
+  // Smart port detection: resolve nodeId → connectionId for profiler events
+  const connectionId = topologyResolver.getConnectionId(nodeId);
+  const { newPorts, allPorts, dismissPort } = usePortDetection(connectionId);
+
   const [forwards, setForwards] = useState<ForwardRule[]>([]);
   const [forwardStats, setForwardStats] = useState<Record<string, ForwardStats>>({});
   const [loading, setLoading] = useState(false);
@@ -63,6 +71,19 @@ export const ForwardsView = ({ nodeId }: { nodeId: string }) => {
   const [editTargetHost, setEditTargetHost] = useState('localhost');
   const [editTargetPort, setEditTargetPort] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Compute which remote ports are already forwarded (for "already forwarded" badge)
+  const forwardedPorts = useMemo(() => {
+    const set = new Set<number>();
+    for (const fw of forwards) {
+      if (fw.status === 'active' || fw.status === 'starting') {
+        if (fw.forward_type === 'local') {
+          set.add(fw.target_port);
+        }
+      }
+    }
+    return set;
+  }, [forwards]);
 
   const fetchForwards = useCallback(async () => {
     // State Gating: skip fetch when node is not ready (checked by caller too)
@@ -217,6 +238,16 @@ export const ForwardsView = ({ nodeId }: { nodeId: string }) => {
     <div className={`h-full w-full p-4 overflow-y-auto ${bgActive ? '' : 'bg-theme-bg'}`} data-bg-active={bgActive || undefined}>
       <div className="max-w-4xl mx-auto space-y-6">
         
+        {/* Smart Port Detection Banner */}
+        {nodeReady && newPorts.length > 0 && (
+          <PortDetectionBanner
+            newPorts={newPorts}
+            nodeId={nodeId}
+            onDismiss={dismissPort}
+            onForwardCreated={fetchForwards}
+          />
+        )}
+
         {/* Quick Actions */}
         <div className="space-y-2">
            <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">{t('forwards.quick.title')}</h3>
@@ -595,6 +626,98 @@ export const ForwardsView = ({ nodeId }: { nodeId: string }) => {
                 </div>
             </div>
         )}
+
+        <Separator />
+
+        {/* Remote Listening Ports */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Radio className="h-4 w-4 text-emerald-400" />
+            <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wide">{t('forwards.detection.remotePorts')}</h3>
+            {allPorts.length > 0 && (
+              <span className="text-xs text-zinc-500">({allPorts.filter(p => p.port !== 22).length})</span>
+            )}
+          </div>
+
+          <div className="border border-theme-border rounded-sm overflow-hidden bg-theme-bg-panel/50">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-theme-bg-panel text-zinc-500 border-b border-theme-border">
+                <tr>
+                  <th className="px-4 py-2 font-medium">{t('forwards.detection.port')}</th>
+                  <th className="px-4 py-2 font-medium">{t('forwards.detection.bindAddr')}</th>
+                  <th className="px-4 py-2 font-medium">{t('forwards.detection.process')}</th>
+                  <th className="px-4 py-2 font-medium text-right">{t('forwards.detection.action')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-oxide-border bg-zinc-950/50">
+                {allPorts.filter(p => p.port !== 22).length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-zinc-500 text-xs">
+                      {t('forwards.detection.noPorts')}
+                    </td>
+                  </tr>
+                ) : (
+                  allPorts.filter(p => p.port !== 22).map(p => (
+                    <tr key={p.port} className="group hover:bg-zinc-900 transition-colors">
+                      <td className="px-4 py-2">
+                        <span className="font-mono text-emerald-400 font-medium">{p.port}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="font-mono text-zinc-400 text-xs">{p.bind_addr || '0.0.0.0'}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="text-zinc-400 text-xs">
+                          {p.process_name || '—'}
+                          {p.pid ? <span className="text-zinc-600 ml-1">({p.pid})</span> : null}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {forwardedPorts.has(p.port) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-900/30 text-emerald-400 border border-emerald-800/40">
+                            <Activity className="h-3 w-3" />
+                            {t('forwards.detection.alreadyForwarded')}
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-xs gap-1 text-zinc-400 hover:text-emerald-400"
+                            onClick={async () => {
+                              try {
+                                await api.nodeCreateForward({
+                                  node_id: nodeId,
+                                  forward_type: 'local',
+                                  bind_address: 'localhost',
+                                  bind_port: p.port,
+                                  target_host: 'localhost',
+                                  target_port: p.port,
+                                });
+                                fetchForwards();
+                                toast({
+                                  title: t('forwards.detection.forwarded'),
+                                  description: `localhost:${p.port}`,
+                                });
+                              } catch {
+                                toast({
+                                  title: t('forwards.detection.forwardError'),
+                                  description: `Port ${p.port}`,
+                                  variant: 'error',
+                                });
+                              }
+                            }}
+                          >
+                            <Play className="h-3 w-3" />
+                            {t('forwards.detection.forward')}
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

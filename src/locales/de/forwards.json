@@ -74,6 +74,20 @@
       "error_title": "Weiterleitungsfehler",
       "session_suspended_title": "Sitzung getrennt",
       "session_suspended_desc": "{{count}} Weiterleitungen pausiert. Werden bei Wiederverbindung automatisch wiederhergestellt."
+    },
+    "detection": {
+      "detected": "Port erkannt",
+      "port": "Port",
+      "forward": "Weiterleiten",
+      "auto": "automatisch erkannt",
+      "forwarded": "Port weitergeleitet",
+      "forwardError": "Port-Weiterleitung fehlgeschlagen",
+      "remotePorts": "Remote-Listening-Ports",
+      "bindAddr": "Bind-Adresse",
+      "process": "Prozess",
+      "action": "Aktion",
+      "noPorts": "Noch keine Listening-Ports erkannt",
+      "alreadyForwarded": "Weitergeleitet"
     }
   }
 }

@@ -1,6 +1,7 @@
 //! Health Check & Resource Profiler Tauri Commands
 //!
 //! Provides commands for monitoring connection health and remote resource metrics.
+//! Also includes smart port detection commands (detected_ports, ignore_port).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use dashmap::DashMap;
 use tauri::State;
 
 use crate::session::health::ResourceMetrics;
-use crate::session::profiler::{ProfilerState, ResourceProfiler};
+use crate::session::profiler::{DetectedPort, ProfilerState, ResourceProfiler};
 use crate::session::{HealthMetrics, HealthStatus, HealthTracker, QuickHealthCheck};
 use crate::ssh::SshConnectionRegistry;
 
@@ -257,7 +258,15 @@ pub async fn start_resource_profiler(
         .get_handle_controller(&connection_id)
         .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
 
-    let profiler = ResourceProfiler::spawn(connection_id.clone(), controller, app_handle);
+    // Fetch remote OS type for platform-dispatched port detection commands
+    let os_type = connection_registry
+        .get_connection(&connection_id)
+        .and_then(|entry| entry.remote_env())
+        .map(|env| env.os_type)
+        .unwrap_or_else(|| "Linux".to_string());
+
+    let profiler =
+        ResourceProfiler::spawn(connection_id.clone(), controller, app_handle, os_type);
     profiler_registry.profilers.insert(connection_id, profiler);
 
     Ok(())
@@ -302,6 +311,36 @@ pub async fn get_resource_history(
     } else {
         Ok(Vec::new())
     }
+}
+
+// ─── Smart Port Detection Commands ───────────────────────────────────────
+
+/// Get the currently detected listening ports for a connection.
+/// Returns the latest snapshot from the profiler's port scanner.
+#[tauri::command]
+pub async fn get_detected_ports(
+    connection_id: String,
+    profiler_registry: State<'_, ProfilerRegistry>,
+) -> Result<Vec<DetectedPort>, String> {
+    if let Some(entry) = profiler_registry.profilers.get(&connection_id) {
+        Ok(entry.detected_ports())
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+/// Ignore a port so it won't trigger notifications again (until profiler restart).
+/// Used when the user dismisses a port detection notification.
+#[tauri::command]
+pub async fn ignore_detected_port(
+    connection_id: String,
+    port: u16,
+    profiler_registry: State<'_, ProfilerRegistry>,
+) -> Result<(), String> {
+    if let Some(entry) = profiler_registry.profilers.get(&connection_id) {
+        entry.ignore_port(port);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

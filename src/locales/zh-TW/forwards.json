@@ -74,6 +74,20 @@
       "error_title": "轉發錯誤",
       "session_suspended_title": "工作階段已中斷",
       "session_suspended_desc": "{{count}} 個轉發已暫停。重新連線後將自動恢復。"
+    },
+    "detection": {
+      "detected": "偵測到連接埠",
+      "port": "連接埠",
+      "forward": "轉發",
+      "auto": "自動偵測",
+      "forwarded": "連接埠已轉發",
+      "forwardError": "連接埠轉發失敗",
+      "remotePorts": "遠端監聽連接埠",
+      "bindAddr": "綁定地址",
+      "process": "程序",
+      "action": "操作",
+      "noPorts": "尚未偵測到監聽連接埠",
+      "alreadyForwarded": "已轉發"
     }
   }
 }

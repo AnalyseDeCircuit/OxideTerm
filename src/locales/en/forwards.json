@@ -74,6 +74,20 @@
       "error_title": "Forward Error",
       "session_suspended_title": "Session Disconnected",
       "session_suspended_desc": "{{count}} forwards suspended. Will auto-recover on reconnect."
+    },
+    "detection": {
+      "detected": "Detected port",
+      "port": "Port",
+      "forward": "Forward",
+      "auto": "auto-detected",
+      "forwarded": "Port forwarded",
+      "forwardError": "Failed to forward port",
+      "remotePorts": "Remote Listening Ports",
+      "bindAddr": "Bind Address",
+      "process": "Process",
+      "action": "Action",
+      "noPorts": "No listening ports detected yet",
+      "alreadyForwarded": "Forwarded"
     }
   }
 }

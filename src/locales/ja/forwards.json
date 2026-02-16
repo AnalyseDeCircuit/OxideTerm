@@ -74,6 +74,20 @@
       "error_title": "転送エラー",
       "session_suspended_title": "セッション切断",
       "session_suspended_desc": "{{count}}個の転送が中断されました。再接続時に自動復旧します。"
+    },
+    "detection": {
+      "detected": "ポートを検出",
+      "port": "ポート",
+      "forward": "転送",
+      "auto": "自動検出",
+      "forwarded": "ポートを転送しました",
+      "forwardError": "ポートの転送に失敗しました",
+      "remotePorts": "リモートリスニングポート",
+      "bindAddr": "バインドアドレス",
+      "process": "プロセス",
+      "action": "操作",
+      "noPorts": "リスニングポートはまだ検出されていません",
+      "alreadyForwarded": "転送済み"
     }
   }
 }

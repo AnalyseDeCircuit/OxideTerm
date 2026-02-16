@@ -74,6 +74,20 @@
       "error_title": "Erreur de transfert",
       "session_suspended_title": "Session déconnectée",
       "session_suspended_desc": "{{count}} transferts suspendus. Récupération automatique à la reconnexion."
+    },
+    "detection": {
+      "detected": "Port détecté",
+      "port": "Port",
+      "forward": "Transférer",
+      "auto": "détection auto",
+      "forwarded": "Port transféré",
+      "forwardError": "Échec du transfert de port",
+      "remotePorts": "Ports d'écoute distants",
+      "bindAddr": "Adresse de liaison",
+      "process": "Processus",
+      "action": "Action",
+      "noPorts": "Aucun port d'écoute détecté",
+      "alreadyForwarded": "Transféré"
     }
   }
 }

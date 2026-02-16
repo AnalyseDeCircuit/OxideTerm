@@ -74,6 +74,20 @@
       "error_title": "Erro no encaminhamento",
       "session_suspended_title": "Sessão desconectada",
       "session_suspended_desc": "{{count}} encaminhamentos suspensos. Serão recuperados automaticamente ao reconectar."
+    },
+    "detection": {
+      "detected": "Porta detectada",
+      "port": "Porta",
+      "forward": "Encaminhar",
+      "auto": "detecção automática",
+      "forwarded": "Porta encaminhada",
+      "forwardError": "Falha ao encaminhar a porta",
+      "remotePorts": "Portas remotas em escuta",
+      "bindAddr": "Endereço de ligação",
+      "process": "Processo",
+      "action": "Ação",
+      "noPorts": "Nenhuma porta em escuta detectada ainda",
+      "alreadyForwarded": "Encaminhada"
     }
   }
 }

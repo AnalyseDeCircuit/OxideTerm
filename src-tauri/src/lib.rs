@@ -548,6 +548,9 @@ pub fn run() {
         commands::stop_resource_profiler,
         commands::get_resource_metrics,
         commands::get_resource_history,
+        // Smart port detection commands
+        commands::get_detected_ports,
+        commands::ignore_detected_port,
         // IDE mode commands
         commands::ide_open_project,
         commands::ide_check_file,
@@ -790,6 +793,9 @@ pub fn run() {
         commands::stop_resource_profiler,
         commands::get_resource_metrics,
         commands::get_resource_history,
+        // Smart port detection commands
+        commands::get_detected_ports,
+        commands::ignore_detected_port,
         // IDE mode commands
         commands::ide_open_project,
         commands::ide_check_file,

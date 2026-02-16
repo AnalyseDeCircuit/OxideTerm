@@ -675,6 +675,21 @@ export interface ForwardResponse {
   error?: string;
 }
 
+// Smart Port Detection Types
+export interface DetectedPort {
+  port: number;
+  bind_addr: string;
+  process_name?: string;
+  pid?: number;
+}
+
+export interface PortDetectionEvent {
+  connection_id: string;
+  new_ports: DetectedPort[];
+  closed_ports: DetectedPort[];
+  all_ports: DetectedPort[];
+}
+
 // Session Stats
 export interface SessionStats {
   total: number;

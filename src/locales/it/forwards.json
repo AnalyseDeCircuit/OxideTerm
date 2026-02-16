@@ -74,6 +74,20 @@
       "error_title": "Errore inoltro",
       "session_suspended_title": "Sessione disconnessa",
       "session_suspended_desc": "{{count}} inoltri sospesi. Verranno ripristinati automaticamente alla riconnessione."
+    },
+    "detection": {
+      "detected": "Porta rilevata",
+      "port": "Porta",
+      "forward": "Inoltra",
+      "auto": "rilevamento automatico",
+      "forwarded": "Porta inoltrata",
+      "forwardError": "Inoltro della porta non riuscito",
+      "remotePorts": "Porte remote in ascolto",
+      "bindAddr": "Indirizzo di binding",
+      "process": "Processo",
+      "action": "Azione",
+      "noPorts": "Nessuna porta in ascolto rilevata",
+      "alreadyForwarded": "Inoltrata"
     }
   }
 }

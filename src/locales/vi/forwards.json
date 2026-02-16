@@ -74,6 +74,20 @@
       "error_title": "Lỗi chuyển tiếp",
       "session_suspended_title": "Phiên đã ngắt kết nối",
       "session_suspended_desc": "{{count}} chuyển tiếp bị tạm dừng. Sẽ tự động khôi phục khi kết nối lại."
+    },
+    "detection": {
+      "detected": "Phát hiện cổng",
+      "port": "Cổng",
+      "forward": "Chuyển tiếp",
+      "auto": "tự động phát hiện",
+      "forwarded": "Đã chuyển tiếp cổng",
+      "forwardError": "Chuyển tiếp cổng thất bại",
+      "remotePorts": "Cổng lắng nghe từ xa",
+      "bindAddr": "Địa chỉ liên kết",
+      "process": "Tiến trình",
+      "action": "Thao tác",
+      "noPorts": "Chưa phát hiện cổng lắng nghe nào",
+      "alreadyForwarded": "Đã chuyển tiếp"
     }
   }
 }
