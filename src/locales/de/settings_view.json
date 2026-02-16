@@ -34,6 +34,7 @@
       "general": "Allgemein",
       "terminal": "Terminal",
       "sftp": "SFTP-Übertragung",
+      "ide": "IDE",
       "appearance": "Erscheinungsbild",
       "connections": "Verbindungen",
       "ssh": "SSH-Schlüssel",
@@ -283,6 +284,12 @@
       "conflict_rename": "Beide behalten (umbenennen)",
       "transfer_count_one": "{{count}} Übertragung",
       "transfer_count_other": "{{count}} Übertragungen"
+    },
+    "ide": {
+      "title": "IDE-Modus",
+      "description": "Verhalten des integrierten Code-Editors konfigurieren.",
+      "auto_save": "Automatisches Speichern",
+      "auto_save_hint": "Dateien beim Tab-Wechsel oder bei Fokusverlust automatisch speichern."
     },
     "ai_confirm": {
       "title": "KI-Funktionen aktivieren?",

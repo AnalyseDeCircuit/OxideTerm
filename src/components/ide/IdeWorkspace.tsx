@@ -1,9 +1,10 @@
 // src/components/ide/IdeWorkspace.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
 import { useTabBgActive } from '../../hooks/useTabBackground';
+import { useNodeState } from '../../hooks/useNodeState';
 import { IdeTree } from './IdeTree';
 import { IdeEditorArea } from './IdeEditorArea';
 import { IdeTerminal } from './IdeTerminal';
@@ -19,6 +20,8 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
   const { t } = useTranslation();
   const bgActive = useTabBgActive('ide');
   const project = useIdeProject();
+  const { state: nodeState } = useNodeState(nodeId);
+  const isDisconnected = nodeState.readiness !== 'ready' && nodeState.readiness !== 'connecting';
 
   const { 
     openProject, 
@@ -109,7 +112,18 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
   }
   
   return (
-    <div className={`flex flex-col h-full ${bgActive ? '' : 'bg-theme-bg'}`} data-bg-active={bgActive || undefined}>
+    <div className={`flex flex-col h-full ${bgActive ? '' : 'bg-theme-bg'} relative`} data-bg-active={bgActive || undefined}>
+      {/* 断线遮罩 */}
+      {isDisconnected && project && (
+        <div className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-auto">
+          <WifiOff className="w-10 h-10 text-amber-400" />
+          <span className="text-sm text-theme-text-muted">
+            {t('ide.disconnected_overlay', 'Connection lost. Waiting for reconnect…')}
+          </span>
+          <Loader2 className="w-5 h-5 animate-spin text-theme-accent" />
+        </div>
+      )}
+      
       {/* 主工作区 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 搜索面板（最左侧，可选） */}

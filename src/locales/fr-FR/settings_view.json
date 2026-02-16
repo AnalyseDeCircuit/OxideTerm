@@ -34,6 +34,7 @@
       "general": "Général",
       "terminal": "Terminal",
       "sftp": "Transfert SFTP",
+      "ide": "IDE",
       "appearance": "Apparence",
       "connections": "Connexions",
       "ssh": "Clés SSH",
@@ -283,6 +284,12 @@
       "conflict_rename": "Garder les deux (renommer)",
       "transfer_count_one": "{{count}} transfert",
       "transfer_count_other": "{{count}} transferts"
+    },
+    "ide": {
+      "title": "Mode IDE",
+      "description": "Configurer le comportement de l'éditeur de code intégré.",
+      "auto_save": "Sauvegarde automatique",
+      "auto_save_hint": "Sauvegarder automatiquement les fichiers lors du changement d'onglet ou de la perte du focus."
     },
     "ai_confirm": {
       "title": "Activer les fonctionnalités IA ?",

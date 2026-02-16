@@ -34,6 +34,7 @@
       "general": "一般",
       "terminal": "ターミナル",
       "sftp": "SFTP転送",
+      "ide": "IDE",
       "appearance": "外観",
       "connections": "接続",
       "ssh": "SSHキー",
@@ -283,6 +284,12 @@
       "conflict_rename": "両方を保持（名前変更）",
       "transfer_count_one": "{{count}} 転送",
       "transfer_count_other": "{{count}} 転送"
+    },
+    "ide": {
+      "title": "IDE モード",
+      "description": "内蔵コードエディタの動作を設定します。",
+      "auto_save": "自動保存",
+      "auto_save_hint": "タブの切り替え時やフォーカスを失った時にファイルを自動保存します。"
     },
     "ai_confirm": {
       "title": "AI機能を有効にしますか？",

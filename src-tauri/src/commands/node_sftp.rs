@@ -190,7 +190,7 @@ pub async fn node_sftp_write(
     let encoded_bytes = crate::sftp::types::encode_to_encoding(&content, target_encoding);
 
     // 写入
-    sftp.write_content(&path, &encoded_bytes)
+    let write_result = sftp.write_content(&path, &encoded_bytes)
         .await
         .map_err(RouteError::from)?;
 
@@ -198,8 +198,8 @@ pub async fn node_sftp_write(
     let file_info = sftp.stat(&path).await.map_err(RouteError::from)?;
 
     info!(
-        "node_sftp_write: wrote {} bytes to {} (encoding: {})",
-        file_info.size, path, target_encoding
+        "node_sftp_write: wrote {} bytes to {} (encoding: {}, atomic: {})",
+        file_info.size, path, target_encoding, write_result.atomic_write
     );
 
     Ok(NodeWriteResult {
@@ -210,6 +210,7 @@ pub async fn node_sftp_write(
         },
         size: Some(file_info.size),
         encoding_used: target_encoding.to_string(),
+        atomic_write: write_result.atomic_write,
     })
 }
 
@@ -358,6 +359,9 @@ pub struct NodeWriteResult {
     pub mtime: Option<u64>,
     pub size: Option<u64>,
     pub encoding_used: String,
+    /// Whether atomic write (swap-file + rename) was used.
+    /// `false` means the write fell back to direct overwrite.
+    pub atomic_write: bool,
 }
 
 // ============================================================================

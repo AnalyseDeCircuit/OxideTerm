@@ -188,6 +188,10 @@ export interface SftpSettings {
   conflictAction: 'ask' | 'overwrite' | 'skip' | 'rename';  // Default conflict resolution
 }
 
+export interface IdeSettings {
+  autoSave: boolean;  // Auto-save dirty tabs on tab switch / window blur
+}
+
 /** Complete settings structure */
 export interface PersistedSettingsV2 {
   version: 2;
@@ -201,6 +205,7 @@ export interface PersistedSettingsV2 {
   ai: AiSettings;
   localTerminal?: LocalTerminalSettings;
   sftp?: SftpSettings;
+  ide?: IdeSettings;
   experimental?: ExperimentalSettings;
 }
 
@@ -308,6 +313,10 @@ const defaultSftpSettings: SftpSettings = {
   conflictAction: 'ask',
 };
 
+const defaultIdeSettings: IdeSettings = {
+  autoSave: false,
+};
+
 function createDefaultSettings(): PersistedSettingsV2 {
   return {
     version: 2,
@@ -321,6 +330,7 @@ function createDefaultSettings(): PersistedSettingsV2 {
     ai: { ...defaultAiSettings },
     localTerminal: { ...defaultLocalTerminalSettings },
     sftp: { ...defaultSftpSettings },
+    ide: { ...defaultIdeSettings },
     experimental: { virtualSessionProxy: false },
   };
 }
@@ -470,6 +480,7 @@ interface SettingsStore {
   refreshProviderModels: (providerId: string) => Promise<string[]>;
   updateLocalTerminal: <K extends keyof LocalTerminalSettings>(key: K, value: LocalTerminalSettings[K]) => void;
   updateSftp: <K extends keyof SftpSettings>(key: K, value: SftpSettings[K]) => void;
+  updateIde: <K extends keyof IdeSettings>(key: K, value: IdeSettings[K]) => void;
 
   // Actions - Dedicated language setter with i18n sync
   setLanguage: (language: Language) => void;
@@ -499,6 +510,7 @@ interface SettingsStore {
   getSidebarUI: () => SidebarUIState;
   getAi: () => AiSettings;
   getSftp: () => SftpSettings;
+  getIde: () => IdeSettings;
 }
 
 // ============================================================================
@@ -624,6 +636,18 @@ export const useSettingsStore = create<SettingsStore>()(
           });
         }
 
+        return { settings: newSettings };
+      });
+    },
+
+    updateIde: (key, value) => {
+      set((state) => {
+        const currentIde = state.settings.ide || defaultIdeSettings;
+        const newSettings: PersistedSettingsV2 = {
+          ...state.settings,
+          ide: { ...currentIde, [key]: value },
+        };
+        persistSettings(newSettings);
         return { settings: newSettings };
       });
     },
@@ -893,6 +917,7 @@ export const useSettingsStore = create<SettingsStore>()(
     getSidebarUI: () => get().settings.sidebarUI,
     getAi: () => get().settings.ai,
     getSftp: () => get().settings.sftp || defaultSftpSettings,
+    getIde: () => get().settings.ide || defaultIdeSettings,
   }))
 );
 

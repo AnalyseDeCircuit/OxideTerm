@@ -65,6 +65,8 @@ export type ReconnectSnapshot = {
     projectPath: string;
     tabPaths: string[];
     connectionId: string;
+    /** Dirty file contents captured at snapshot time, keyed by path */
+    dirtyContents: Record<string, string>;
   };
 };
 
@@ -680,12 +682,19 @@ async function phaseSnapshot(nodeId: string) {
     const ideNodeId = ideState.nodeId;
     const isAffected = allNodes.some((n) => n.id === ideNodeId);
     if (isAffected) {
+      const dirtyContents: Record<string, string> = {};
+      for (const tab of ideState.tabs) {
+        if (tab.isDirty && tab.content !== null) {
+          dirtyContents[tab.path] = tab.content;
+        }
+      }
       ideSnapshot = {
         projectPath: ideState.project.rootPath,
         tabPaths: ideState.tabs.map((t) => t.path),
         connectionId: ideState.nodeId,
+        dirtyContents,
       };
-      console.log(`[Orchestrator] IDE snapshot: project=${ideSnapshot.projectPath}, tabs=${ideSnapshot.tabPaths.length}`);
+      console.log(`[Orchestrator] IDE snapshot: project=${ideSnapshot.projectPath}, tabs=${ideSnapshot.tabPaths.length}, dirty=${Object.keys(dirtyContents).length}`);
     }
   }
 
@@ -1259,6 +1268,22 @@ async function phaseRestoreIde(nodeId: string) {
       } catch (e) {
         console.warn(`[Orchestrator] Failed to reopen IDE tab ${path}:`, e);
       }
+    }
+
+    // Restore dirty contents from snapshot
+    const dirtyContents = ideSnapshot.dirtyContents ?? {};
+    const dirtyPaths = Object.keys(dirtyContents);
+    if (dirtyPaths.length > 0) {
+      const currentIdeState = useIdeStore.getState();
+      const tabUpdates = currentIdeState.tabs.map(tab => {
+        const savedContent = dirtyContents[tab.path];
+        if (savedContent !== undefined && savedContent !== tab.originalContent) {
+          return { ...tab, content: savedContent, isDirty: true };
+        }
+        return tab;
+      });
+      useIdeStore.setState({ tabs: tabUpdates });
+      console.log(`[Orchestrator] Restored ${dirtyPaths.length} dirty file(s) from snapshot`);
     }
 
     if (openedTabs > 0) {

@@ -35,6 +35,14 @@ pub struct ResumeContext {
     pub is_resume: bool,
 }
 
+/// Result of a `write_content` call, indicating whether atomic write was used.
+#[derive(Debug, Clone)]
+pub struct WriteContentResult {
+    /// `true` if write used the atomic swap-file + rename strategy.
+    /// `false` if it fell back to direct overwrite (e.g. permission denied for swap file).
+    pub atomic_write: bool,
+}
+
 /// SFTP Session wrapper
 pub struct SftpSession {
     /// russh SFTP session
@@ -264,50 +272,158 @@ impl SftpSession {
         })
     }
 
-    /// Write content to a remote file
+    /// Write content to a remote file using atomic write (write-to-temp + rename).
     ///
     /// This is designed for the IDE mode editor - writes UTF-8 text content
-    /// directly to a remote file. The file is created if it doesn't exist,
-    /// or truncated and overwritten if it does.
+    /// to a remote file safely. The strategy:
+    /// 1. Write to a temporary swap file (`.{filename}.oxswp`)
+    /// 2. Rename swap file over the original (atomic on most filesystems)
+    /// 3. If temp file creation fails (e.g. Permission Denied), fall back to
+    ///    direct overwrite and return `atomic_write: false` so the frontend
+    ///    can warn the user.
     ///
     /// # Arguments
     /// * `path` - The remote file path to write to
     /// * `content` - The byte content to write (typically UTF-8 text)
-    pub async fn write_content(&self, path: &str, content: &[u8]) -> Result<(), SftpError> {
-        let canonical_path = self.resolve_path(path).await?;
+    ///
+    /// # Returns
+    /// `WriteContentResult` indicating whether atomic write was used.
+    pub async fn write_content(&self, path: &str, content: &[u8]) -> Result<WriteContentResult, SftpError> {
+        // resolve_path uses canonicalize which requires the file to exist.
+        // For new file creation (e.g. IDE "New File"), fall back to resolving
+        // the parent directory and appending the filename.
+        let canonical_path = match self.resolve_path(path).await {
+            Ok(p) => p,
+            Err(_) => self.resolve_new_file_path(path).await?,
+        };
         debug!(
             "Writing {} bytes to file: {}",
             content.len(),
             canonical_path
         );
 
-        // Open file for writing (create if not exists, truncate if exists)
+        // Derive swap file path: /dir/.filename.oxswp
+        let swap_path = Self::swap_path(&canonical_path);
+
+        // Try atomic write first: write to swap file, then rename
+        match self.write_to_swap_and_rename(&canonical_path, &swap_path, content).await {
+            Ok(()) => {
+                info!(
+                    "Successfully wrote {} bytes to {} (atomic via swap)",
+                    content.len(),
+                    canonical_path
+                );
+                Ok(WriteContentResult { atomic_write: true })
+            }
+            Err(e) => {
+                // Fallback to direct overwrite for any swap/rename issue:
+                //  - PermissionDenied: can't write in that directory
+                //  - Swap file failure (.oxswp in message)
+                //  - Rename failure ("Atomic rename failed")
+                let is_permission = matches!(&e, SftpError::PermissionDenied(_));
+                let err_str = e.to_string();
+                let is_recoverable = is_permission
+                    || err_str.contains(".oxswp")
+                    || err_str.contains("Atomic rename failed");
+
+                if is_recoverable {
+                    warn!(
+                        "Atomic write failed for {} ({}), falling back to direct overwrite",
+                        canonical_path, e
+                    );
+                    // Fallback: direct overwrite (legacy behavior)
+                    self.write_direct(&canonical_path, content).await?;
+                    info!(
+                        "Successfully wrote {} bytes to {} (direct overwrite, non-atomic)",
+                        content.len(),
+                        canonical_path
+                    );
+                    Ok(WriteContentResult { atomic_write: false })
+                } else {
+                    // Non-recoverable error (network disconnect, etc.) — propagate
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Derive the swap file path: `/dir/.filename.oxswp`
+    fn swap_path(canonical_path: &str) -> String {
+        if let Some(slash_pos) = canonical_path.rfind('/') {
+            let dir = &canonical_path[..=slash_pos];
+            let name = &canonical_path[slash_pos + 1..];
+            format!("{}.{}.oxswp", dir, name)
+        } else {
+            format!(".{}.oxswp", canonical_path)
+        }
+    }
+
+    /// Write to swap file and atomically rename over target.
+    async fn write_to_swap_and_rename(
+        &self,
+        canonical_path: &str,
+        swap_path: &str,
+        content: &[u8],
+    ) -> Result<(), SftpError> {
+        // 1. Write content to swap file
         let mut file = self
             .sftp
             .open_with_flags(
-                &canonical_path,
+                swap_path,
                 OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
             )
             .await
-            .map_err(|e| self.map_sftp_error(e, &canonical_path))?;
+            .map_err(|e| self.map_sftp_error(e, swap_path))?;
 
-        // Write the content
+        file.write_all(content)
+            .await
+            .map_err(|e| SftpError::WriteError(format!("Failed to write swap file: {}", e)))?;
+
+        file.flush()
+            .await
+            .map_err(|e| SftpError::WriteError(format!("Failed to flush swap file: {}", e)))?;
+
+        // Explicitly drop the file handle before rename (close the file on the server)
+        drop(file);
+
+        // 2. Remove the original file first — SFTP v3 rename does NOT
+        //    overwrite an existing target (unlike POSIX rename).
+        //    Ignore errors: the file might not exist yet (new file creation).
+        let _ = self.sftp.remove_file(canonical_path).await;
+
+        // 3. Atomic rename: swap → target
+        match self.sftp.rename(swap_path, canonical_path).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let err_msg = e.to_string();
+                warn!("Rename failed ({}), cleaning up swap file {}", err_msg, swap_path);
+                // Best-effort cleanup of the swap file
+                let _ = self.sftp.remove_file(swap_path).await;
+                Err(SftpError::WriteError(format!("Atomic rename failed: {}", err_msg)))
+            }
+        }
+    }
+
+    /// Direct overwrite (legacy non-atomic write). Used as fallback when
+    /// atomic write is not possible (e.g. no write permission in directory).
+    async fn write_direct(&self, canonical_path: &str, content: &[u8]) -> Result<(), SftpError> {
+        let mut file = self
+            .sftp
+            .open_with_flags(
+                canonical_path,
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+            )
+            .await
+            .map_err(|e| self.map_sftp_error(e, canonical_path))?;
+
         file.write_all(content)
             .await
             .map_err(|e| SftpError::WriteError(format!("Failed to write content: {}", e)))?;
 
-        // Flush and sync to ensure data is written
         file.flush()
             .await
             .map_err(|e| SftpError::WriteError(format!("Failed to flush file: {}", e)))?;
 
-        // File is closed when dropped
-
-        info!(
-            "Successfully wrote {} bytes to {}",
-            content.len(),
-            canonical_path
-        );
         Ok(())
     }
 
@@ -2228,6 +2344,57 @@ impl SftpSession {
                 .canonicalize(&full_path)
                 .await
                 .map_err(|e| SftpError::ProtocolError(e.to_string()))
+        }
+    }
+
+    /// Resolve a path for a file that may not exist yet (new file creation).
+    ///
+    /// Canonicalizes the parent directory (which must exist) and appends
+    /// the filename. This avoids the `canonicalize` failure for non-existent
+    /// leaf entries (SFTP realpath requires the target to exist).
+    async fn resolve_new_file_path(&self, path: &str) -> Result<String, SftpError> {
+        let full_path = if is_absolute_remote_path(path) {
+            path.to_string()
+        } else if path == "~" || path.starts_with("~/") {
+            let home = self
+                .sftp
+                .canonicalize(".")
+                .await
+                .map_err(|e| SftpError::ProtocolError(e.to_string()))?;
+            if path == "~" {
+                home
+            } else {
+                join_remote_path(&home, &path[2..])
+            }
+        } else {
+            join_remote_path(&self.cwd, path)
+        };
+
+        // Split into parent directory + filename
+        if let Some(slash_pos) = full_path.rfind('/') {
+            let parent = if slash_pos == 0 {
+                "/".to_string()
+            } else {
+                full_path[..slash_pos].to_string()
+            };
+            let name = &full_path[slash_pos + 1..];
+
+            // Canonicalize the parent directory (must exist)
+            let canonical_parent = self
+                .sftp
+                .canonicalize(&parent)
+                .await
+                .map_err(|e| {
+                    SftpError::FileNotFound(format!(
+                        "Parent directory not found ({}): {}",
+                        parent, e
+                    ))
+                })?;
+
+            Ok(join_remote_path(&canonical_parent, name))
+        } else {
+            // No slash at all — treat as relative to cwd
+            Ok(join_remote_path(&self.cwd, &full_path))
         }
     }
 

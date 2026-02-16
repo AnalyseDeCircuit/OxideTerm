@@ -28,6 +28,8 @@
     "search_hint": "Inserisci parole chiave per cercare",
     "no_results": "Nessun risultato trovato",
     "search_shortcut_hint": "Premi Esc per chiudere",
+    "search_truncated": "Risultati troncati. Affina la ricerca per corrispondenze più specifiche.",
+    "search_results_count": "{{count}} risultati in {{files}} file",
     "find_placeholder": "Cerca",
     "replace_placeholder": "Sostituisci",
     "find_next": "Corrispondenza successiva (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "Annulla",
     "discard": "Non salvare",
     "save": "Salva",
+    "pin_tab": "Fissa",
+    "unpin_tab": "Sblocca",
+    "save_failed": "Salvataggio fallito",
+    "open_failed": "Impossibile aprire il progetto",
+    "disconnected_overlay": "Connessione persa. In attesa di riconnessione…",
     "contextMenu": {
       "newFile": "Nuovo file",
       "newFolder": "Nuova cartella",
@@ -71,6 +78,7 @@
       "deleteFailed": "Eliminazione fallita",
       "pathCopied": "Percorso copiato",
       "revealInTerminal": "Apri nel terminale",
+      "noTerminal": "Nessun terminale attivo trovato",
       "operationFailed": "Operazione fallita"
     },
     "inline": {

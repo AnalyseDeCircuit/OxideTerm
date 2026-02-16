@@ -34,6 +34,7 @@
       "general": "일반",
       "terminal": "터미널",
       "sftp": "SFTP 전송",
+      "ide": "IDE",
       "appearance": "외관",
       "connections": "연결",
       "ssh": "SSH 키",
@@ -283,6 +284,12 @@
       "conflict_rename": "둘 다 유지 (이름 변경)",
       "transfer_count_one": "{{count}}개 전송",
       "transfer_count_other": "{{count}}개 전송"
+    },
+    "ide": {
+      "title": "IDE 모드",
+      "description": "내장 코드 편집기의 동작을 설정합니다.",
+      "auto_save": "자동 저장",
+      "auto_save_hint": "탭 전환 또는 포커스를 잃을 때 파일을 자동 저장합니다."
     },
     "ai_confirm": {
       "title": "AI 기능을 활성화하시겠습니까?",

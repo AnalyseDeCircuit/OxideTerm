@@ -1,7 +1,7 @@
 // src/components/ide/hooks/useCodeMirrorEditor.ts
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
-import { EditorState, Extension } from '@codemirror/state';
+import { EditorState, EditorSelection, Extension, Transaction } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { indentOnInput, bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
 import { highlightSelectionMatches, search } from '@codemirror/search';
@@ -33,7 +33,7 @@ export interface UseCodeMirrorEditorResult {
   isReady: boolean;
   /** 获取当前内容 */
   getContent: () => string;
-  /** 设置内容（会重置编辑器状态） */
+  /** 设置内容（会重置编辑器 undo 历史） */
   setContent: (content: string) => void;
   /** 聚焦编辑器 */
   focus: () => void;
@@ -41,6 +41,8 @@ export interface UseCodeMirrorEditorResult {
   getView: () => EditorView | null;
   /** 执行命令 (如 findNext) */
   executeCommand: (command: (view: EditorView) => boolean) => boolean;
+  /** 滚动到指定行列并设置光标 */
+  scrollToLine: (line: number, col?: number) => void;
 }
 
 // Oxide 主题覆盖（与 RemoteFileEditor 保持一致）
@@ -247,17 +249,19 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
     return viewRef.current?.state.doc.toString() || '';
   }, []);
 
-  // 设置内容
+  // 设置内容（重置 undo 历史，防止 Ctrl+Z 回退到旧内容）
   const setContent = useCallback((content: string) => {
     if (!viewRef.current) return;
 
     const view = viewRef.current;
+    // Replace content without adding to undo history
     view.dispatch({
       changes: {
         from: 0,
         to: view.state.doc.length,
         insert: content,
       },
+      annotations: Transaction.addToHistory.of(false),
     });
   }, []);
 
@@ -275,6 +279,22 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
     return command(viewRef.current);
   }, []);
 
+  // 滚动到指定行列
+  const scrollToLine = useCallback((line: number, col?: number) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const doc = view.state.doc;
+    const clampedLine = Math.max(1, Math.min(line, doc.lines));
+    const lineInfo = doc.line(clampedLine);
+    const clampedCol = Math.max(0, Math.min((col ?? 1) - 1, lineInfo.length));
+    const pos = lineInfo.from + clampedCol;
+    view.dispatch({
+      selection: EditorSelection.cursor(pos),
+      scrollIntoView: true,
+    });
+    view.focus();
+  }, []);
+
   return {
     containerRef: setContainerRef,
     isReady,
@@ -283,5 +303,6 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
     focus,
     getView,
     executeCommand,
+    scrollToLine,
   };
 }

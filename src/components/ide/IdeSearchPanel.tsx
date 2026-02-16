@@ -113,7 +113,7 @@ interface IdeSearchPanelProps {
 export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
   const { t } = useTranslation();
   const project = useIdeProject();
-  const { nodeId, openFile } = useIdeStore();
+  const { nodeId, openFile, setPendingScroll } = useIdeStore();
   
   // 搜索状态
   const [query, setQuery] = useState('');
@@ -121,6 +121,7 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [truncated, setTruncated] = useState(false);
   
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -173,11 +174,23 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
       // 转义搜索查询中的特殊字符用于 grep
       const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       
+      // Shell-escape single quotes: ' → '\''
+      const shellSafe = escapedQuery.replace(/'/g, "'\\''");
+      
+      // 命令长度安全检查 (8KB 上限)
+      if (shellSafe.length > 8192) {
+        setError('Search query too long');
+        return;
+      }
+      
       // 构建 grep 命令
       // -r: 递归搜索
       // -n: 显示行号
       // -I: 忽略二进制文件
       // --include: 只搜索特定类型文件
+      // --: 终止选项解析（防止 query 被解释为 flag）
+      // -e: 指定模式（防止以 - 开头的 query 被解释为选项）
+      // --max-columns=500: 防止巨长行（压缩 JS）卡死 UI
       // 限制结果数量为 200 以避免过多输出
       const includePatterns = [
         '*.ts', '*.tsx', '*.js', '*.jsx', '*.json',
@@ -187,7 +200,7 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
         '*.yaml', '*.yml', '*.sh', '*.bash',
       ].map(p => `--include='${p}'`).join(' ');
       
-      const command = `grep -rn -I ${includePatterns} '${escapedQuery}' . 2>/dev/null | head -200`;
+      const command = `grep -rn -I ${includePatterns} --color=never -- -e '${shellSafe}' . 2>/dev/null | head -200`;
       
       const result = await nodeIdeExecCommand(
         nodeId,
@@ -257,6 +270,8 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
       });
       
       setResults(resultGroups);
+      // 检测是否被 head -200 截断
+      setTruncated(matches.length >= 200);
       // 默认展开所有文件
       setExpandedPaths(new Set(resultGroups.map(g => g.path)));
       
@@ -311,12 +326,13 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
     const fullPath = `${project.rootPath}/${match.path}`;
     
     openFile(fullPath).then(() => {
-      // TODO: 跳转到指定行
-      // 需要通过 ideStore 传递目标行号，然后在 IdeEditor 中处理
-      // 目前仅打开文件
-      console.log(`[IdeSearchPanel] Open file at line ${match.line}`);
+      // openFile 完成后 activeTabId 就是目标 tab
+      const activeTabId = useIdeStore.getState().activeTabId;
+      if (activeTabId) {
+        setPendingScroll(activeTabId, match.line, match.column);
+      }
     }).catch(console.error);
-  }, [project, openFile]);
+  }, [project, openFile, setPendingScroll]);
   
   /**
    * 切换文件展开/折叠
@@ -340,6 +356,7 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
     setQuery('');
     setResults([]);
     setError(null);
+    setTruncated(false);
     inputRef.current?.focus();
   }, []);
   
@@ -485,6 +502,14 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
             )}
           </div>
         ))}
+        
+        {/* 结果截断提示 */}
+        {truncated && (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-amber-400 bg-amber-400/5">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{t('ide.search_truncated', 'Results truncated. Refine your search for more specific matches.')}</span>
+          </div>
+        )}
       </div>
       
       {/* 底部提示 */}

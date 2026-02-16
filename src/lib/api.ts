@@ -1336,7 +1336,7 @@ export const cleanupSftpPreviewTemp = (path?: string): Promise<void> =>
   invoke('cleanup_sftp_preview_temp', { path: path ?? null });
 
 /** 写入远程文件内容 */
-export const nodeSftpWrite = (nodeId: string, path: string, content: string, encoding?: string): Promise<{ mtime: number | null; size: number | null; encodingUsed: string }> =>
+export const nodeSftpWrite = (nodeId: string, path: string, content: string, encoding?: string): Promise<{ mtime: number | null; size: number | null; encodingUsed: string; atomicWrite: boolean }> =>
   invoke('node_sftp_write', { nodeId, path, content, encoding });
 
 /** 下载远程文件到本地 */

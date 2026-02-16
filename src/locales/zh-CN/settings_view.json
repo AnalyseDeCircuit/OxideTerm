@@ -34,6 +34,7 @@
       "general": "常规",
       "terminal": "终端",
       "sftp": "SFTP 传输",
+      "ide": "IDE 编辑器",
       "appearance": "外观",
       "connections": "连接",
       "ssh": "SSH 密钥",
@@ -283,6 +284,12 @@
       "conflict_rename": "保留两者（重命名）",
       "transfer_count_one": "{{count}} 个传输",
       "transfer_count_other": "{{count}} 个传输"
+    },
+    "ide": {
+      "title": "IDE 编辑器",
+      "description": "配置内置代码编辑器的行为。",
+      "auto_save": "自动保存",
+      "auto_save_hint": "切换标签页或失去焦点时自动保存文件。"
     },
     "ai_confirm": {
       "title": "启用 AI 功能？",

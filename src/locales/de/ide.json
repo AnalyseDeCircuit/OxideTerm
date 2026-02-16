@@ -28,6 +28,8 @@
     "search_hint": "Schlüsselwörter eingeben zum Suchen",
     "no_results": "Keine Ergebnisse gefunden",
     "search_shortcut_hint": "Drücken Sie Esc zum Schließen",
+    "search_truncated": "Ergebnisse wurden abgeschnitten. Verfeinern Sie Ihre Suche für genauere Treffer.",
+    "search_results_count": "{{count}} Ergebnisse in {{files}} Dateien",
     "find_placeholder": "Suchen",
     "replace_placeholder": "Ersetzen",
     "find_next": "Nächste Übereinstimmung (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "Abbrechen",
     "discard": "Nicht speichern",
     "save": "Speichern",
+    "pin_tab": "Anheften",
+    "unpin_tab": "Lösen",
+    "save_failed": "Speichern fehlgeschlagen",
+    "open_failed": "Projekt konnte nicht geöffnet werden",
+    "disconnected_overlay": "Verbindung verloren. Warten auf Wiederverbindung…",
     "contextMenu": {
       "newFile": "Neue Datei",
       "newFolder": "Neuer Ordner",
@@ -71,6 +78,7 @@
       "deleteFailed": "Löschen fehlgeschlagen",
       "pathCopied": "Pfad kopiert",
       "revealInTerminal": "Im Terminal öffnen",
+      "noTerminal": "Kein aktives Terminal gefunden",
       "operationFailed": "Operation fehlgeschlagen"
     },
     "inline": {

@@ -84,6 +84,7 @@ export interface IdeTab {
   originalContent: string | null; // 打开时的原始内容（用于 diff/dirty 检测）
   isDirty: boolean;
   isLoading: boolean;
+  isPinned: boolean;      // 是否已 Pin（不参与 LRU 驱逐）
   cursor?: { line: number; col: number };
   serverMtime?: number;   // 服务器端文件修改时间（Unix timestamp 秒）
   lastAccessTime: number; // 最后访问时间（用于 LRU 驱逐）
@@ -124,6 +125,9 @@ interface IdeState {
     localMtime: number;
     remoteMtime: number;
   } | null;
+  
+  // ─── 搜索跳转 ───
+  pendingScroll: { tabId: string; line: number; col?: number } | null;
 
   // ─── 重连恢复缓存 ───
   cachedProjectPath: string | null;
@@ -138,7 +142,7 @@ interface IdeState {
 interface IdeActions {
   // 项目操作
   openProject: (nodeId: string, rootPath: string) => Promise<void>;
-  closeProject: () => void;
+  closeProject: (force?: boolean) => void;
   changeRootPath: (newRootPath: string) => Promise<void>;
   
   // 文件操作
@@ -152,6 +156,7 @@ interface IdeActions {
   setActiveTab: (tabId: string) => void;
   updateTabContent: (tabId: string, content: string) => void;
   updateTabCursor: (tabId: string, line: number, col: number) => void;
+  togglePinTab: (tabId: string) => void;
   
   // 布局操作
   setTreeWidth: (width: number) => void;
@@ -167,6 +172,10 @@ interface IdeActions {
   // 冲突处理
   resolveConflict: (resolution: 'overwrite' | 'reload') => Promise<void>;
   clearConflict: () => void;
+  
+  // 搜索跳转
+  setPendingScroll: (tabId: string, line: number, col?: number) => void;
+  clearPendingScroll: () => void;
   
   // 文件系统操作（CRUD）
   createFile: (parentPath: string, name: string) => Promise<string>;
@@ -206,6 +215,7 @@ export const useIdeStore = create<IdeState & IdeActions>()(
         expandedPaths: new Set<string>(),
         treeRefreshSignal: {},
         conflictState: null,
+        pendingScroll: null,
         cachedProjectPath: null,
         cachedTabPaths: [],
         cachedNodeId: null,
@@ -246,13 +256,12 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           });
         },
 
-        closeProject: () => {
+        closeProject: (force?: boolean) => {
           const { tabs } = get();
           const hasDirty = tabs.some(t => t.isDirty);
           
-          if (hasDirty) {
-            // 调用方需要先处理未保存文件
-            console.warn('closeProject called with dirty tabs');
+          if (hasDirty && !force) {
+            throw new Error('IDE_DIRTY_TABS');
           }
           
           set({
@@ -321,9 +330,22 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             return;
           }
           
-          // 检查标签数量限制
+          // 检查标签数量限制 — LRU 驱逐而非抛出
           if (tabs.length >= MAX_OPEN_TABS) {
-            throw new Error(`Maximum ${MAX_OPEN_TABS} tabs allowed`);
+            // 找出最久未访问的非 dirty、非 pinned tab
+            const evictionCandidates = tabs
+              .filter(t => !t.isDirty && !t.isPinned)
+              .sort((a, b) => a.lastAccessTime - b.lastAccessTime);
+            
+            if (evictionCandidates.length === 0) {
+              throw new Error('IDE_ALL_TABS_PROTECTED');
+            }
+            
+            const toEvict = evictionCandidates[0];
+            set(state => ({
+              tabs: state.tabs.filter(t => t.id !== toEvict.id),
+              activeTabId: state.activeTabId === toEvict.id ? null : state.activeTabId,
+            }));
           }
           
           // 创建新标签（loading 状态）
@@ -340,6 +362,7 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             originalContent: null,
             isDirty: false,
             isLoading: true,
+            isPinned: false,
             lastAccessTime: Date.now(),
             contentVersion: 0,
           };
@@ -507,9 +530,25 @@ export const useIdeStore = create<IdeState & IdeActions>()(
         saveAllFiles: async () => {
           const { tabs, saveFile } = get();
           const dirtyTabs = tabs.filter(t => t.isDirty);
+          const failedFiles: string[] = [];
           
           for (const tab of dirtyTabs) {
-            await saveFile(tab.id);
+            try {
+              await saveFile(tab.id);
+            } catch (err) {
+              // Collect failures instead of aborting the entire loop
+              const msg = err instanceof Error ? err.message : String(err);
+              // Skip conflict errors — they are handled by the UI layer
+              if (msg !== 'CONFLICT') {
+                failedFiles.push(tab.name);
+                console.error(`[IDE] saveAllFiles: failed to save ${tab.name}:`, err);
+              }
+            }
+          }
+          
+          // If there were failures, throw a summary error for the caller to toast
+          if (failedFiles.length > 0) {
+            throw new Error(`SAVE_ALL_PARTIAL:${failedFiles.join(',')}`);
           }
         },
 
@@ -544,6 +583,16 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             tabs: state.tabs.map(t =>
               t.id === tabId
                 ? { ...t, cursor: { line, col } }
+                : t
+            ),
+          }));
+        },
+
+        togglePinTab: (tabId) => {
+          set(state => ({
+            tabs: state.tabs.map(t =>
+              t.id === tabId
+                ? { ...t, isPinned: !t.isPinned }
                 : t
             ),
           }));
@@ -623,6 +672,15 @@ export const useIdeStore = create<IdeState & IdeActions>()(
 
         clearConflict: () => {
           set({ conflictState: null });
+        },
+
+        // ─── Search Jump ───
+        setPendingScroll: (tabId, line, col) => {
+          set({ pendingScroll: { tabId, line, col } });
+        },
+        
+        clearPendingScroll: () => {
+          set({ pendingScroll: null });
         },
 
         // ─── File System Operations (CRUD) ───
@@ -817,19 +875,26 @@ export const useIdeStore = create<IdeState & IdeActions>()(
               
               // Case 1: 精确匹配 - 重命名的就是这个文件
               if (tabPath === normalizedOld) {
+                const ext = newName.includes('.') ? newName.split('.').pop() || '' : '';
                 return {
                   ...tab,
                   path: newPath,
                   name: newName,
+                  language: extensionToLanguage(ext),
                 };
               }
               
               // Case 2: 前缀匹配 - 重命名的是父目录
               if (tabPath.startsWith(normalizedOld + '/')) {
                 const relativePart = tabPath.substring(normalizedOld.length);
+                const updatedPath = normalizedNew + relativePart;
+                const updatedName = updatedPath.split('/').pop() || tab.name;
+                const ext = updatedName.includes('.') ? updatedName.split('.').pop() || '' : '';
                 return {
                   ...tab,
-                  path: normalizedNew + relativePart,
+                  path: updatedPath,
+                  name: updatedName,
+                  language: extensionToLanguage(ext),
                 };
               }
               
@@ -951,3 +1016,43 @@ export const useIdeDirtyCount = () => useIdeStore(state =>
   state.tabs.filter(t => t.isDirty).length
 );
 export const useIdeConflict = () => useIdeStore(state => state.conflictState);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auto-Save Subscription
+// ═══════════════════════════════════════════════════════════════════════════
+
+// When activeTabId changes, auto-save the previous dirty tab (if ide.autoSave is on)
+useIdeStore.subscribe(
+  (state) => state.activeTabId,
+  (newTabId, prevTabId) => {
+    if (!prevTabId || prevTabId === newTabId) return;
+    // Dynamic import to avoid circular dependency with settingsStore
+    import('./settingsStore').then(({ useSettingsStore }) => {
+      const ideSettings = useSettingsStore.getState().getIde();
+      if (!ideSettings.autoSave) return;
+      
+      const store = useIdeStore.getState();
+      const prevTab = store.tabs.find(t => t.id === prevTabId);
+      if (prevTab?.isDirty && !prevTab.isLoading) {
+        store.saveFile(prevTabId).catch((err) => {
+          console.warn(`[IDE AutoSave] Failed to save ${prevTab.name}:`, err);
+        });
+      }
+    });
+  }
+);
+
+// Window blur → auto-save all dirty tabs (if ide.autoSave is on)
+if (typeof window !== 'undefined') {
+  window.addEventListener('blur', () => {
+    import('./settingsStore').then(({ useSettingsStore }) => {
+      const ideSettings = useSettingsStore.getState().getIde();
+      if (!ideSettings.autoSave) return;
+      
+      const store = useIdeStore.getState();
+      store.saveAllFiles().catch((err) => {
+        console.warn('[IDE AutoSave] saveAllFiles on blur failed:', err);
+      });
+    });
+  });
+}

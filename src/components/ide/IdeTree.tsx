@@ -28,6 +28,8 @@ import { IdeDeleteConfirmDialog } from './dialogs/IdeDeleteConfirmDialog';
 import { IdeTreeContextMenu } from './IdeTreeContextMenu';
 import { IdeInlineInput } from './IdeInlineInput';
 import { normalizePath, getParentPath } from '../../lib/pathUtils';
+import { useSessionTreeStore } from '../../store/sessionTreeStore';
+import { findPaneBySessionId, writeToTerminal } from '../../lib/terminalRegistry';
 import { useToast } from '../../hooks/useToast';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -141,7 +143,16 @@ function TreeNode({
     
     try {
       const result = await nodeSftpListDir(nodeId, fullPath);
-      setChildren(sortFiles(result));
+      const sorted = sortFiles(result);
+      // 大目录保护：超过 500 项时截断，避免 DOM 爆炸
+      const MAX_DIR_ITEMS = 500;
+      if (sorted.length > MAX_DIR_ITEMS) {
+        const truncated = sorted.slice(0, MAX_DIR_ITEMS);
+        setChildren(truncated);
+        setError(`+${sorted.length - MAX_DIR_ITEMS} more items not shown`);
+      } else {
+        setChildren(sorted);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -555,11 +566,36 @@ export function IdeTree() {
   const handleRevealInTerminal = useCallback(() => {
     if (!contextMenu) return;
     const dirPath = contextMenu.isDirectory ? contextMenu.path : getParentPath(contextMenu.path);
-    // TODO: 向终端发送 cd 命令
-    toast({
-      title: t('ide.toast.revealInTerminal', 'Open in Terminal'),
-      description: `cd ${dirPath}`,
-    });
+    
+    // 查找该节点的终端并发送 cd 命令
+    const { nodeId } = useIdeStore.getState();
+    if (!nodeId) return;
+    
+    const terminalIds = useSessionTreeStore.getState().nodeTerminalMap.get(nodeId) || [];
+    let sent = false;
+    for (const tid of terminalIds) {
+      const paneId = findPaneBySessionId(tid);
+      if (paneId) {
+        // 对路径中的特殊字符进行转义
+        const escaped = dirPath.replace(/'/g, "'\\''");
+        writeToTerminal(paneId, `cd '${escaped}'\r`);
+        sent = true;
+        break;
+      }
+    }
+    
+    if (sent) {
+      toast({
+        title: t('ide.toast.revealInTerminal', 'Open in Terminal'),
+        description: `cd ${dirPath}`,
+      });
+    } else {
+      toast({
+        title: t('ide.toast.revealInTerminal', 'Open in Terminal'),
+        description: t('ide.toast.noTerminal', 'No active terminal found'),
+        variant: 'error',
+      });
+    }
   }, [contextMenu, toast, t]);
   
   // 内联输入确认

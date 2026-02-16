@@ -34,6 +34,7 @@
       "general": "Geral",
       "terminal": "Terminal",
       "sftp": "Transferências SFTP",
+      "ide": "IDE",
       "appearance": "Aparência",
       "connections": "Conexões",
       "ssh": "Chaves SSH",
@@ -283,6 +284,12 @@
       "conflict_rename": "Manter ambos (renomear)",
       "transfer_count_one": "{{count}} transferência",
       "transfer_count_other": "{{count}} transferências"
+    },
+    "ide": {
+      "title": "Modo IDE",
+      "description": "Configure o comportamento do editor de código integrado.",
+      "auto_save": "Salvamento automático",
+      "auto_save_hint": "Salvar arquivos automaticamente ao trocar de aba ou perder o foco."
     },
     "ai_confirm": {
       "title": "Habilitar recursos de IA?",

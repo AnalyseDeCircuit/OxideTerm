@@ -28,6 +28,8 @@
     "search_hint": "キーワードを入力して検索",
     "no_results": "結果が見つかりません",
     "search_shortcut_hint": "Escで検索を閉じる",
+    "search_truncated": "結果が切り捨てられました。より正確な結果を得るために検索条件を絞り込んでください。",
+    "search_results_count": "{{files}} ファイルで {{count}} 件の結果",
     "find_placeholder": "検索",
     "replace_placeholder": "置換",
     "find_next": "次を検索 (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "キャンセル",
     "discard": "保存しない",
     "save": "保存",
+    "pin_tab": "固定",
+    "unpin_tab": "固定解除",
+    "save_failed": "保存に失敗しました",
+    "open_failed": "プロジェクトを開くのに失敗しました",
+    "disconnected_overlay": "接続が切断されました。再接続を待っています…",
     "contextMenu": {
       "newFile": "新規ファイル",
       "newFolder": "新規フォルダ",
@@ -71,6 +78,7 @@
       "deleteFailed": "削除に失敗しました",
       "pathCopied": "パスをコピーしました",
       "revealInTerminal": "ターミナルで開く",
+      "noTerminal": "アクティブなターミナルが見つかりません",
       "operationFailed": "操作に失敗しました"
     },
     "inline": {

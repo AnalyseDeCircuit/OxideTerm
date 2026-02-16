@@ -29,7 +29,7 @@ import {
     SelectLabel,
     SelectSeparator
 } from '../ui/select';
-import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X } from 'lucide-react';
+import { Monitor, Key, Terminal as TerminalIcon, Shield, Plus, Trash2, FolderInput, Sparkles, Square, HardDrive, HelpCircle, Github, ExternalLink, Keyboard, RefreshCw, ImageIcon, X, Code2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useLocalTerminalStore } from '../../store/localTerminalStore';
 import { SshKeyInfo, SshHostInfo } from '../../types';
@@ -852,8 +852,8 @@ export const SettingsView = () => {
     const [activeTab, setActiveTab] = useState('general');
 
     // Use unified settings store
-    const { settings, updateTerminal, updateConnectionDefaults, updateAi, updateSftp, setLanguage, addProvider, removeProvider, updateProvider, setActiveProvider, refreshProviderModels } = useSettingsStore();
-    const { general, terminal, connectionDefaults, ai, sftp } = settings;
+    const { settings, updateTerminal, updateConnectionDefaults, updateAi, updateSftp, updateIde, setLanguage, addProvider, removeProvider, updateProvider, setActiveProvider, refreshProviderModels } = useSettingsStore();
+    const { general, terminal, connectionDefaults, ai, sftp, ide } = settings;
 
     // AI enable confirmation dialog
     const [showAiConfirm, setShowAiConfirm] = useState(false);
@@ -960,6 +960,13 @@ export const SettingsView = () => {
                         onClick={() => setActiveTab('sftp')}
                     >
                         <HardDrive className="h-4 w-4" /> {t('settings_view.tabs.sftp')}
+                    </Button>
+                    <Button
+                        variant={activeTab === 'ide' ? 'secondary' : 'ghost'}
+                        className="w-full justify-start gap-3 h-10 font-normal"
+                        onClick={() => setActiveTab('ide')}
+                    >
+                        <Code2 className="h-4 w-4" /> {t('settings_view.tabs.ide', 'IDE')}
                     </Button>
                     <Button
                         variant={activeTab === 'appearance' ? 'secondary' : 'ghost'}
@@ -1899,6 +1906,32 @@ export const SettingsView = () => {
                                             <SelectItem value="rename">{t('settings_view.sftp.conflict_rename')}</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'ide' && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div>
+                                <h3 className="text-2xl font-medium text-theme-text mb-2">{t('settings_view.ide.title', 'IDE Mode')}</h3>
+                                <p className="text-theme-text-muted">{t('settings_view.ide.description', 'Configure the built-in code editor behavior.')}</p>
+                            </div>
+                            <Separator />
+
+                            {/* Auto-save */}
+                            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-theme-text">{t('settings_view.ide.auto_save', 'Auto Save')}</Label>
+                                        <p className="text-xs text-theme-text-muted mt-0.5">
+                                            {t('settings_view.ide.auto_save_hint', 'Automatically save files when switching tabs or losing focus.')}
+                                        </p>
+                                    </div>
+                                    <Checkbox
+                                        checked={ide?.autoSave ?? false}
+                                        onCheckedChange={(checked) => updateIde('autoSave', checked === true)}
+                                    />
                                 </div>
                             </div>
                         </div>

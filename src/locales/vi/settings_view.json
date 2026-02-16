@@ -34,6 +34,7 @@
       "general": "Chung",
       "terminal": "Terminal",
       "sftp": "Truyền file SFTP",
+      "ide": "IDE",
       "appearance": "Giao diện",
       "connections": "Kết nối",
       "ssh": "SSH Keys",
@@ -283,6 +284,12 @@
       "conflict_rename": "Giữ cả hai (đổi tên)",
       "transfer_count_one": "{{count}} truyền tải",
       "transfer_count_other": "{{count}} truyền tải"
+    },
+    "ide": {
+      "title": "Chế độ IDE",
+      "description": "Cấu hình hành vi của trình soạn thảo mã tích hợp.",
+      "auto_save": "Tự động lưu",
+      "auto_save_hint": "Tự động lưu tệp khi chuyển tab hoặc mất tiêu điểm."
     },
     "ai_confirm": {
       "title": "Bật tính năng AI?",

@@ -28,6 +28,8 @@
     "search_hint": "Nhập từ khóa để tìm kiếm",
     "no_results": "Không tìm thấy kết quả",
     "search_shortcut_hint": "Nhấn Esc để đóng",
+    "search_truncated": "Kết quả đã bị cắt ngắn. Tinh chỉnh tìm kiếm để có kết quả chính xác hơn.",
+    "search_results_count": "{{count}} kết quả trong {{files}} tệp",
     "find_placeholder": "Tìm kiếm",
     "replace_placeholder": "Thay thế",
     "find_next": "Kết quả tiếp theo (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "Hủy",
     "discard": "Không lưu",
     "save": "Lưu",
+    "pin_tab": "Ghim",
+    "unpin_tab": "Bỏ ghim",
+    "save_failed": "Lưu thất bại",
+    "open_failed": "Không thể mở dự án",
+    "disconnected_overlay": "Mất kết nối. Đang chờ kết nối lại…",
     "contextMenu": {
       "newFile": "Tệp mới",
       "newFolder": "Thư mục mới",
@@ -71,6 +78,7 @@
       "deleteFailed": "Xóa thất bại",
       "pathCopied": "Đã sao chép đường dẫn",
       "revealInTerminal": "Mở trong terminal",
+      "noTerminal": "Không tìm thấy terminal đang hoạt động",
       "operationFailed": "Thao tác thất bại"
     },
     "inline": {

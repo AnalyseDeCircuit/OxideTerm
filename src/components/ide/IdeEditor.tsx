@@ -6,6 +6,7 @@ import { useIdeStore, IdeTab } from '../../store/ideStore';
 import { useCodeMirrorEditor } from './hooks/useCodeMirrorEditor';
 import { CodeEditorSearchBar } from './CodeEditorSearchBar';
 import { cn } from '../../lib/utils';
+import { useToast } from '../../hooks/useToast';
 
 interface IdeEditorProps {
   tab: IdeTab;
@@ -13,7 +14,9 @@ interface IdeEditorProps {
 
 export function IdeEditor({ tab }: IdeEditorProps) {
   const { t } = useTranslation();
-  const { updateTabContent, updateTabCursor, saveFile } = useIdeStore();
+  const { updateTabContent, updateTabCursor, saveFile, clearPendingScroll } = useIdeStore();
+  const pendingScroll = useIdeStore(s => s.pendingScroll);
+  const { toast } = useToast();
 
   // 搜索栏状态
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -34,10 +37,17 @@ export function IdeEditor({ tab }: IdeEditorProps) {
     try {
       await saveFile(tab.id);
     } catch (e) {
-      // 错误处理由 store 或上层组件处理
-      console.error('[IdeEditor] Save failed:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      // CONFLICT is handled by the conflict resolution UI, don't double-toast
+      if (msg !== 'CONFLICT') {
+        toast({
+          title: t('ide.save_failed', 'Save failed'),
+          description: `${tab.name}: ${msg}`,
+          variant: 'error',
+        });
+      }
     }
-  }, [tab.id, saveFile]);
+  }, [tab.id, tab.name, saveFile, toast, t]);
 
   // 光标位置回调
   const handleCursorChange = useCallback((line: number, col: number) => {
@@ -51,6 +61,7 @@ export function IdeEditor({ tab }: IdeEditorProps) {
     setContent,
     focus,
     getView,
+    scrollToLine,
   } = useCodeMirrorEditor({
     initialContent: '',
     language: tab.language,
@@ -117,6 +128,18 @@ export function IdeEditor({ tab }: IdeEditorProps) {
       return () => clearTimeout(timer);
     }
   }, [isReady, tab.content, focus, isSearchOpen]);
+
+  // 消费 pendingScroll：搜索结果点击后跳转到指定行
+  useEffect(() => {
+    if (pendingScroll && pendingScroll.tabId === tab.id && isReady && tab.content !== null) {
+      // 短暂延迟确保内容已渲染
+      const timer = setTimeout(() => {
+        scrollToLine(pendingScroll.line, pendingScroll.col);
+        clearPendingScroll();
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingScroll, tab.id, isReady, tab.content, scrollToLine, clearPendingScroll]);
 
   // 关闭搜索栏
   const handleCloseSearch = useCallback(() => {

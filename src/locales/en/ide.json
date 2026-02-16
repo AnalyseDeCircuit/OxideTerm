@@ -28,6 +28,8 @@
     "search_hint": "Enter keywords to search",
     "no_results": "No results found",
     "search_shortcut_hint": "Press Esc to close search",
+    "search_truncated": "Results truncated. Refine your search for more specific matches.",
+    "search_results_count": "{{count}} results in {{files}} files",
     "find_placeholder": "Find",
     "replace_placeholder": "Replace",
     "find_next": "Next match (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "Cancel",
     "discard": "Don't Save",
     "save": "Save",
+    "pin_tab": "Pin",
+    "unpin_tab": "Unpin",
+    "save_failed": "Save failed",
+    "open_failed": "Failed to open project",
+    "disconnected_overlay": "Connection lost. Waiting for reconnect…",
     "contextMenu": {
       "newFile": "New File",
       "newFolder": "New Folder",
@@ -71,6 +78,7 @@
       "deleteFailed": "Failed to delete",
       "pathCopied": "Path copied",
       "revealInTerminal": "Open in Terminal",
+      "noTerminal": "No active terminal found",
       "operationFailed": "Operation failed"
     },
     "inline": {

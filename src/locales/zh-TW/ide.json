@@ -28,6 +28,8 @@
     "search_hint": "輸入關鍵字進行搜尋",
     "no_results": "無搜尋結果",
     "search_shortcut_hint": "按 Esc 關閉搜尋",
+    "search_truncated": "結果已截斷。請優化搜尋條件以獲得更精確的匹配。",
+    "search_results_count": "在 {{files}} 個檔案中找到 {{count}} 個結果",
     "find_placeholder": "尋找",
     "replace_placeholder": "取代",
     "find_next": "尋找下一個 (Enter)",
@@ -45,6 +47,11 @@
     "cancel": "取消",
     "discard": "不儲存",
     "save": "儲存",
+    "pin_tab": "釘選",
+    "unpin_tab": "取消釘選",
+    "save_failed": "儲存失敗",
+    "open_failed": "開啟專案失敗",
+    "disconnected_overlay": "連線已中斷，等待重新連線…",
     "contextMenu": {
       "newFile": "新增檔案",
       "newFolder": "新增資料夾",
@@ -71,6 +78,7 @@
       "deleteFailed": "刪除失敗",
       "pathCopied": "已複製路徑",
       "revealInTerminal": "在終端機開啟",
+      "noTerminal": "未找到活躍的終端機",
       "operationFailed": "操作失敗"
     },
     "inline": {

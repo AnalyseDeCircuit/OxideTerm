@@ -1,6 +1,7 @@
 // src/components/ide/IdeEditorTabs.tsx
 import { useCallback, useState, useRef } from 'react';
-import { X, Circle, Loader2 } from 'lucide-react';
+import { X, Circle, Loader2, Pin } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useIdeTabs, useIdeStore, IdeTab } from '../../store/ideStore';
 import { cn } from '../../lib/utils';
 import { FileIcon } from '../../lib/fileIcons';
@@ -11,9 +12,13 @@ interface TabItemProps {
   isActive: boolean;
   onActivate: () => void;
   onClose: () => void;
+  onTogglePin: () => void;
 }
 
-function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
+function TabItem({ tab, isActive, onActivate, onClose, onTogglePin }: TabItemProps) {
+  const { t } = useTranslation();
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  
   const handleClose = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onClose();
@@ -27,80 +32,134 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
     }
   }, [onClose]);
   
+  // 双击切换 pin 状态
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onTogglePin();
+  }, [onTogglePin]);
+  
+  // 右键菜单
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+  }, []);
+  
+  const closeContextMenu = useCallback(() => {
+    setContextMenuPos(null);
+  }, []);
+  
   return (
-    <div
-      className={cn(
-        'group flex items-center gap-1.5 px-3 py-1.5 cursor-pointer',
-        'border-r border-theme-border/50 transition-colors',
-        'hover:bg-theme-bg-hover/30',
-        isActive 
-          ? 'bg-theme-bg-hover border-b-2 border-b-theme-accent' 
-          : 'bg-theme-bg/50'
-      )}
-      onClick={onActivate}
-      onMouseDown={handleMouseDown}
-    >
-      {/* 文件图标 */}
-      <span className="flex-shrink-0">
-        <FileIcon filename={tab.name} size={14} />
-      </span>
+    <>
+      <div
+        className={cn(
+          'group flex items-center gap-1.5 px-3 py-1.5 cursor-pointer',
+          'border-r border-theme-border/50 transition-colors',
+          'hover:bg-theme-bg-hover/30',
+          isActive 
+            ? 'bg-theme-bg-hover border-b-2 border-b-theme-accent' 
+            : 'bg-theme-bg/50'
+        )}
+        onClick={onActivate}
+        onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
+      >
+        {/* Pin 指示器 */}
+        {tab.isPinned && (
+          <Pin className="w-3 h-3 text-theme-accent flex-shrink-0 rotate-45" />
+        )}
       
-      {/* 文件名 */}
-      <span className={cn(
-        'text-xs truncate max-w-[120px]',
-        isActive ? 'text-theme-text' : 'text-theme-text-muted',
-        tab.isDirty && 'italic'
-      )}>
-        {tab.name}
-      </span>
+        {/* 文件图标 */}
+        <span className="flex-shrink-0">
+          <FileIcon filename={tab.name} size={14} />
+        </span>
       
-      {/* 状态指示器 / 关闭按钮 */}
-      <div className="w-4 h-4 flex items-center justify-center flex-shrink-0 ml-1">
-        {tab.isLoading ? (
-          <Loader2 className="w-3 h-3 animate-spin text-theme-text-muted" />
-        ) : tab.isDirty ? (
-          // 未保存指示器（hover 时显示关闭按钮）
-          <>
-            <Circle 
-              className={cn(
-                'w-2 h-2 fill-theme-accent text-theme-accent',
-                'group-hover:hidden'
-              )} 
-            />
+        {/* 文件名 */}
+        <span className={cn(
+          'text-xs truncate max-w-[120px]',
+          isActive ? 'text-theme-text' : 'text-theme-text-muted',
+          tab.isDirty && 'italic'
+        )}>
+          {tab.name}
+        </span>
+      
+        {/* 状态指示器 / 关闭按钮 */}
+        <div className="w-4 h-4 flex items-center justify-center flex-shrink-0 ml-1">
+          {tab.isLoading ? (
+            <Loader2 className="w-3 h-3 animate-spin text-theme-text-muted" />
+          ) : tab.isDirty ? (
+            // 未保存指示器（hover 时显示关闭按钮）
+            <>
+              <Circle 
+                className={cn(
+                  'w-2 h-2 fill-theme-accent text-theme-accent',
+                  'group-hover:hidden'
+                )} 
+              />
+              <button
+                className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded hover:bg-theme-bg-hover/50"
+                onClick={handleClose}
+              >
+                <X className="w-3 h-3 text-theme-text-muted" />
+              </button>
+            </>
+          ) : (
+            // 关闭按钮
             <button
-              className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded hover:bg-theme-bg-hover/50"
+              className={cn(
+                'flex items-center justify-center w-4 h-4 rounded',
+                'opacity-0 group-hover:opacity-100 transition-opacity',
+                'hover:bg-theme-bg-hover/50'
+              )}
               onClick={handleClose}
             >
               <X className="w-3 h-3 text-theme-text-muted" />
             </button>
-          </>
-        ) : (
-          // 关闭按钮
-          <button
-            className={cn(
-              'flex items-center justify-center w-4 h-4 rounded',
-              'opacity-0 group-hover:opacity-100 transition-opacity',
-              'hover:bg-theme-bg-hover/50'
-            )}
-            onClick={handleClose}
-          >
-            <X className="w-3 h-3 text-theme-text-muted" />
-          </button>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+      
+      {/* 右键菜单 */}
+      {contextMenuPos && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
+          <div
+            className="fixed z-50 bg-theme-bg-panel border border-theme-border rounded-md shadow-xl py-1 min-w-[140px]"
+            style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
+          >
+            <button
+              className="w-full px-3 py-1.5 text-xs text-left hover:bg-theme-bg-hover flex items-center gap-2"
+              onClick={() => { onTogglePin(); closeContextMenu(); }}
+            >
+              <Pin className="w-3 h-3" />
+              {tab.isPinned ? t('ide.unpin_tab', 'Unpin') : t('ide.pin_tab', 'Pin')}
+            </button>
+            <button
+              className="w-full px-3 py-1.5 text-xs text-left hover:bg-theme-bg-hover flex items-center gap-2"
+              onClick={() => { onClose(); closeContextMenu(); }}
+            >
+              <X className="w-3 h-3" />
+              {t('tabbar.close_tab', 'Close')}
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
 export function IdeEditorTabs() {
   const tabs = useIdeTabs();
-  const { activeTabId, setActiveTab, closeTab, saveFile } = useIdeStore();
+  const { activeTabId, setActiveTab, closeTab, saveFile, togglePinTab } = useIdeStore();
   
   // 保存确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     tabId: string;
     fileName: string;
+    saveError?: string;
   }>({ open: false, tabId: '', fileName: '' });
   
   // 滚动容器 ref
@@ -128,10 +187,15 @@ export function IdeEditorTabs() {
     try {
       await saveFile(tabId);
       await closeTab(tabId);
+      setConfirmDialog({ open: false, tabId: '', fileName: '' });
     } catch (e) {
       console.error('[IdeEditorTabs] Save failed:', e);
+      // Keep dialog open and show error instead of silently closing
+      setConfirmDialog(prev => ({
+        ...prev,
+        saveError: e instanceof Error ? e.message : String(e),
+      }));
     }
-    setConfirmDialog({ open: false, tabId: '', fileName: '' });
   }, [confirmDialog, saveFile, closeTab]);
   
   const handleDiscardAndClose = useCallback(async () => {
@@ -176,6 +240,7 @@ export function IdeEditorTabs() {
             isActive={tab.id === activeTabId}
             onActivate={() => setActiveTab(tab.id)}
             onClose={() => handleCloseTab(tab.id)}
+            onTogglePin={() => togglePinTab(tab.id)}
           />
         ))}
       </div>
