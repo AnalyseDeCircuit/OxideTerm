@@ -60,6 +60,8 @@
     "zoomOut": "Verkleinern",
     "rotate": "Drehen",
     "copyContent": "Inhalt kopieren",
+    "viewSource": "Quelltext anzeigen (u)",
+    "viewRender": "Gerendert anzeigen (u)",
     "openExternal": "In externer App öffnen",
     "fontLoadError": "Schriftart konnte nicht geladen werden",
     "loadingFont": "Schriftart wird geladen...",

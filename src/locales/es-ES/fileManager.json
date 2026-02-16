@@ -60,6 +60,8 @@
     "zoomOut": "Alejar",
     "rotate": "Rotar",
     "copyContent": "Copiar contenido",
+    "viewSource": "Ver código fuente (u)",
+    "viewRender": "Ver renderizado (u)",
     "openExternal": "Abrir en aplicación externa",
     "fontLoadError": "Error al cargar la fuente",
     "loadingFont": "Cargando fuente...",

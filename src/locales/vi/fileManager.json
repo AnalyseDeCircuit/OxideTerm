@@ -60,6 +60,8 @@
     "zoomOut": "Thu nhỏ",
     "rotate": "Xoay",
     "copyContent": "Sao chép nội dung",
+    "viewSource": "Xem mã nguồn (u)",
+    "viewRender": "Xem kết xuất (u)",
     "openExternal": "Mở trong ứng dụng ngoài",
     "fontLoadError": "Không thể tải phông chữ",
     "loadingFont": "Đang tải phông chữ...",

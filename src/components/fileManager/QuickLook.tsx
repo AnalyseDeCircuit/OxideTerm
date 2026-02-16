@@ -27,7 +27,9 @@ import {
   Info,
   Type,
   Film,
-  Music
+  Music,
+  Code,
+  Eye,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
@@ -95,6 +97,8 @@ export const QuickLook: React.FC<QuickLookProps> = ({
   const [imageRotation, setImageRotation] = useState(0);
   const [pdfZoom, setPdfZoom] = useState(1);
   const [showMetadata, setShowMetadata] = useState(true);
+  /** Markdown view mode: 'render' (default) or 'source' */
+  const [mdViewMode, setMdViewMode] = useState<'render' | 'source'>('render');
   const markdownRef = useRef<HTMLDivElement>(null);
 
   // Handle Mermaid diagram rendering for markdown previews
@@ -141,6 +145,7 @@ export const QuickLook: React.FC<QuickLookProps> = ({
     setImageZoom(1);
     setImageRotation(0);
     setPdfZoom(1);
+    setMdViewMode('render');
   }, [preview?.path]);
 
   // Inject markdown styles once
@@ -185,6 +190,11 @@ export const QuickLook: React.FC<QuickLookProps> = ({
       if (e.key === 'i') {
         e.preventDefault();
         setShowMetadata(s => !s);
+      }
+      // Toggle markdown source/render with 'u'
+      if (e.key === 'u' && preview.type === 'markdown') {
+        e.preventDefault();
+        setMdViewMode(m => m === 'render' ? 'source' : 'render');
       }
       // Zoom controls for images
       if (preview.type === 'image') {
@@ -343,6 +353,21 @@ export const QuickLook: React.FC<QuickLookProps> = ({
               </Button>
             )}
 
+            {/* Markdown source / render toggle */}
+            {preview.type === 'markdown' && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn("h-7 w-7", mdViewMode === 'source' && "bg-zinc-800")}
+                onClick={() => setMdViewMode(m => m === 'render' ? 'source' : 'render')}
+                title={mdViewMode === 'render'
+                  ? t('fileManager.viewSource', 'View Source (u)')
+                  : t('fileManager.viewRender', 'View Rendered (u)')}
+              >
+                {mdViewMode === 'render' ? <Code className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </Button>
+            )}
+
             {/* Toggle metadata */}
             <Button 
               size="icon" 
@@ -385,11 +410,23 @@ export const QuickLook: React.FC<QuickLookProps> = ({
 
           {/* Markdown Preview */}
           {preview.type === 'markdown' && (
-            <div 
-              ref={markdownRef}
-              className="flex-1 p-6 md-content max-w-none"
-              dangerouslySetInnerHTML={{ __html: markdownHtml }}
-            />
+            mdViewMode === 'source' ? (
+              <div className="flex-1">
+                <CodeHighlight
+                  code={preview.data}
+                  language="markdown"
+                  filename={preview.name}
+                  showLineNumbers={true}
+                  className="p-4 min-h-full"
+                />
+              </div>
+            ) : (
+              <div 
+                ref={markdownRef}
+                className="flex-1 p-6 md-content max-w-none"
+                dangerouslySetInnerHTML={{ __html: markdownHtml }}
+              />
+            )
           )}
 
           {/* Video Preview */}

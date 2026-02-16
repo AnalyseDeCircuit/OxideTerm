@@ -60,6 +60,8 @@
     "zoomOut": "縮小",
     "rotate": "旋轉",
     "copyContent": "複製內容",
+    "viewSource": "檢視原始碼 (u)",
+    "viewRender": "檢視渲染結果 (u)",
     "openExternal": "以外部應用程式開啟",
     "fontLoadError": "字型載入失敗",
     "loadingFont": "正在載入字型...",

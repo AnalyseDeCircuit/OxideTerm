@@ -61,6 +61,8 @@
     "zoomOut": "缩小",
     "rotate": "旋转",
     "copyContent": "复制内容",
+    "viewSource": "查看源码 (u)",
+    "viewRender": "查看渲染 (u)",
     "openExternal": "用外部应用打开",
     "fontLoadError": "无法加载字体",
     "loadingFont": "正在加载字体...",

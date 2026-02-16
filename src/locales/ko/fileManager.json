@@ -60,6 +60,8 @@
     "zoomOut": "축소",
     "rotate": "회전",
     "copyContent": "내용 복사",
+    "viewSource": "소스 보기 (u)",
+    "viewRender": "렌더링 보기 (u)",
     "openExternal": "외부 앱에서 열기",
     "fontLoadError": "폰트 로드 실패",
     "loadingFont": "폰트 로딩 중...",

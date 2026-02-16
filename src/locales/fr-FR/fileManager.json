@@ -60,6 +60,8 @@
     "zoomOut": "Zoom arrière",
     "rotate": "Pivoter",
     "copyContent": "Copier le contenu",
+    "viewSource": "Voir la source (u)",
+    "viewRender": "Voir le rendu (u)",
     "openExternal": "Ouvrir dans une application externe",
     "fontLoadError": "Échec du chargement de la police",
     "loadingFont": "Chargement de la police...",

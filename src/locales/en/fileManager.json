@@ -61,6 +61,8 @@
     "zoomOut": "Zoom Out",
     "rotate": "Rotate",
     "copyContent": "Copy Content",
+    "viewSource": "View Source (u)",
+    "viewRender": "View Rendered (u)",
     "openExternal": "Open in External App",
     "fontLoadError": "Failed to load font",
     "loadingFont": "Loading font...",
