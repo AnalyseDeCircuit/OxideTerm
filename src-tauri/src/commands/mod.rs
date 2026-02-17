@@ -16,6 +16,7 @@ pub mod network;
 
 // WSL Graphics commands — the actual module lives at src/graphics/
 // We re-export from there. On non-Windows platforms, stub commands return Err.
+pub mod node_agent;
 pub mod node_forwarding;
 pub mod node_sftp;
 pub mod oxide_export;
@@ -38,6 +39,7 @@ pub use kbi::*;
 #[cfg(feature = "local-terminal")]
 pub use local::*;
 pub use network::*;
+pub use node_agent::*;
 pub use node_forwarding::*;
 pub use node_sftp::*;
 pub use plugin::*;

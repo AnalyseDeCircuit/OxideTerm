@@ -11,11 +11,11 @@ import {
   Folder,
   FolderInput,
 } from 'lucide-react';
-import { nodeSftpListDir } from '../../lib/api';
+import * as agentService from '../../lib/agentService';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
 import { cn } from '../../lib/utils';
 import { FileIcon, FolderIcon } from '../../lib/fileIcons';
-import { FileInfo } from '../../types';
+import { FileInfo, AgentFileEntry } from '../../types';
 import { Button } from '../ui/button';
 import { 
   useGitStatus, 
@@ -44,6 +44,44 @@ const GitStatusContext = createContext<GitStatusContextValue | null>(null);
 
 function useGitStatusContext() {
   return useContext(GitStatusContext);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Prefetch Cache Context（深度预取缓存）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Map from directory path → sorted children (populated by listTree prefetch) */
+type PrefetchCache = Map<string, FileInfo[]>;
+
+const PrefetchCacheContext = createContext<PrefetchCache>(new Map());
+
+function usePrefetchCache() {
+  return useContext(PrefetchCacheContext);
+}
+
+/**
+ * Build a flat path→children cache from a recursive AgentFileEntry tree.
+ * Converts agent entries to FileInfo format for compatibility.
+ */
+function buildPrefetchCache(entries: AgentFileEntry[], cache: PrefetchCache): void {
+  for (const entry of entries) {
+    if (entry.children && entry.children.length > 0) {
+      // This entry is a directory with prefetched children
+      const childInfos: FileInfo[] = entry.children.map(child => ({
+        name: child.name,
+        path: child.path,
+        file_type: (child.file_type === 'directory' || child.file_type === 'dir') ? 'Directory' 
+                 : child.file_type === 'symlink' ? 'Symlink' 
+                 : child.file_type === 'file' ? 'File' : 'Unknown',
+        size: child.size,
+        modified: child.mtime ?? null,
+        permissions: child.permissions ?? null,
+      }));
+      cache.set(entry.path, sortFiles(childInfos));
+      // Recurse into grandchildren
+      buildPrefetchCache(entry.children, cache);
+    }
+  }
 }
 
 // 判断文件是否为目录
@@ -132,8 +170,9 @@ function TreeNode({
       : file.name
     : '';
   const gitStatus = gitStatusCtx?.getFileStatus(relativePath);
+  const prefetchCache = usePrefetchCache();
   
-  // 加载子目录内容
+  // 加载子目录内容（先查 prefetch 缓存，再走网络）
   const loadChildren = useCallback(async () => {
     if (!isDir || loadingRef.current) return;
     
@@ -142,7 +181,16 @@ function TreeNode({
     setError(null);
     
     try {
-      const result = await nodeSftpListDir(nodeId, fullPath);
+      // Check prefetch cache first (populated by listTree on project open)
+      const cached = prefetchCache.get(fullPath);
+      if (cached) {
+        setChildren(cached);
+        setIsLoading(false);
+        loadingRef.current = false;
+        return;
+      }
+
+      const result = await agentService.listDir(nodeId, fullPath);
       const sorted = sortFiles(result);
       // 大目录保护：超过 500 项时截断，避免 DOM 爆炸
       const MAX_DIR_ITEMS = 500;
@@ -375,6 +423,9 @@ export function IdeTree() {
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   
+  // Prefetch cache for deep tree loading (agent only)
+  const [prefetchCache] = useState<PrefetchCache>(() => new Map());
+  
   // 加载根目录
   const loadRoot = useCallback(async () => {
     if (!project || !nodeId) return;
@@ -383,14 +434,24 @@ export function IdeTree() {
     setError(null);
     
     try {
-      const result = await nodeSftpListDir(nodeId, project.rootPath);
+      const result = await agentService.listDir(nodeId, project.rootPath);
       setRootFiles(sortFiles(result));
+      
+      // Deep prefetch: if agent is available, load 3 levels in background
+      agentService.listTree(nodeId, project.rootPath, 3, 5000)
+        .then(treeEntries => {
+          if (treeEntries) {
+            prefetchCache.clear();
+            buildPrefetchCache(treeEntries, prefetchCache);
+          }
+        })
+        .catch(() => { /* ignore — prefetch is best-effort */ });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setIsLoading(false);
     }
-  }, [project, nodeId]);
+  }, [project, nodeId, prefetchCache]);
   
   // 订阅根目录刷新信号
   const rootRefreshSignal = useIdeStore(
@@ -660,6 +721,7 @@ export function IdeTree() {
   }
   
   return (
+    <PrefetchCacheContext.Provider value={prefetchCache}>
     <GitStatusContext.Provider value={gitStatusContextValue}>
       <div className="h-full flex flex-col bg-theme-bg/85">
         {/* 标题栏 */}
@@ -811,5 +873,6 @@ export function IdeTree() {
         )}
       </div>
     </GitStatusContext.Provider>
+    </PrefetchCacheContext.Provider>
   );
 }

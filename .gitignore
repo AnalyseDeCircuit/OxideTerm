@@ -53,6 +53,10 @@ build/
 target/
 **/*.rs.bk
 
+# Agent build artifacts (binaries built by CI)
+agent/target/
+src-tauri/agents/oxideterm-agent-*
+
 # Node
 # Note: package-lock.json should be committed for consistent builds
 yarn.lock

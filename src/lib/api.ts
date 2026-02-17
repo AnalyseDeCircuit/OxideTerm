@@ -1430,6 +1430,66 @@ export const nodeIdeBatchStat = (nodeId: string, paths: string[]): Promise<
 export const nodeTerminalUrl = (nodeId: string): Promise<{ wsPort: number; wsToken: string; sessionId: string }> =>
   invoke('node_terminal_url', { nodeId });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Agent API — Remote agent deployment & operations
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type {
+  AgentStatus,
+  AgentReadFileResult,
+  AgentWriteFileResult,
+  AgentFileEntry,
+  AgentGrepMatch,
+  AgentGitStatusResult,
+} from '@/types';
+
+/** Deploy the agent to a remote host */
+export const nodeAgentDeploy = (nodeId: string): Promise<AgentStatus> =>
+  invoke('node_agent_deploy', { nodeId });
+
+/** Get agent status for a node */
+export const nodeAgentStatus = (nodeId: string): Promise<AgentStatus> =>
+  invoke('node_agent_status', { nodeId });
+
+/** Read file via agent (returns content + hash for optimistic locking) */
+export const nodeAgentReadFile = (nodeId: string, path: string): Promise<AgentReadFileResult> =>
+  invoke('node_agent_read_file', { nodeId, path });
+
+/** Write file via agent (atomic write with optional optimistic lock) */
+export const nodeAgentWriteFile = (
+  nodeId: string, path: string, content: string, expectHash?: string
+): Promise<AgentWriteFileResult> =>
+  invoke('node_agent_write_file', { nodeId, path, content, expectHash });
+
+/** List directory tree (recursive) via agent */
+export const nodeAgentListTree = (
+  nodeId: string, path: string, maxDepth?: number, maxEntries?: number
+): Promise<AgentFileEntry[]> =>
+  invoke('node_agent_list_tree', { nodeId, path, maxDepth, maxEntries });
+
+/** Search files for pattern via agent */
+export const nodeAgentGrep = (
+  nodeId: string, pattern: string, path: string,
+  caseSensitive?: boolean, maxResults?: number
+): Promise<AgentGrepMatch[]> =>
+  invoke('node_agent_grep', { nodeId, pattern, path, caseSensitive, maxResults });
+
+/** Get git status via agent */
+export const nodeAgentGitStatus = (nodeId: string, path: string): Promise<AgentGitStatusResult> =>
+  invoke('node_agent_git_status', { nodeId, path });
+
+/** Start watching a directory for changes via agent */
+export const nodeAgentWatchStart = (nodeId: string, path: string, ignore?: string[]): Promise<void> =>
+  invoke('node_agent_watch_start', { nodeId, path, ignore });
+
+/** Stop watching a directory */
+export const nodeAgentWatchStop = (nodeId: string, path: string): Promise<void> =>
+  invoke('node_agent_watch_stop', { nodeId, path });
+
+/** Start relaying agent watch events to Tauri frontend events */
+export const nodeAgentStartWatchRelay = (nodeId: string): Promise<void> =>
+  invoke('node_agent_start_watch_relay', { nodeId });
+
 
 // --- Mock Data Helpers ---
 

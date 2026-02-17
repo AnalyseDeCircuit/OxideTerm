@@ -3,9 +3,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import {
   nodeSftpInit,
-  nodeSftpPreview,
   nodeSftpStat,
-  nodeSftpWrite,
   nodeSftpMkdir,
   nodeSftpDelete,
   nodeSftpDeleteRecursive,
@@ -13,6 +11,7 @@ import {
   nodeIdeOpenProject,
   nodeIdeCheckFile,
 } from '../lib/api';
+import * as agentService from '../lib/agentService';
 import {
   normalizePath,
   joinPath,
@@ -87,6 +86,7 @@ export interface IdeTab {
   isPinned: boolean;      // 是否已 Pin（不参与 LRU 驱逐）
   cursor?: { line: number; col: number };
   serverMtime?: number;   // 服务器端文件修改时间（Unix timestamp 秒）
+  agentHash?: string;     // Agent 乐观锁 hash（agent 可用时才有值）
   lastAccessTime: number; // 最后访问时间（用于 LRU 驱逐）
   contentVersion: number; // 内容版本号，用于强制编辑器刷新（冲突 reload 等场景）
 }
@@ -236,6 +236,11 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           
           // node-first: nodeSftpInit 是幂等的，总是安全调用
           await nodeSftpInit(nodeId);
+          
+          // Deploy agent (non-blocking, best-effort)
+          agentService.ensureAgent(nodeId).catch(() => {
+            // Agent deployment is optional — IDE works with SFTP alone
+          });
           
           // 调用后端获取项目信息
           const projectInfo = await nodeIdeOpenProject(nodeId, rootPath);
@@ -404,34 +409,25 @@ export const useIdeStore = create<IdeState & IdeActions>()(
               throw new Error(`Cannot edit file: ${checkResult.reason}`);
             }
             
-            // 文件可编辑，使用 preview API 加载内容
-            const preview = await nodeSftpPreview(nodeId, path);
+            // 文件可编辑，使用 agent-first 加载内容（SFTP 回退）
+            const result = await agentService.readFile(nodeId, path);
             
-            if ('Text' in preview) {
-              set(state => ({
-                tabs: state.tabs.map(t => 
-                  t.id === tabId 
-                    ? {
-                        ...t,
-                        content: preview.Text.data,
-                        originalContent: preview.Text.data,
-                        language: preview.Text.language || extensionToLanguage(extension),
-                        isLoading: false,
-                        serverMtime: checkResult.mtime,
-                      }
-                    : t
-                ),
-                cachedTabPaths: [...new Set([...state.cachedTabPaths, path])],
-              }));
-            } else {
-              // 不应该发生，但以防万一
-              set(state => ({
-                tabs: state.tabs.filter(t => t.id !== tabId),
-                activeTabId: state.tabs.length > 1 ? state.tabs[0].id : null,
-              }));
-              console.warn(`[IDE] Unexpected preview result for: ${path}`);
-              return;
-            }
+            set(state => ({
+              tabs: state.tabs.map(t => 
+                t.id === tabId 
+                  ? {
+                      ...t,
+                      content: result.content,
+                      originalContent: result.content,
+                      language: extensionToLanguage(extension),
+                      isLoading: false,
+                      serverMtime: result.mtime ?? checkResult.mtime,
+                      agentHash: result.hash, // 乐观锁 hash（agent only）
+                    }
+                  : t
+              ),
+              cachedTabPaths: [...new Set([...state.cachedTabPaths, path])],
+            }));
           } catch (error) {
             // 加载失败，移除标签
             set(state => ({
@@ -489,42 +485,53 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           // State Gating
           assertNodeReady(nodeId);
           
-          // 检查冲突
-          const stat = await nodeSftpStat(nodeId, tab.path);
-          if (tab.serverMtime && stat.modified && stat.modified !== tab.serverMtime) {
-            // 设置冲突状态，由 UI 层处理
-            set({
-              conflictState: {
-                tabId,
-                localMtime: tab.serverMtime,
-                remoteMtime: stat.modified,
-              }
-            });
-            throw new Error('CONFLICT');
+          // Agent-first: 原子写入 + 乐观锁
+          // 如果有 agentHash，使用 agent 写入（自动检测冲突）
+          // 否则回退到 SFTP stat + write
+          try {
+            const agentHash = tab.agentHash;
+            const writeResult = await agentService.writeFile(
+              nodeId,
+              tab.path,
+              tab.content,
+              agentHash,
+            );
+            
+            // 清除搜索缓存（文件内容已变化）
+            triggerSearchCacheClear();
+            
+            // 触发 Git 状态刷新
+            triggerGitRefresh();
+            
+            set(state => ({
+              tabs: state.tabs.map(t =>
+                t.id === tabId
+                  ? {
+                      ...t,
+                      isDirty: false,
+                      originalContent: t.content,
+                      serverMtime: writeResult.mtime ?? undefined,
+                      agentHash: writeResult.hash, // 更新 hash
+                    }
+                  : t
+              ),
+              conflictState: null,
+            }));
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            // Agent hash 冲突 → 转为 UI 冲突状态
+            if (msg.includes('CONFLICT') || msg.includes('hash mismatch') || msg.includes('File modified externally')) {
+              set({
+                conflictState: {
+                  tabId,
+                  localMtime: tab.serverMtime ?? 0,
+                  remoteMtime: 0, // SFTP stat 来获取精确时间
+                }
+              });
+              throw new Error('CONFLICT');
+            }
+            throw err;
           }
-          
-          // 保存文件
-          const result = await nodeSftpWrite(nodeId, tab.path, tab.content);
-          
-          // 清除搜索缓存（文件内容已变化）
-          triggerSearchCacheClear();
-          
-          // 触发 Git 状态刷新
-          triggerGitRefresh();
-          
-          set(state => ({
-            tabs: state.tabs.map(t =>
-              t.id === tabId
-                ? {
-                    ...t,
-                    isDirty: false,
-                    originalContent: t.content,
-                    serverMtime: result.mtime ?? undefined,
-                  }
-                : t
-            ),
-            conflictState: null,
-          }));
         },
 
         saveAllFiles: async () => {
@@ -628,8 +635,8 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           if (!tab || tab.content === null) return;
           
           if (resolution === 'overwrite') {
-            // 强制保存（忽略冲突）
-            const result = await nodeSftpWrite(nodeId, tab.path, tab.content);
+            // 强制保存（忽略冲突，不传 expectHash）
+            const writeResult = await agentService.writeFile(nodeId, tab.path, tab.content);
             
             set(state => ({
               tabs: state.tabs.map(t =>
@@ -638,35 +645,33 @@ export const useIdeStore = create<IdeState & IdeActions>()(
                       ...t,
                       isDirty: false,
                       originalContent: t.content,
-                      serverMtime: result.mtime ?? undefined,
+                      serverMtime: writeResult.mtime ?? undefined,
+                      agentHash: writeResult.hash,
                     }
                   : t
               ),
               conflictState: null,
             }));
           } else if (resolution === 'reload') {
-            // 重新加载远程内容
-            const preview = await nodeSftpPreview(nodeId, tab.path);
+            // 重新加载远程内容 (agent-first + SFTP 回退)
+            const result = await agentService.readFile(nodeId, tab.path);
             
-            if ('Text' in preview) {
-              const stat = await nodeSftpStat(nodeId, tab.path);
-              
-              set(state => ({
-                tabs: state.tabs.map(t =>
-                  t.id === conflictState.tabId
-                    ? {
-                        ...t,
-                        content: preview.Text.data,
-                        originalContent: preview.Text.data,
-                        isDirty: false,
-                        serverMtime: stat.modified ?? undefined,
-                        contentVersion: t.contentVersion + 1, // 强制编辑器刷新
-                      }
-                    : t
-                ),
-                conflictState: null,
-              }));
-            }
+            set(state => ({
+              tabs: state.tabs.map(t =>
+                t.id === conflictState.tabId
+                  ? {
+                      ...t,
+                      content: result.content,
+                      originalContent: result.content,
+                      isDirty: false,
+                      serverMtime: result.mtime ?? undefined,
+                      agentHash: result.hash,
+                      contentVersion: t.contentVersion + 1, // 强制编辑器刷新
+                    }
+                  : t
+              ),
+              conflictState: null,
+            }));
           }
         },
 
@@ -723,8 +728,8 @@ export const useIdeStore = create<IdeState & IdeActions>()(
             // 其他错误（如 "not found"）是正常的，继续执行
           }
           
-          // 5. 创建空文件（通过写入空内容）
-          await nodeSftpWrite(nodeId, fullPath, '');
+          // 5. 创建空文件（agent-first + SFTP 回退）
+          await agentService.writeFile(nodeId, fullPath, '');
           
           // 6. 触发树刷新
           refreshTreeNode(parentPath);

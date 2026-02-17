@@ -289,7 +289,15 @@
       "title": "Modo IDE",
       "description": "Configure o comportamento do editor de código integrado.",
       "auto_save": "Salvamento automático",
-      "auto_save_hint": "Salvar arquivos automaticamente ao trocar de aba ou perder o foco."
+      "auto_save_hint": "Salvar arquivos automaticamente ao trocar de aba ou perder o foco.",
+      "agent_title": "Agente remoto",
+      "agent_description": "O OxideTerm pode implantar um binário de agente leve em hosts remotos para melhorar o desempenho do IDE. O agente fornece operações de arquivo nativas POSIX, monitoramento de arquivos em tempo real e pesquisa rápida — tudo executado localmente no servidor remoto.",
+      "agent_feature_atomic": "Escrita atômica de arquivos (sem perda de dados em caso de interrupção de rede)",
+      "agent_feature_watch": "Monitoramento de arquivos em tempo real via inotify (atualização instantânea)",
+      "agent_feature_hash": "Detecção de conflitos baseada em hash (impede sobrescrever alterações externas)",
+      "agent_feature_search": "Pesquisa grep no lado do servidor e carregamento profundo da árvore de diretórios",
+      "agent_supported": "Arquiteturas suportadas",
+      "agent_auto_hint": "O agente é implantado automaticamente ao abrir o modo IDE em um host Linux compatível. Nenhuma configuração manual necessária. Arquiteturas não suportadas recorrem ao SFTP de forma transparente."
     },
     "ai_confirm": {
       "title": "Habilitar recursos de IA?",

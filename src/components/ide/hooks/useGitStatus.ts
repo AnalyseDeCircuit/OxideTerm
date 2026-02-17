@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useIdeStore, registerGitRefreshCallback } from '../../../store/ideStore';
 import { nodeIdeExecCommand } from '../../../lib/api';
+import * as agentService from '../../../lib/agentService';
 
 // 防抖函数
 function debounce<T extends (...args: unknown[]) => unknown>(
@@ -53,6 +54,23 @@ interface UseGitStatusResult {
   refresh: () => Promise<void>;
   /** 获取特定文件的 Git 状态 */
   getFileStatus: (relativePath: string) => GitFileStatus | undefined;
+}
+
+/**
+ * Convert agent's status string to GitFileStatus enum.
+ * Agent returns single-char status: M, A, D, R, ?, !, U
+ */
+function statusStringToGitFileStatus(status: string): GitFileStatus {
+  switch (status) {
+    case 'M': return 'modified';
+    case 'A': return 'added';
+    case 'D': return 'deleted';
+    case 'R': return 'renamed';
+    case '?': return 'untracked';
+    case '!': return 'ignored';
+    case 'U': return 'conflict';
+    default: return 'modified';
+  }
 }
 
 /**
@@ -196,32 +214,47 @@ export function useGitStatus(): UseGitStatusResult {
     setError(null);
     
     try {
-      // 执行 git status 命令
-      const result = await nodeIdeExecCommand(
-        nodeId,
-        'git status --porcelain=v1 --branch 2>/dev/null',
-        project.rootPath,
-        10 // 10秒超时
-      );
+      // Agent-first: try native git status via agent
+      const agentResult = await agentService.gitStatus(nodeId, project.rootPath);
       
-      // 检查命令是否成功
-      if (result.exitCode !== 0) {
-        // git 命令失败，可能不是 git 仓库或其他错误
-        console.warn('[useGitStatus] git status failed:', result.stderr);
+      if (agentResult !== null) {
+        // Agent succeeded — convert to GitStatus format
+        const files = new Map<string, GitFileStatus>();
+        for (const f of agentResult.files) {
+          files.set(f.path, statusStringToGitFileStatus(f.status));
+        }
         setStatus({
-          branch: project.gitBranch || 'main',
+          branch: agentResult.branch,
           ahead: 0,
           behind: 0,
-          files: new Map(),
+          files,
         });
-        return;
+      } else {
+        // Exec fallback: git status via shell command
+        const result = await nodeIdeExecCommand(
+          nodeId,
+          'git status --porcelain=v1 --branch 2>/dev/null',
+          project.rootPath,
+          10
+        );
+        
+        if (result.exitCode !== 0) {
+          console.warn('[useGitStatus] git status failed:', result.stderr);
+          setStatus({
+            branch: project.gitBranch || 'main',
+            ahead: 0,
+            behind: 0,
+            files: new Map(),
+          });
+          return;
+        }
+        
+        const lines = result.stdout.split('\n');
+        const { branch, ahead, behind } = parseBranchInfo(lines[0] || '');
+        const files = parseGitStatusOutput(lines.slice(1).join('\n'));
+        
+        setStatus({ branch, ahead, behind, files });
       }
-      
-      const lines = result.stdout.split('\n');
-      const { branch, ahead, behind } = parseBranchInfo(lines[0] || '');
-      const files = parseGitStatusOutput(lines.slice(1).join('\n'));
-      
-      setStatus({ branch, ahead, behind, files });
       
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);

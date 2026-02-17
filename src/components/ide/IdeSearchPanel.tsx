@@ -13,6 +13,7 @@ import { useIdeStore, useIdeProject, registerSearchCacheClearCallback } from '..
 import { cn } from '../../lib/utils';
 import { Input } from '../ui/input';
 import { nodeIdeExecCommand } from '../../lib/api';
+import * as agentService from '../../lib/agentService';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 搜索缓存（模块级别，组件卸载不会丢失）
@@ -171,84 +172,93 @@ export function IdeSearchPanel({ open, onClose }: IdeSearchPanelProps) {
     setError(null);
     
     try {
-      // 转义搜索查询中的特殊字符用于 grep
-      const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let matches: SearchMatch[] = [];
       
-      // Shell-escape single quotes: ' → '\''
-      const shellSafe = escapedQuery.replace(/'/g, "'\\''");
-      
-      // 命令长度安全检查 (8KB 上限)
-      if (shellSafe.length > 8192) {
-        setError('Search query too long');
-        return;
-      }
-      
-      // 构建 grep 命令
-      // -r: 递归搜索
-      // -n: 显示行号
-      // -I: 忽略二进制文件
-      // --include: 只搜索特定类型文件
-      // --: 终止选项解析（防止 query 被解释为 flag）
-      // -e: 指定模式（防止以 - 开头的 query 被解释为选项）
-      // --max-columns=500: 防止巨长行（压缩 JS）卡死 UI
-      // 限制结果数量为 200 以避免过多输出
-      const includePatterns = [
-        '*.ts', '*.tsx', '*.js', '*.jsx', '*.json',
-        '*.rs', '*.toml', '*.md', '*.txt',
-        '*.py', '*.go', '*.java', '*.c', '*.cpp', '*.h',
-        '*.css', '*.scss', '*.html', '*.vue', '*.svelte',
-        '*.yaml', '*.yml', '*.sh', '*.bash',
-      ].map(p => `--include='${p}'`).join(' ');
-      
-      const command = `grep -rn -I ${includePatterns} --color=never -- -e '${shellSafe}' . 2>/dev/null | head -200`;
-      
-      const result = await nodeIdeExecCommand(
+      // Agent-first: try native grep via agent
+      const agentResults = await agentService.grep(
         nodeId,
-        command,
+        searchQuery,
         project.rootPath,
-        30 // 30秒超时
+        { caseSensitive: false, maxResults: 200 },
       );
       
-      // 解析 grep 输出
-      // 格式: ./path/to/file:line:content
-      const matches: SearchMatch[] = [];
-      const lines = result.stdout.split('\n');
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
+      if (agentResults !== null) {
+        // Agent grep succeeded — convert to SearchMatch format
+        matches = agentResults.map(m => {
+          const lowerText = m.text.toLowerCase();
+          const lowerQuery = searchQuery.toLowerCase();
+          const matchStart = lowerText.indexOf(lowerQuery);
+          return {
+            path: m.path,
+            line: m.line,
+            column: m.column,
+            preview: m.text.trim().substring(0, 200),
+            matchStart: Math.max(0, matchStart),
+            matchEnd: matchStart >= 0 ? matchStart + searchQuery.length : 0,
+          };
+        });
+      } else {
+        // SFTP/exec fallback: grep via shell command
+        const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const shellSafe = escapedQuery.replace(/'/g, "'\\''");
         
-        // 解析格式: ./path:linenum:content
-        const firstColonIdx = line.indexOf(':');
-        if (firstColonIdx === -1) continue;
-        
-        const secondColonIdx = line.indexOf(':', firstColonIdx + 1);
-        if (secondColonIdx === -1) continue;
-        
-        let path = line.substring(0, firstColonIdx);
-        const lineNum = parseInt(line.substring(firstColonIdx + 1, secondColonIdx), 10);
-        const content = line.substring(secondColonIdx + 1);
-        
-        if (isNaN(lineNum)) continue;
-        
-        // 移除前导 ./
-        if (path.startsWith('./')) {
-          path = path.substring(2);
+        if (shellSafe.length > 8192) {
+          setError('Search query too long');
+          return;
         }
         
-        // 查找匹配位置（不区分大小写）
-        const lowerContent = content.toLowerCase();
-        const lowerQuery = searchQuery.toLowerCase();
-        const matchStart = lowerContent.indexOf(lowerQuery);
-        const matchEnd = matchStart >= 0 ? matchStart + searchQuery.length : 0;
+        const includePatterns = [
+          '*.ts', '*.tsx', '*.js', '*.jsx', '*.json',
+          '*.rs', '*.toml', '*.md', '*.txt',
+          '*.py', '*.go', '*.java', '*.c', '*.cpp', '*.h',
+          '*.css', '*.scss', '*.html', '*.vue', '*.svelte',
+          '*.yaml', '*.yml', '*.sh', '*.bash',
+        ].map(p => `--include='${p}'`).join(' ');
         
-        matches.push({
-          path,
-          line: lineNum,
-          column: matchStart >= 0 ? matchStart : 0,
-          preview: content.trim().substring(0, 200), // 限制预览长度
-          matchStart: Math.max(0, matchStart),
-          matchEnd: matchEnd,
-        });
+        const command = `grep -rn -I ${includePatterns} --color=never -- -e '${shellSafe}' . 2>/dev/null | head -200`;
+        
+        const result = await nodeIdeExecCommand(
+          nodeId,
+          command,
+          project.rootPath,
+          30
+        );
+        
+        const lines = result.stdout.split('\n');
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          const firstColonIdx = line.indexOf(':');
+          if (firstColonIdx === -1) continue;
+          
+          const secondColonIdx = line.indexOf(':', firstColonIdx + 1);
+          if (secondColonIdx === -1) continue;
+          
+          let path = line.substring(0, firstColonIdx);
+          const lineNum = parseInt(line.substring(firstColonIdx + 1, secondColonIdx), 10);
+          const content = line.substring(secondColonIdx + 1);
+          
+          if (isNaN(lineNum)) continue;
+          
+          if (path.startsWith('./')) {
+            path = path.substring(2);
+          }
+          
+          const lowerContent = content.toLowerCase();
+          const lowerQuery = searchQuery.toLowerCase();
+          const matchStart = lowerContent.indexOf(lowerQuery);
+          const matchEnd = matchStart >= 0 ? matchStart + searchQuery.length : 0;
+          
+          matches.push({
+            path,
+            line: lineNum,
+            column: matchStart >= 0 ? matchStart : 0,
+            preview: content.trim().substring(0, 200),
+            matchStart: Math.max(0, matchStart),
+            matchEnd: matchEnd,
+          });
+        }
       }
       
       // 按文件分组

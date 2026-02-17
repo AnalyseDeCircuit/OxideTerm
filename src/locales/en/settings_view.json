@@ -289,7 +289,15 @@
       "title": "IDE Mode",
       "description": "Configure the built-in code editor behavior.",
       "auto_save": "Auto Save",
-      "auto_save_hint": "Automatically save files when switching tabs or losing focus."
+      "auto_save_hint": "Automatically save files when switching tabs or losing focus.",
+      "agent_title": "Remote Agent",
+      "agent_description": "OxideTerm can deploy a lightweight agent binary to remote hosts for enhanced IDE performance. The agent provides POSIX-native file operations, real-time file watching, and faster search — all running locally on the remote server.",
+      "agent_feature_atomic": "Atomic file writes (no data loss on network disruption)",
+      "agent_feature_watch": "Real-time file watching via inotify (instant refresh)",
+      "agent_feature_hash": "Hash-based conflict detection (prevents overwriting external changes)",
+      "agent_feature_search": "Server-side grep and deep directory tree loading",
+      "agent_supported": "Supported Architectures",
+      "agent_auto_hint": "The agent is deployed automatically when opening IDE mode on a supported Linux host. No manual configuration needed. Unsupported architectures fall back to SFTP seamlessly."
     },
     "ai_confirm": {
       "title": "Enable AI Capabilities?",

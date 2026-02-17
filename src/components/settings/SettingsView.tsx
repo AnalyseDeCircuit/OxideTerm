@@ -1934,6 +1934,48 @@ export const SettingsView = () => {
                                     />
                                 </div>
                             </div>
+
+                            {/* Remote Agent */}
+                            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5 space-y-4">
+                                <h4 className="text-sm font-medium text-theme-text uppercase tracking-wider">
+                                    {t('settings_view.ide.agent_title', 'Remote Agent')}
+                                </h4>
+                                <p className="text-xs text-theme-text-muted">
+                                    {t('settings_view.ide.agent_description', 'OxideTerm can deploy a lightweight agent binary to remote hosts for enhanced IDE performance. The agent provides POSIX-native file operations, real-time file watching, and faster search — all running locally on the remote server.')}
+                                </p>
+                                <div className="space-y-3 text-xs">
+                                    <div className="flex items-start gap-2 text-theme-text-muted">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                                        <span>{t('settings_view.ide.agent_feature_atomic', 'Atomic file writes (no data loss on network disruption)')}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-theme-text-muted">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                                        <span>{t('settings_view.ide.agent_feature_watch', 'Real-time file watching via inotify (instant refresh)')}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-theme-text-muted">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                                        <span>{t('settings_view.ide.agent_feature_hash', 'Hash-based conflict detection (prevents overwriting external changes)')}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2 text-theme-text-muted">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                                        <span>{t('settings_view.ide.agent_feature_search', 'Server-side grep and deep directory tree loading')}</span>
+                                    </div>
+                                </div>
+                                <div className="pt-2 border-t border-theme-border/50">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <Label className="text-theme-text text-xs">{t('settings_view.ide.agent_supported', 'Supported Architectures')}</Label>
+                                            <p className="text-xs text-theme-text-muted mt-0.5">x86_64, aarch64 (Linux)</p>
+                                        </div>
+                                        <span className="text-xs text-theme-text-muted bg-theme-bg-panel px-2 py-1 rounded border border-theme-border/50">
+                                            ~600 KB
+                                        </span>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-theme-text-muted italic">
+                                    {t('settings_view.ide.agent_auto_hint', 'The agent is deployed automatically when opening IDE mode on a supported Linux host. No manual configuration needed. Unsupported architectures fall back to SFTP seamlessly.')}
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>

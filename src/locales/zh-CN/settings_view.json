@@ -289,7 +289,15 @@
       "title": "IDE 编辑器",
       "description": "配置内置代码编辑器的行为。",
       "auto_save": "自动保存",
-      "auto_save_hint": "切换标签页或失去焦点时自动保存文件。"
+      "auto_save_hint": "切换标签页或失去焦点时自动保存文件。",
+      "agent_title": "远程代理",
+      "agent_description": "OxideTerm 可以将轻量级代理程序部署到远程主机，以提升 IDE 性能。代理提供 POSIX 原生文件操作、实时文件监视和快速搜索 — 全部在远程服务器本地运行。",
+      "agent_feature_atomic": "原子文件写入（网络中断不会丢失数据）",
+      "agent_feature_watch": "通过 inotify 实时监视文件变更（即时刷新）",
+      "agent_feature_hash": "基于哈希的冲突检测（防止覆盖外部更改）",
+      "agent_feature_search": "服务端 grep 搜索和深层目录树加载",
+      "agent_supported": "支持的架构",
+      "agent_auto_hint": "在受支持的 Linux 主机上打开 IDE 模式时，代理会自动部署，无需手动配置。不支持的架构将无缝回退到 SFTP。"
     },
     "ai_confirm": {
       "title": "启用 AI 功能？",

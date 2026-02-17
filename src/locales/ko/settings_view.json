@@ -289,7 +289,15 @@
       "title": "IDE 모드",
       "description": "내장 코드 편집기의 동작을 설정합니다.",
       "auto_save": "자동 저장",
-      "auto_save_hint": "탭 전환 또는 포커스를 잃을 때 파일을 자동 저장합니다."
+      "auto_save_hint": "탭 전환 또는 포커스를 잃을 때 파일을 자동 저장합니다.",
+      "agent_title": "원격 에이전트",
+      "agent_description": "OxideTerm은 원격 호스트에 경량 에이전트 바이너리를 배포하여 IDE 성능을 향상시킬 수 있습니다. 에이전트는 POSIX 네이티브 파일 작업, 실시간 파일 감시, 빠른 검색을 제공합니다 — 모두 원격 서버에서 로컬로 실행됩니다.",
+      "agent_feature_atomic": "원자적 파일 쓰기 (네트워크 중단 시 데이터 손실 없음)",
+      "agent_feature_watch": "inotify를 통한 실시간 파일 감시 (즉시 새로고침)",
+      "agent_feature_hash": "해시 기반 충돌 감지 (외부 변경 덮어쓰기 방지)",
+      "agent_feature_search": "서버 측 grep 및 깊은 디렉토리 트리 로딩",
+      "agent_supported": "지원 아키텍처",
+      "agent_auto_hint": "지원되는 Linux 호스트에서 IDE 모드를 열면 에이전트가 자동으로 배포됩니다. 수동 구성이 필요 없습니다. 지원되지 않는 아키텍처는 SFTP로 원활하게 대체됩니다."
     },
     "ai_confirm": {
       "title": "AI 기능을 활성화하시겠습니까?",

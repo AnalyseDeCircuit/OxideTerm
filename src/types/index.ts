@@ -1245,3 +1245,65 @@ export interface AiProvider {
   /** Creation timestamp */
   createdAt: number;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Agent Types (Remote Agent Architecture)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Agent deployment/runtime status */
+export type AgentStatus =
+  | { type: 'notDeployed' }
+  | { type: 'deploying' }
+  | { type: 'ready'; version: string; arch: string; pid: number }
+  | { type: 'failed'; reason: string }
+  | { type: 'unsupportedArch'; arch: string };
+
+/** Agent fs/readFile result */
+export type AgentReadFileResult = {
+  content: string;
+  hash: string;
+  size: number;
+  mtime: number;
+};
+
+/** Agent fs/writeFile result */
+export type AgentWriteFileResult = {
+  hash: string;
+  size: number;
+  mtime: number;
+  atomic: boolean;
+};
+
+/** Agent file/directory entry (recursive tree) */
+export type AgentFileEntry = {
+  name: string;
+  path: string;
+  file_type: string;
+  size: number;
+  mtime?: number;
+  permissions?: string;
+  children?: AgentFileEntry[];
+};
+
+/** Agent search/grep match */
+export type AgentGrepMatch = {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+};
+
+/** Agent git/status result */
+export type AgentGitStatusResult = {
+  branch: string;
+  files: Array<{
+    path: string;
+    status: string;
+  }>;
+};
+
+/** Agent watch/event notification */
+export type AgentWatchEvent = {
+  path: string;
+  kind: 'create' | 'modify' | 'delete' | 'rename';
+};

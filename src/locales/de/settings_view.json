@@ -289,7 +289,15 @@
       "title": "IDE-Modus",
       "description": "Verhalten des integrierten Code-Editors konfigurieren.",
       "auto_save": "Automatisches Speichern",
-      "auto_save_hint": "Dateien beim Tab-Wechsel oder bei Fokusverlust automatisch speichern."
+      "auto_save_hint": "Dateien beim Tab-Wechsel oder bei Fokusverlust automatisch speichern.",
+      "agent_title": "Remote-Agent",
+      "agent_description": "OxideTerm kann eine leichtgewichtige Agent-Binärdatei auf Remote-Hosts bereitstellen, um die IDE-Leistung zu verbessern. Der Agent bietet POSIX-native Dateioperationen, Echtzeit-Dateiüberwachung und schnelle Suche — alles lokal auf dem Remote-Server ausgeführt.",
+      "agent_feature_atomic": "Atomare Dateischreibvorgänge (kein Datenverlust bei Netzwerkunterbrechung)",
+      "agent_feature_watch": "Echtzeit-Dateiüberwachung über inotify (sofortige Aktualisierung)",
+      "agent_feature_hash": "Hash-basierte Konflikterkennung (verhindert das Überschreiben externer Änderungen)",
+      "agent_feature_search": "Serverseitige grep-Suche und tiefes Verzeichnisbaum-Laden",
+      "agent_supported": "Unterstützte Architekturen",
+      "agent_auto_hint": "Der Agent wird automatisch bereitgestellt, wenn der IDE-Modus auf einem unterstützten Linux-Host geöffnet wird. Keine manuelle Konfiguration erforderlich. Nicht unterstützte Architekturen fallen nahtlos auf SFTP zurück."
     },
     "ai_confirm": {
       "title": "KI-Funktionen aktivieren?",

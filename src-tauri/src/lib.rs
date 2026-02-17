@@ -7,6 +7,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+pub mod agent;
 pub mod bridge;
 pub mod commands;
 pub mod config;
@@ -74,6 +75,7 @@ mod windows_timer {
 #[cfg(target_os = "windows")]
 use windows_timer::{disable_high_precision_timer, enable_high_precision_timer};
 
+use agent::AgentRegistry;
 use bridge::BridgeManager;
 use commands::config::ConfigState;
 use commands::plugin_server::PluginFileServer;
@@ -234,6 +236,9 @@ pub fn run() {
     // Create SSH connection registry (connection pool)
     let ssh_connection_registry = Arc::new(SshConnectionRegistry::new());
 
+    // Create Agent registry (remote agent sessions)
+    let agent_registry = Arc::new(AgentRegistry::new());
+
     // Create progress store for transfer resume
     let progress_store = match RedbProgressStore::default_path() {
         Ok(path) => {
@@ -326,6 +331,7 @@ pub fn run() {
         .manage(transfer_manager)
         .manage(progress_store)
         .manage(ssh_connection_registry.clone())
+        .manage(agent_registry.clone())
         .manage(session_tree_state)
         .manage(node_router)
         .manage(node_event_emitter.clone())
@@ -644,6 +650,17 @@ pub fn run() {
         commands::node_forward_tensorboard,
         commands::node_forward_vscode,
         commands::node_list_saved_forwards,
+        // Agent commands (remote agent deployment & operations)
+        commands::node_agent_deploy,
+        commands::node_agent_status,
+        commands::node_agent_read_file,
+        commands::node_agent_write_file,
+        commands::node_agent_list_tree,
+        commands::node_agent_grep,
+        commands::node_agent_git_status,
+        commands::node_agent_watch_start,
+        commands::node_agent_watch_stop,
+        commands::node_agent_start_watch_relay,
         // WSL Graphics commands (stub on non-Windows platforms)
         graphics::commands::wsl_graphics_list_distros,
         graphics::commands::wsl_graphics_start,
@@ -888,6 +905,17 @@ pub fn run() {
         commands::node_forward_tensorboard,
         commands::node_forward_vscode,
         commands::node_list_saved_forwards,
+        // Agent commands (remote agent deployment & operations)
+        commands::node_agent_deploy,
+        commands::node_agent_status,
+        commands::node_agent_read_file,
+        commands::node_agent_write_file,
+        commands::node_agent_list_tree,
+        commands::node_agent_grep,
+        commands::node_agent_git_status,
+        commands::node_agent_watch_start,
+        commands::node_agent_watch_stop,
+        commands::node_agent_start_watch_relay,
         // WSL Graphics commands (stub on non-Windows platforms)
         graphics::commands::wsl_graphics_list_distros,
         graphics::commands::wsl_graphics_start,
@@ -967,6 +995,14 @@ pub fn run() {
                         tracing::info!("Closing all SFTP sessions...");
                         tauri::async_runtime::block_on(async {
                             sftp_registry.close_all().await;
+                        });
+                    }
+
+                    // Clean up agent sessions
+                    if let Some(agent_reg) = app_handle.try_state::<Arc<AgentRegistry>>() {
+                        tracing::info!("Shutting down all remote agents...");
+                        tauri::async_runtime::block_on(async {
+                            agent_reg.close_all().await;
                         });
                     }
 

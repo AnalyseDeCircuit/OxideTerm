@@ -289,7 +289,15 @@
       "title": "Chế độ IDE",
       "description": "Cấu hình hành vi của trình soạn thảo mã tích hợp.",
       "auto_save": "Tự động lưu",
-      "auto_save_hint": "Tự động lưu tệp khi chuyển tab hoặc mất tiêu điểm."
+      "auto_save_hint": "Tự động lưu tệp khi chuyển tab hoặc mất tiêu điểm.",
+      "agent_title": "Agent từ xa",
+      "agent_description": "OxideTerm có thể triển khai một agent nhị phân nhẹ trên máy chủ từ xa để nâng cao hiệu suất IDE. Agent cung cấp các thao tác tệp POSIX gốc, theo dõi tệp thời gian thực và tìm kiếm nhanh — tất cả chạy cục bộ trên máy chủ từ xa.",
+      "agent_feature_atomic": "Ghi tệp nguyên tử (không mất dữ liệu khi mạng bị gián đoạn)",
+      "agent_feature_watch": "Theo dõi tệp thời gian thực qua inotify (làm mới tức thì)",
+      "agent_feature_hash": "Phát hiện xung đột dựa trên hash (ngăn ghi đè các thay đổi bên ngoài)",
+      "agent_feature_search": "Tìm kiếm grep phía máy chủ và tải sâu cây thư mục",
+      "agent_supported": "Kiến trúc được hỗ trợ",
+      "agent_auto_hint": "Agent được triển khai tự động khi mở chế độ IDE trên máy chủ Linux được hỗ trợ. Không cần cấu hình thủ công. Các kiến trúc không được hỗ trợ sẽ chuyển sang SFTP một cách liền mạch."
     },
     "ai_confirm": {
       "title": "Bật tính năng AI?",
