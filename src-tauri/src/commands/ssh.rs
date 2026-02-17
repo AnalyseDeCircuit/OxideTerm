@@ -22,6 +22,7 @@ use crate::forwarding::ForwardingManager;
 use crate::session::{
     parse_terminal_output, AuthMethod, SessionConfig, SessionInfo, SessionRegistry,
 };
+use crate::agent::AgentRegistry;
 use crate::sftp::session::SftpRegistry;
 use crate::ssh::{
     accept_host_key, check_host_key, get_host_key_cache, ConnectionInfo, ConnectionPoolConfig,
@@ -39,6 +40,7 @@ pub async fn ssh_disconnect(
     bridge_manager: State<'_, BridgeManager>,
     health_registry: State<'_, HealthRegistry>,
     profiler_registry: State<'_, ProfilerRegistry>,
+    agent_registry: State<'_, Arc<AgentRegistry>>,
 ) -> Result<(), String> {
     info!("SSH disconnect request: {}", connection_id);
 
@@ -72,6 +74,9 @@ pub async fn ssh_disconnect(
         // 这里暂时跳过，后续重构 ForwardingRegistry
         let _ = forward_id;
     }
+
+    // 关闭关联的 agent
+    agent_registry.remove(&connection_id).await;
 
     // 断开 SSH 连接
     connection_registry

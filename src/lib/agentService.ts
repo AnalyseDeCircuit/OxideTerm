@@ -167,9 +167,14 @@ export async function writeFile(
 }
 
 /**
- * List directory — agent (recursive tree) or SFTP (single level).
+ * List directory — agent (flat listing) or SFTP (single level).
  * When agent is available, returns a flattened single-level listing
  * (for compatibility with IdeTree's per-node expansion model).
+ *
+ * Uses max_depth=0 so the agent only reads the directory's direct children
+ * without recursing into subdirectories. This keeps the entry count proportional
+ * to the directory's actual size and prevents truncation caused by deep
+ * subdirectory expansion inflating the shared count budget.
  */
 export async function listDir(
   nodeId: string,
@@ -177,7 +182,7 @@ export async function listDir(
 ): Promise<FileInfo[]> {
   if (await isAgentReady(nodeId)) {
     try {
-      const result = await nodeAgentListTree(nodeId, path, 1, 5000);
+      const result = await nodeAgentListTree(nodeId, path, 0, 5000);
       return agentEntriesToFileInfoList(result.entries);
     } catch {
       agentReadyCache.set(nodeId, false);

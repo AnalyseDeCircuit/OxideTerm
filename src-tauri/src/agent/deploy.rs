@@ -245,11 +245,23 @@ impl AgentDeployer {
         .await
         .map_err(|e| DeployError::ExecFailed(e))?;
 
-        if result.exit_code.unwrap_or(1) != 0 {
-            warn!(
-                "[agent-deploy] Command '{}' failed: {}",
-                command, result.stderr
-            );
+        // Only warn on explicit non-zero exit codes.
+        // When exit_code is None (SSH channel didn't send ExitStatus before Close),
+        // treat as success if stderr is empty — this is common for simple commands.
+        match result.exit_code {
+            Some(code) if code != 0 => {
+                warn!(
+                    "[agent-deploy] Command '{}' failed (exit {}): {}",
+                    command, code, result.stderr
+                );
+            }
+            None if !result.stderr.trim().is_empty() => {
+                warn!(
+                    "[agent-deploy] Command '{}' produced stderr: {}",
+                    command, result.stderr
+                );
+            }
+            _ => {}
         }
 
         Ok(result.stdout)

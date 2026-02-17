@@ -161,7 +161,7 @@ function TreeNode({
       setChildren(null);
       loadingRef.current = false;
     }
-  }, [refreshSignal, isDir, isExpanded]);
+  }, [refreshSignal, isDir, isExpanded, children]);
   
   // 计算相对于项目根目录的路径（用于 Git 状态查询）
   const relativePath = gitStatusCtx 
@@ -181,9 +181,12 @@ function TreeNode({
     setError(null);
     
     try {
-      // Check prefetch cache first (populated by listTree on project open)
+      // Check prefetch cache first (populated by listTree on project open).
+      // Only trust non-empty cached results — an empty array could be a
+      // truncation artefact where the directory's entries were skipped
+      // because the global entry count budget was exhausted.
       const cached = prefetchCache.get(fullPath);
-      if (cached) {
+      if (cached && cached.length > 0) {
         setChildren(cached);
         setIsLoading(false);
         loadingRef.current = false;
@@ -215,6 +218,21 @@ function TreeNode({
       loadChildren();
     }
   }, [isExpanded, isDir, children, loadChildren]);
+
+  // 安全网：如果 loadingRef 卡住（展开状态 + children 为 null + 不在加载 + ref 异常为 true），
+  // 在短暂延迟后强制重试
+  useEffect(() => {
+    if (!isExpanded || !isDir || children !== null || isLoading) return;
+    // loadingRef 可能因并发/重连等边界情况卡住
+    const timer = setTimeout(() => {
+      if (loadingRef.current && !isLoading && children === null) {
+        console.warn('[IdeTree] loadingRef stuck, resetting for', fullPath);
+        loadingRef.current = false;
+        loadChildren();
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [isExpanded, isDir, children, isLoading, fullPath, loadChildren]);
   
   // 点击处理
   const handleClick = useCallback(() => {
@@ -348,7 +366,7 @@ function TreeNode({
       {/* 子节点 */}
       {isDir && isExpanded && (
         <div>
-          {error ? (
+          {error && (
             <div 
               className="flex items-center gap-1 py-1 text-xs text-red-400"
               style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
@@ -356,9 +374,26 @@ function TreeNode({
               <AlertCircle className="w-3 h-3" />
               <span className="truncate">{error}</span>
             </div>
-          ) : children?.map(child => (
+          )}
+          {children === null ? (
+            /* 子节点加载中 — 显示占位 spinner */
+            <div
+              className="flex items-center gap-1.5 py-1 text-xs text-theme-text-muted"
+              style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </div>
+          ) : children.length === 0 && !error ? (
+            /* 空目录 */
+            <div
+              className="py-1 text-xs text-theme-text-muted italic"
+              style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
+            >
+              (empty)
+            </div>
+          ) : children.map(child => (
             <TreeNode
-              key={child.name}
+              key={child.path}
               file={child}
               depth={depth + 1}
               nodeId={nodeId}
@@ -429,6 +464,18 @@ export function IdeTree() {
   // Truncation state: tree was too large for full prefetch
   const [treeTruncated, setTreeTruncated] = useState(false);
   
+  // 当项目根目录变化时，立即清空旧文件树和预取缓存，防止陈旧数据
+  const prevRootRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentRoot = project?.rootPath ?? null;
+    if (prevRootRef.current !== null && prevRootRef.current !== currentRoot) {
+      setRootFiles(null);
+      prefetchCache.clear();
+      setTreeTruncated(false);
+    }
+    prevRootRef.current = currentRoot;
+  }, [project?.rootPath, prefetchCache]);
+  
   // 加载根目录
   const loadRoot = useCallback(async () => {
     if (!project || !nodeId) return;
@@ -441,14 +488,26 @@ export function IdeTree() {
       const result = await agentService.listDir(nodeId, project.rootPath);
       setRootFiles(sortFiles(result));
       
-      // Deep prefetch: if agent is available, load 3 levels in background
+      // Deep prefetch: if agent is available, load 3 levels in background.
+      // Capture current rootPath to guard against stale results after root change.
+      const rootPathAtStart = project.rootPath;
       agentService.listTree(nodeId, project.rootPath, 3, 5000)
         .then(treeResult => {
           if (treeResult) {
-            prefetchCache.clear();
-            buildPrefetchCache(treeResult.entries, prefetchCache);
+            // Guard: if root changed while prefetch was in-flight, discard stale result
+            const currentRoot = useIdeStore.getState().project?.rootPath;
+            if (currentRoot !== rootPathAtStart) return;
+
             if (treeResult.truncated) {
+              // Tree exceeded the entry budget — the cache would contain partial
+              // directory listings (some files/dirs silently missing). Discard
+              // the entire prefetch so every expansion does a live fetch instead
+              // of trusting incomplete data.
               setTreeTruncated(true);
+              prefetchCache.clear();
+            } else {
+              prefetchCache.clear();
+              buildPrefetchCache(treeResult.entries, prefetchCache);
             }
           }
         })
@@ -803,7 +862,7 @@ export function IdeTree() {
             </div>
           ) : rootFiles?.map(file => (
             <TreeNode
-              key={file.name}
+              key={file.path}
               file={file}
               depth={0}
               nodeId={nodeId!}

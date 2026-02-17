@@ -250,7 +250,21 @@ pub(crate) async fn exec_command_inner(
 
     // Build command with optional cwd
     let full_command = match cwd {
-        Some(dir) => format!("cd {} && {}", shell_escape(&dir), command),
+        Some(dir) => {
+            // Handle ~ prefix: keep it outside quotes so the shell expands it
+            let cd_target = if dir == "~" {
+                "~".to_string()
+            } else if let Some(rest) = dir.strip_prefix("~/") {
+                if rest.is_empty() {
+                    "~".to_string()
+                } else {
+                    format!("~/{}", shell_escape(rest))
+                }
+            } else {
+                shell_escape(&dir)
+            };
+            format!("cd {} && {}", cd_target, command)
+        }
         None => command.clone(),
     };
 

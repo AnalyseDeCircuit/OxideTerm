@@ -257,10 +257,12 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
 
       if (!mounted || !node) return;
 
-      // 构建扩展 — 字体从 settingsStore 读取
+      // 构建扩展 — 字体从 settingsStore 读取，IDE 独立设置优先
       const { settings } = useSettingsStore.getState();
       const fontStack = getFontFamily(settings.terminal.fontFamily, settings.terminal.customFontFamily);
-      const initialTheme = buildOxideTheme(fontStack, settings.terminal.fontSize, settings.terminal.lineHeight);
+      const ideFontSize = settings.ide?.fontSize ?? settings.terminal.fontSize;
+      const ideLineHeight = settings.ide?.lineHeight ?? settings.terminal.lineHeight;
+      const initialTheme = buildOxideTheme(fontStack, ideFontSize, ideLineHeight);
 
       // Agent symbol completion source (only when nodeId + projectRoot provided)
       const completionOverrides = (nodeId && projectRoot)
@@ -371,10 +373,18 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
       });
 
       viewRef.current = view;
-      setIsReady(true);
 
       // 初始光标位置
       onCursorChangeRef.current?.(1, 1);
+
+      // Defer isReady until after browser layout so CodeMirror can
+      // measure the container dimensions correctly.  Without this,
+      // the first setContent may land on a zero-viewport editor.
+      requestAnimationFrame(() => {
+        // Guard: only proceed if this view is still the active one
+        // (view might have been destroyed if the component unmounted)
+        if (viewRef.current === view) setIsReady(true);
+      });
     };
 
     initEditor();
@@ -388,24 +398,30 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
       (state) => ({
         fontFamily: state.settings.terminal.fontFamily,
         customFontFamily: state.settings.terminal.customFontFamily,
-        fontSize: state.settings.terminal.fontSize,
-        lineHeight: state.settings.terminal.lineHeight,
+        terminalFontSize: state.settings.terminal.fontSize,
+        terminalLineHeight: state.settings.terminal.lineHeight,
+        ideFontSize: state.settings.ide?.fontSize ?? null,
+        ideLineHeight: state.settings.ide?.lineHeight ?? null,
       }),
       (curr, prev) => {
         if (
           curr.fontFamily === prev.fontFamily &&
           curr.customFontFamily === prev.customFontFamily &&
-          curr.fontSize === prev.fontSize &&
-          curr.lineHeight === prev.lineHeight
+          curr.terminalFontSize === prev.terminalFontSize &&
+          curr.terminalLineHeight === prev.terminalLineHeight &&
+          curr.ideFontSize === prev.ideFontSize &&
+          curr.ideLineHeight === prev.ideLineHeight
         ) return;
 
         const view = viewRef.current;
         if (!view) return;
 
         const fontStack = getFontFamily(curr.fontFamily, curr.customFontFamily);
+        const fontSize = curr.ideFontSize ?? curr.terminalFontSize;
+        const lineHeight = curr.ideLineHeight ?? curr.terminalLineHeight;
         view.dispatch({
           effects: themeCompartment.reconfigure(
-            buildOxideTheme(fontStack, curr.fontSize, curr.lineHeight),
+            buildOxideTheme(fontStack, fontSize, lineHeight),
           ),
         });
       },
@@ -432,6 +448,11 @@ export function useCodeMirrorEditor(options: UseCodeMirrorEditorOptions): UseCod
       },
       annotations: Transaction.addToHistory.of(false),
     });
+
+    // Force CodeMirror to re-measure its viewport after content change.
+    // This prevents the blank-on-first-open issue where the editor was
+    // created before the container had final CSS dimensions.
+    requestAnimationFrame(() => view.requestMeasure());
   }, []);
 
   // 聚焦

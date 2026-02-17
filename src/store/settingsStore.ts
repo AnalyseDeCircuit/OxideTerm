@@ -190,6 +190,9 @@ export interface SftpSettings {
 
 export interface IdeSettings {
   autoSave: boolean;  // Auto-save dirty tabs on tab switch / window blur
+  fontSize: number | null;    // null = follow terminal setting (8-32)
+  lineHeight: number | null;  // null = follow terminal setting (0.8-3.0)
+  agentMode: 'ask' | 'enabled' | 'disabled';  // Remote agent deployment policy
 }
 
 /** Complete settings structure */
@@ -315,6 +318,9 @@ const defaultSftpSettings: SftpSettings = {
 
 const defaultIdeSettings: IdeSettings = {
   autoSave: false,
+  fontSize: null,
+  lineHeight: null,
+  agentMode: 'ask',
 };
 
 function createDefaultSettings(): PersistedSettingsV2 {

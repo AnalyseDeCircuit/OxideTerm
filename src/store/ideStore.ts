@@ -20,6 +20,7 @@ import {
   validateFileName,
 } from '../lib/pathUtils';
 import { useSessionTreeStore } from './sessionTreeStore';
+import { useSettingsStore } from './settingsStore';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // State Gating: IO 操作前校验节点连接状态
@@ -237,10 +238,15 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           // node-first: nodeSftpInit 是幂等的，总是安全调用
           await nodeSftpInit(nodeId);
           
-          // Deploy agent (non-blocking, best-effort)
-          agentService.ensureAgent(nodeId).catch(() => {
-            // Agent deployment is optional — IDE works with SFTP alone
-          });
+          // Deploy agent based on agentMode setting
+          const agentMode = useSettingsStore.getState().getIde().agentMode;
+          if (agentMode === 'enabled') {
+            agentService.ensureAgent(nodeId).catch(() => {
+              // Agent deployment is optional — IDE works with SFTP alone
+            });
+          }
+          // If agentMode === 'ask', IdeWorkspace will show opt-in dialog
+          // If agentMode === 'disabled', skip agent entirely
           
           // 调用后端获取项目信息
           const projectInfo = await nodeIdeOpenProject(nodeId, rootPath);
@@ -356,13 +362,12 @@ export const useIdeStore = create<IdeState & IdeActions>()(
           // 创建新标签（loading 状态）
           const tabId = crypto.randomUUID();
           const fileName = path.split('/').pop() || path;
-          const extension = fileName.includes('.') ? fileName.split('.').pop() || '' : '';
           
           const newTab: IdeTab = {
             id: tabId,
             path,
             name: fileName,
-            language: extensionToLanguage(extension),
+            language: detectLanguage(fileName),
             content: null,
             originalContent: null,
             isDirty: false,
@@ -419,7 +424,7 @@ export const useIdeStore = create<IdeState & IdeActions>()(
                       ...t,
                       content: result.content,
                       originalContent: result.content,
-                      language: extensionToLanguage(extension),
+                      language: detectLanguage(fileName),
                       isLoading: false,
                       serverMtime: result.mtime ?? checkResult.mtime,
                       agentHash: result.hash, // 乐观锁 hash（agent only）
@@ -880,12 +885,11 @@ export const useIdeStore = create<IdeState & IdeActions>()(
               
               // Case 1: 精确匹配 - 重命名的就是这个文件
               if (tabPath === normalizedOld) {
-                const ext = newName.includes('.') ? newName.split('.').pop() || '' : '';
                 return {
                   ...tab,
                   path: newPath,
                   name: newName,
-                  language: extensionToLanguage(ext),
+                  language: detectLanguage(newName),
                 };
               }
               
@@ -894,12 +898,11 @@ export const useIdeStore = create<IdeState & IdeActions>()(
                 const relativePart = tabPath.substring(normalizedOld.length);
                 const updatedPath = normalizedNew + relativePart;
                 const updatedName = updatedPath.split('/').pop() || tab.name;
-                const ext = updatedName.includes('.') ? updatedName.split('.').pop() || '' : '';
                 return {
                   ...tab,
                   path: updatedPath,
                   name: updatedName,
-                  language: extensionToLanguage(ext),
+                  language: detectLanguage(updatedName),
                 };
               }
               
@@ -973,39 +976,171 @@ function extensionToLanguage(ext: string): string {
   const map: Record<string, string> = {
     ts: 'typescript',
     tsx: 'typescript',
+    mts: 'typescript',
+    cts: 'typescript',
     js: 'javascript',
     jsx: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
     rs: 'rust',
     py: 'python',
+    pyw: 'python',
+    pyi: 'python',
     go: 'go',
     java: 'java',
     c: 'c',
     cpp: 'cpp',
+    cc: 'cpp',
+    cxx: 'cpp',
     h: 'c',
     hpp: 'cpp',
+    hxx: 'cpp',
     cs: 'csharp',
     rb: 'ruby',
     php: 'php',
     swift: 'swift',
     kt: 'kotlin',
+    kts: 'kotlin',
     scala: 'scala',
     json: 'json',
+    jsonc: 'json',
+    json5: 'json',
     yaml: 'yaml',
     yml: 'yaml',
     toml: 'toml',
     xml: 'xml',
+    svg: 'xml',
+    xsl: 'xml',
+    plist: 'xml',
     html: 'html',
+    htm: 'html',
+    vue: 'html',
+    svelte: 'html',
     css: 'css',
     scss: 'css',
     less: 'css',
     md: 'markdown',
+    mdx: 'markdown',
     sql: 'sql',
     sh: 'shell',
     bash: 'shell',
     zsh: 'shell',
+    fish: 'shell',
+    ksh: 'shell',
+    csh: 'shell',
     dockerfile: 'dockerfile',
+    lua: 'lua',
+    pl: 'perl',
+    pm: 'perl',
+    r: 'r',
+    R: 'r',
+    diff: 'diff',
+    patch: 'diff',
+    conf: 'shell',
+    cfg: 'shell',
+    ini: 'toml',
+    env: 'shell',
+    properties: 'toml',
+    tf: 'shell',
+    hcl: 'shell',
+    mk: 'shell',
+    cmake: 'shell',
+    gradle: 'shell',
+    zig: 'cpp',
+    nim: 'python',
+    ex: 'ruby',
+    exs: 'ruby',
+    erl: 'ruby',
+    hs: 'python',
+    ml: 'python',
+    el: 'lisp',
+    clj: 'lisp',
+    lisp: 'lisp',
   };
   return map[ext.toLowerCase()] || 'plaintext';
+}
+
+/**
+ * Detect language from a full file name.
+ * Checks exact filename match first, then dotfile patterns, then extension.
+ */
+function detectLanguage(fileName: string): string {
+  const lower = fileName.toLowerCase();
+
+  // 1. Exact filename → language (case-insensitive)
+  const filenameMap: Record<string, string> = {
+    'makefile': 'shell',
+    'gnumakefile': 'shell',
+    'dockerfile': 'dockerfile',
+    'containerfile': 'dockerfile',
+    'vagrantfile': 'ruby',
+    'gemfile': 'ruby',
+    'rakefile': 'ruby',
+    'guardfile': 'ruby',
+    'jenkinsfile': 'shell',
+    'procfile': 'shell',
+    'justfile': 'shell',
+    'cmakelists.txt': 'shell',
+    'go.mod': 'go',
+    'go.sum': 'go',
+    'cargo.lock': 'toml',
+    'flake.lock': 'json',
+    'composer.lock': 'json',
+    'package-lock.json': 'json',
+    'pnpm-lock.yaml': 'yaml',
+    '.gitignore': 'shell',
+    '.gitattributes': 'shell',
+    '.gitmodules': 'shell',
+    '.dockerignore': 'shell',
+    '.editorconfig': 'toml',
+    '.prettierrc': 'json',
+    '.eslintrc': 'json',
+    '.babelrc': 'json',
+    '.npmrc': 'shell',
+    '.nvmrc': 'shell',
+    '.env': 'shell',
+    '.env.local': 'shell',
+    '.env.production': 'shell',
+    '.env.development': 'shell',
+    '.flake8': 'toml',
+    '.pylintrc': 'toml',
+    '.rubocop.yml': 'yaml',
+  };
+
+  if (filenameMap[lower]) {
+    return filenameMap[lower];
+  }
+
+  // 2. Dotfile patterns: .xxxrc → shell, .xxx.yml → yaml, etc.
+  if (lower.startsWith('.')) {
+    // .foo.json, .foo.yaml, .foo.yml, .foo.toml → use the real extension
+    const dotParts = lower.split('.');
+    if (dotParts.length >= 3) {
+      const realExt = dotParts[dotParts.length - 1];
+      const byExt = extensionToLanguage(realExt);
+      if (byExt !== 'plaintext') return byExt;
+    }
+    // .bashrc, .zshrc, .profile, .bash_profile, .zshenv, .zprofile → shell
+    if (/rc$|profile$|_profile$|logout$|login$|env$/.test(lower)) {
+      return 'shell';
+    }
+    // .vimrc, .inputrc → shell-like config
+    if (lower.endsWith('rc')) {
+      return 'shell';
+    }
+    // .tmux.conf → shell
+    if (lower.endsWith('.conf')) {
+      return 'shell';
+    }
+    // .gitconfig → toml-like
+    if (lower === '.gitconfig') {
+      return 'toml';
+    }
+  }
+
+  // 3. Fall back to extension-based detection
+  const ext = fileName.includes('.') ? fileName.split('.').pop() || '' : '';
+  return extensionToLanguage(ext);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

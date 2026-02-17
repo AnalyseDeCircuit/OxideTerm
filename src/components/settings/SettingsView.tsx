@@ -1935,6 +1935,67 @@ export const SettingsView = () => {
                                 </div>
                             </div>
 
+                            {/* Editor Font & Spacing */}
+                            <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5 space-y-4">
+                                <h4 className="text-sm font-medium text-theme-text uppercase tracking-wider">
+                                    {t('settings_view.ide.editor_typography', 'Editor Typography')}
+                                </h4>
+                                <p className="text-xs text-theme-text-muted">
+                                    {t('settings_view.ide.editor_typography_hint', 'Override terminal font size and line height for the code editor. Leave at "Follow Terminal" to use terminal settings.')}
+                                </p>
+
+                                {/* Font Size */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-theme-text">{t('settings_view.ide.font_size', 'Font Size')}</Label>
+                                        <p className="text-xs text-theme-text-muted mt-0.5">
+                                            {t('settings_view.ide.font_size_hint', 'Editor font size in pixels. Empty = follow terminal.')}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            min="8"
+                                            max="32"
+                                            step="1"
+                                            value={ide?.fontSize ?? ''}
+                                            placeholder={String(terminal.fontSize)}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                updateIde('fontSize', v === '' ? null : Math.min(32, Math.max(8, parseInt(v) || 14)));
+                                            }}
+                                            className="w-20 text-center"
+                                        />
+                                        <span className="text-xs text-theme-text-muted">px</span>
+                                    </div>
+                                </div>
+
+                                <Separator className="opacity-50" />
+
+                                {/* Line Height */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-theme-text">{t('settings_view.ide.line_height', 'Line Height')}</Label>
+                                        <p className="text-xs text-theme-text-muted mt-0.5">
+                                            {t('settings_view.ide.line_height_hint', 'Editor line spacing. Empty = follow terminal.')}
+                                        </p>
+                                    </div>
+                                    <Input
+                                        type="number"
+                                        step="0.1"
+                                        min="0.8"
+                                        max="3"
+                                        value={ide?.lineHeight ?? ''}
+                                        placeholder={String(terminal.lineHeight)}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            updateIde('lineHeight', v === '' ? null : Math.min(3, Math.max(0.8, parseFloat(v) || 1.2)));
+                                        }}
+                                        className="w-20 text-center"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Remote Agent */}
                             <div className="rounded-lg border border-theme-border bg-theme-bg-panel/50 p-5 space-y-4">
                                 <h4 className="text-sm font-medium text-theme-text uppercase tracking-wider">
@@ -1975,6 +2036,62 @@ export const SettingsView = () => {
                                 <p className="text-xs text-theme-text-muted italic">
                                     {t('settings_view.ide.agent_auto_hint', 'The agent is deployed automatically when opening IDE mode on a supported Linux host. No manual configuration needed. Unsupported architectures fall back to SFTP seamlessly.')}
                                 </p>
+
+                                <Separator className="opacity-50" />
+
+                                {/* Agent Mode */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-theme-text">{t('settings_view.ide.agent_mode_label', 'Agent Deploy Policy')}</Label>
+                                        <p className="text-xs text-theme-text-muted mt-0.5">
+                                            {t('settings_view.ide.agent_mode_hint', 'Control whether the agent is deployed to remote hosts.')}
+                                        </p>
+                                    </div>
+                                    <Select
+                                        value={ide?.agentMode ?? 'ask'}
+                                        onValueChange={(value) => updateIde('agentMode', value as 'ask' | 'enabled' | 'disabled')}
+                                    >
+                                        <SelectTrigger className="w-40">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ask">{t('settings_view.ide.agent_mode_ask', 'Ask Every Time')}</SelectItem>
+                                            <SelectItem value="enabled">{t('settings_view.ide.agent_mode_enabled', 'Always Enable')}</SelectItem>
+                                            <SelectItem value="disabled">{t('settings_view.ide.agent_mode_disabled', 'SFTP Only')}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            {/* Agent Transparency & Privacy */}
+                            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-5 space-y-3">
+                                <h4 className="text-sm font-medium text-theme-text flex items-center gap-2">
+                                    <Shield className="h-4 w-4 text-blue-400" />
+                                    {t('settings_view.ide.agent_transparency_title', 'Transparency & Privacy')}
+                                </h4>
+                                <div className="space-y-2.5 text-xs text-theme-text-muted">
+                                    <div className="flex items-start gap-2">
+                                        <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                        <span>
+                                            <span className="text-theme-text font-medium">{t('settings_view.ide.agent_path_label', 'Deploy Path')}:</span>{' '}
+                                            {t('settings_view.ide.agent_path_detail', 'The agent binary is placed at ~/.oxideterm/oxideterm-agent in the remote user\'s home directory.')}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                        <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                        <span>
+                                            <span className="text-theme-text font-medium">{t('settings_view.ide.agent_lifecycle_label', 'Lifecycle')}:</span>{' '}
+                                            {t('settings_view.ide.agent_lifecycle_detail', 'Deployed on first IDE mode open and persists between sessions. Automatically updated when a new version is available. Can be safely deleted at any time — it will be re-deployed when needed.')}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                        <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                        <span>
+                                            <span className="text-theme-text font-medium">{t('settings_view.ide.agent_privacy_label', 'Privacy')}:</span>{' '}
+                                            {t('settings_view.ide.agent_privacy_detail', 'The agent is a standalone binary that communicates exclusively with OxideTerm over the existing SSH connection (stdio). It makes no third-party network connections, sends no telemetry, and collects no data.')}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

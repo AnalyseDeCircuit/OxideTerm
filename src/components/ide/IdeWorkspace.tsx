@@ -3,13 +3,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { useTabBgActive } from '../../hooks/useTabBackground';
 import { useNodeState } from '../../hooks/useNodeState';
+import * as agentService from '../../lib/agentService';
 import { IdeTree } from './IdeTree';
 import { IdeEditorArea } from './IdeEditorArea';
 import { IdeTerminal } from './IdeTerminal';
 import { IdeStatusBar } from './IdeStatusBar';
 import { IdeSearchPanel } from './IdeSearchPanel';
+import { IdeAgentOptInDialog } from './dialogs/IdeAgentOptInDialog';
 
 interface IdeWorkspaceProps {
   nodeId: string;
@@ -38,10 +41,27 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
   // 初始化错误状态
   const [initError, setInitError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+  // Agent opt-in 对话框
+  const [agentOptInOpen, setAgentOptInOpen] = useState(false);
   
   // 切换搜索面板
   const toggleSearch = useCallback(() => {
     setSearchOpen(prev => !prev);
+  }, []);
+  
+  // Agent opt-in handlers
+  const handleAgentEnable = useCallback(() => {
+    useSettingsStore.getState().updateIde('agentMode', 'enabled');
+    setAgentOptInOpen(false);
+    // Deploy agent now
+    agentService.ensureAgent(nodeId).catch(() => {
+      // Agent deployment is optional
+    });
+  }, [nodeId]);
+  
+  const handleAgentSftpOnly = useCallback(() => {
+    useSettingsStore.getState().updateIde('agentMode', 'disabled');
+    setAgentOptInOpen(false);
   }, []);
   
   // 初始化项目 — nodeId 变化触发重连后重建
@@ -52,7 +72,14 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
     if (needsOpen) {
       setInitError(null);
       openProject(nodeId, rootPath)
-        .then(() => setInitError(null))
+        .then(() => {
+          setInitError(null);
+          // Check if we need to show agent opt-in dialog
+          const agentMode = useSettingsStore.getState().getIde().agentMode;
+          if (agentMode === 'ask') {
+            setAgentOptInOpen(true);
+          }
+        })
         .catch((err) => {
           console.error('[IdeWorkspace] openProject failed:', err);
           setInitError(err instanceof Error ? err.message : String(err));
@@ -201,6 +228,13 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
       
       {/* 状态栏 */}
       <IdeStatusBar />
+      
+      {/* Agent opt-in 对话框 */}
+      <IdeAgentOptInDialog
+        open={agentOptInOpen}
+        onEnable={handleAgentEnable}
+        onSftpOnly={handleAgentSftpOnly}
+      />
     </div>
   );
 }

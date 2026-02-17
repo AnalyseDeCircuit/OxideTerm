@@ -199,6 +199,8 @@ export function useGitStatus(): UseGitStatusResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isRefreshingRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
   
   /**
    * 刷新 Git 状态
@@ -209,6 +211,10 @@ export function useGitStatus(): UseGitStatusResult {
       setStatus(null);
       return;
     }
+    
+    // Prevent concurrent refreshes — skip if one is already running
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     
     setIsLoading(true);
     setError(null);
@@ -229,6 +235,7 @@ export function useGitStatus(): UseGitStatusResult {
           behind: 0,
           files,
         });
+        consecutiveFailuresRef.current = 0;
       } else {
         // Exec fallback: git status via shell command
         const result = await nodeIdeExecCommand(
@@ -239,7 +246,11 @@ export function useGitStatus(): UseGitStatusResult {
         );
         
         if (result.exitCode !== 0) {
-          console.warn('[useGitStatus] git status failed:', result.stderr);
+          // Only log the first failure to avoid spamming the console
+          if (consecutiveFailuresRef.current === 0) {
+            console.warn('[useGitStatus] git status failed:', result.stderr);
+          }
+          consecutiveFailuresRef.current++;
           setStatus({
             branch: project.gitBranch || 'main',
             ahead: 0,
@@ -249,6 +260,7 @@ export function useGitStatus(): UseGitStatusResult {
           return;
         }
         
+        consecutiveFailuresRef.current = 0;
         const lines = result.stdout.split('\n');
         const { branch, ahead, behind } = parseBranchInfo(lines[0] || '');
         const files = parseGitStatusOutput(lines.slice(1).join('\n'));
@@ -259,7 +271,11 @@ export function useGitStatus(): UseGitStatusResult {
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       setError(errorMessage);
-      console.error('[useGitStatus] Failed to refresh git status:', e);
+      // Only log first consecutive error
+      if (consecutiveFailuresRef.current === 0) {
+        console.error('[useGitStatus] Failed to refresh git status:', e);
+      }
+      consecutiveFailuresRef.current++;
       
       // 出错时仍然设置一个基本状态
       setStatus({
@@ -269,6 +285,7 @@ export function useGitStatus(): UseGitStatusResult {
         files: new Map(),
       });
     } finally {
+      isRefreshingRef.current = false;
       setIsLoading(false);
     }
   }, [project, nodeId]);
