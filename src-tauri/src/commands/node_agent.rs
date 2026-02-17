@@ -15,6 +15,7 @@
 //! - `node_agent_git_status` — git status
 //! - `node_agent_watch_start` — start file watching
 //! - `node_agent_watch_stop` — stop file watching
+//! - `node_agent_remove` — remove agent binary from remote host
 
 use std::sync::Arc;
 
@@ -89,6 +90,81 @@ pub async fn node_agent_deploy(
             })
         }
     }
+}
+
+/// Remove the agent binary from a remote host.
+///
+/// 1. Shuts down the running agent process (if any)
+/// 2. Removes the registry entry
+/// 3. Resolves `$HOME` on the remote host, then deletes `$HOME/.oxideterm/oxideterm-agent`
+///
+/// Safety: uses `$HOME` (not `~`) for reliable expansion, validates the resolved
+/// path is non-empty, and only deletes the exact agent binary.
+#[tauri::command]
+pub async fn node_agent_remove(
+    node_id: String,
+    router: State<'_, Arc<NodeRouter>>,
+    agent_registry: State<'_, Arc<AgentRegistry>>,
+) -> Result<(), String> {
+    info!("[node_agent_remove] Removing agent for node {}", node_id);
+
+    let resolved = router
+        .resolve_connection(&node_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Step 1: Shutdown agent session (sends sys/shutdown RPC + removes entry)
+    agent_registry.remove(&resolved.connection_id).await;
+
+    // Step 2: Resolve $HOME on the remote host for reliable path expansion
+    let home_result = crate::commands::ide::exec_command_inner(
+        resolved.handle_controller.clone(),
+        "echo \"$HOME\"".to_string(),
+        None,
+        Some(10),
+    )
+    .await
+    .map_err(|e| format!("Failed to resolve HOME: {}", e))?;
+
+    let home = home_result.stdout.trim().to_string();
+    if home.is_empty() || !home.starts_with('/') {
+        return Err(format!(
+            "Cannot resolve HOME directory on remote host (got: {:?})",
+            home
+        ));
+    }
+
+    // Construct the exact path — only the agent binary, nothing else.
+    let agent_path = format!("{}/.oxideterm/oxideterm-agent", home);
+
+    // Step 3: Delete the agent binary via SSH exec
+    // Use -- to prevent argument injection, and single-quote the path
+    let rm_cmd = format!("rm -f -- '{}'", agent_path.replace('\'', "'\\''"));
+    debug!("[node_agent_remove] Executing: {}", rm_cmd);
+
+    let result = crate::commands::ide::exec_command_inner(
+        resolved.handle_controller.clone(),
+        rm_cmd,
+        None,
+        Some(15),
+    )
+    .await
+    .map_err(|e| format!("Failed to remove agent binary: {}", e))?;
+
+    if let Some(code) = result.exit_code {
+        if code != 0 {
+            warn!(
+                "[node_agent_remove] rm command exited with code {}: {}",
+                code, result.stderr
+            );
+        }
+    }
+
+    info!(
+        "[node_agent_remove] Agent removed for node {} (path: {})",
+        node_id, agent_path
+    );
+    Ok(())
 }
 
 /// Get agent status for a node.

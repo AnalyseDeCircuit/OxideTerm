@@ -9,6 +9,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   nodeAgentDeploy,
+  nodeAgentRemove,
   nodeAgentStatus,
   nodeAgentReadFile,
   nodeAgentWriteFile,
@@ -102,6 +103,16 @@ export async function ensureAgent(nodeId: string): Promise<AgentStatus> {
 export function invalidateAgentCache(nodeId: string): void {
   agentReadyCache.delete(nodeId);
   deployPromises.delete(nodeId);
+}
+
+/**
+ * Remove the agent binary from a remote host.
+ * Shuts down the running agent, deletes `~/.oxideterm/oxideterm-agent`,
+ * and invalidates local cache.
+ */
+export async function removeAgent(nodeId: string): Promise<void> {
+  await nodeAgentRemove(nodeId);
+  invalidateAgentCache(nodeId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

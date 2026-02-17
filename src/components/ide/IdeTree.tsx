@@ -15,7 +15,7 @@ import * as agentService from '../../lib/agentService';
 import { useIdeStore, useIdeProject } from '../../store/ideStore';
 import { cn } from '../../lib/utils';
 import { FileIcon, FolderIcon } from '../../lib/fileIcons';
-import { FileInfo, AgentFileEntry } from '../../types';
+import { FileInfo } from '../../types';
 import { Button } from '../ui/button';
 import { 
   useGitStatus, 
@@ -47,41 +47,19 @@ function useGitStatusContext() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Prefetch Cache Context（深度预取缓存）
+// Directory fetch lock（竞态条件保护）
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Map from directory path → sorted children (populated by listTree prefetch) */
-type PrefetchCache = Map<string, FileInfo[]>;
-
-const PrefetchCacheContext = createContext<PrefetchCache>(new Map());
-
-function usePrefetchCache() {
-  return useContext(PrefetchCacheContext);
-}
-
 /**
- * Build a flat path→children cache from a recursive AgentFileEntry tree.
- * Converts agent entries to FileInfo format for compatibility.
+ * Shared AbortController map to prevent race conditions when a directory
+ * is being fetched and the user triggers another fetch (expand/refresh).
+ * Key = directory path, Value = AbortController for the in-flight request.
+ * When a new fetch starts, the previous one is aborted.
  */
-function buildPrefetchCache(entries: AgentFileEntry[], cache: PrefetchCache): void {
-  for (const entry of entries) {
-    if (entry.children && entry.children.length > 0) {
-      // This entry is a directory with prefetched children
-      const childInfos: FileInfo[] = entry.children.map(child => ({
-        name: child.name,
-        path: child.path,
-        file_type: (child.file_type === 'directory' || child.file_type === 'dir') ? 'Directory' 
-                 : child.file_type === 'symlink' ? 'Symlink' 
-                 : child.file_type === 'file' ? 'File' : 'Unknown',
-        size: child.size,
-        modified: child.mtime ?? null,
-        permissions: child.permissions ?? null,
-      }));
-      cache.set(entry.path, sortFiles(childInfos));
-      // Recurse into grandchildren
-      buildPrefetchCache(entry.children, cache);
-    }
-  }
+const FetchLockContext = createContext<React.MutableRefObject<Map<string, AbortController>> | null>(null);
+
+function useFetchLock() {
+  return useContext(FetchLockContext);
 }
 
 // 判断文件是否为目录
@@ -137,6 +115,7 @@ function TreeNode({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadingRef = useRef(false);
+  const fetchLockRef = useFetchLock();
   
   const isDir = isDirectory(file);
   // 使用后端返回的标准化路径，而不是手动构建
@@ -170,30 +149,32 @@ function TreeNode({
       : file.name
     : '';
   const gitStatus = gitStatusCtx?.getFileStatus(relativePath);
-  const prefetchCache = usePrefetchCache();
   
-  // 加载子目录内容（先查 prefetch 缓存，再走网络）
+  // 加载子目录内容 — 纯按需加载，无预取缓存
+  // 使用 AbortController 处理竞态：新请求自动取消旧请求
   const loadChildren = useCallback(async () => {
-    if (!isDir || loadingRef.current) return;
+    if (!isDir) return;
+    
+    // Cancel any in-flight fetch for this directory
+    const lockMap = fetchLockRef?.current;
+    if (lockMap) {
+      const prev = lockMap.get(fullPath);
+      if (prev) prev.abort();
+    }
+    
+    const controller = new AbortController();
+    if (lockMap) lockMap.set(fullPath, controller);
     
     loadingRef.current = true;
     setIsLoading(true);
     setError(null);
     
     try {
-      // Check prefetch cache first (populated by listTree on project open).
-      // Only trust non-empty cached results — an empty array could be a
-      // truncation artefact where the directory's entries were skipped
-      // because the global entry count budget was exhausted.
-      const cached = prefetchCache.get(fullPath);
-      if (cached && cached.length > 0) {
-        setChildren(cached);
-        setIsLoading(false);
-        loadingRef.current = false;
-        return;
-      }
-
       const result = await agentService.listDir(nodeId, fullPath);
+      
+      // Check if this request was aborted (superseded by a newer one)
+      if (controller.signal.aborted) return;
+      
       const sorted = sortFiles(result);
       // 大目录保护：超过 500 项时截断，避免 DOM 爆炸
       const MAX_DIR_ITEMS = 500;
@@ -205,12 +186,19 @@ function TreeNode({
         setChildren(sorted);
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setIsLoading(false);
-      loadingRef.current = false;
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        loadingRef.current = false;
+      }
+      // Clean up lock entry
+      if (lockMap?.get(fullPath) === controller) {
+        lockMap.delete(fullPath);
+      }
     }
-  }, [isDir, fullPath, nodeId]);
+  }, [isDir, fullPath, nodeId, fetchLockRef]);
   
   // 展开时加载子目录
   useEffect(() => {
@@ -458,23 +446,23 @@ export function IdeTree() {
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  // Prefetch cache for deep tree loading (agent only)
-  const [prefetchCache] = useState<PrefetchCache>(() => new Map());
+  // Directory fetch lock map — shared with all TreeNode descendants
+  const fetchLockMapRef = useRef<Map<string, AbortController>>(new Map());
   
-  // Truncation state: tree was too large for full prefetch
-  const [treeTruncated, setTreeTruncated] = useState(false);
-  
-  // 当项目根目录变化时，立即清空旧文件树和预取缓存，防止陈旧数据
+  // 当项目根目录变化时，取消所有进行中的请求并清空文件树
   const prevRootRef = useRef<string | null>(null);
   useEffect(() => {
     const currentRoot = project?.rootPath ?? null;
     if (prevRootRef.current !== null && prevRootRef.current !== currentRoot) {
+      // Cancel all in-flight fetches
+      for (const controller of fetchLockMapRef.current.values()) {
+        controller.abort();
+      }
+      fetchLockMapRef.current.clear();
       setRootFiles(null);
-      prefetchCache.clear();
-      setTreeTruncated(false);
     }
     prevRootRef.current = currentRoot;
-  }, [project?.rootPath, prefetchCache]);
+  }, [project?.rootPath]);
   
   // 加载根目录
   const loadRoot = useCallback(async () => {
@@ -482,36 +470,12 @@ export function IdeTree() {
     
     setIsLoading(true);
     setError(null);
-    setTreeTruncated(false);
     
     try {
+      // Only fetch root-level children — no deep prefetch.
+      // All subdirectories are loaded on-demand when the user expands them.
       const result = await agentService.listDir(nodeId, project.rootPath);
       setRootFiles(sortFiles(result));
-      
-      // Deep prefetch: if agent is available, load 3 levels in background.
-      // Capture current rootPath to guard against stale results after root change.
-      const rootPathAtStart = project.rootPath;
-      agentService.listTree(nodeId, project.rootPath, 3, 5000)
-        .then(treeResult => {
-          if (treeResult) {
-            // Guard: if root changed while prefetch was in-flight, discard stale result
-            const currentRoot = useIdeStore.getState().project?.rootPath;
-            if (currentRoot !== rootPathAtStart) return;
-
-            if (treeResult.truncated) {
-              // Tree exceeded the entry budget — the cache would contain partial
-              // directory listings (some files/dirs silently missing). Discard
-              // the entire prefetch so every expansion does a live fetch instead
-              // of trusting incomplete data.
-              setTreeTruncated(true);
-              prefetchCache.clear();
-            } else {
-              prefetchCache.clear();
-              buildPrefetchCache(treeResult.entries, prefetchCache);
-            }
-          }
-        })
-        .catch(() => { /* ignore — prefetch is best-effort */ });
 
       // Background symbol indexing for completion + go-to-definition
       agentService.symbolIndex(nodeId, project.rootPath)
@@ -521,7 +485,7 @@ export function IdeTree() {
     } finally {
       setIsLoading(false);
     }
-  }, [project, nodeId, prefetchCache]);
+  }, [project, nodeId]);
   
   // 订阅根目录刷新信号
   const rootRefreshSignal = useIdeStore(
@@ -791,7 +755,7 @@ export function IdeTree() {
   }
   
   return (
-    <PrefetchCacheContext.Provider value={prefetchCache}>
+    <FetchLockContext.Provider value={fetchLockMapRef}>
     <GitStatusContext.Provider value={gitStatusContextValue}>
       <div className="h-full flex flex-col bg-theme-bg/85">
         {/* 标题栏 */}
@@ -874,16 +838,6 @@ export function IdeTree() {
             />
           ))}
           
-          {/* 树截断提示 — 条目数超过上限时显示 */}
-          {treeTruncated && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 mt-1 mx-2 rounded bg-theme-accent/8 border border-theme-accent/15">
-              <AlertCircle className="w-3 h-3 text-theme-accent flex-shrink-0" />
-              <span className="text-[10px] text-theme-text-muted leading-tight">
-                {t('ide.tree_truncated', 'File tree is large — some entries are not shown. Expand folders to load on demand.')}
-              </span>
-            </div>
-          )}
-          
           {/* 根目录新建输入框（当在根目录下新建时） */}
           {inlineInput && (inlineInput.type === 'newFile' || inlineInput.type === 'newFolder') 
             && inlineInput.parentPath === project.rootPath && (
@@ -953,6 +907,6 @@ export function IdeTree() {
         )}
       </div>
     </GitStatusContext.Provider>
-    </PrefetchCacheContext.Provider>
+    </FetchLockContext.Provider>
   );
 }

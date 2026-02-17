@@ -629,21 +629,26 @@ pub async fn node_ide_open_project(
         ));
     }
 
-    let git_path = format!("{}/.git", path);
+    // Use the canonicalized path from stat() — this resolves ~, symlinks,
+    // and relative paths to an absolute path that the agent can use directly.
+    // Normalize path separators — Windows OpenSSH may return backslashes
+    let canonical_path = info.path.replace('\\', "/");
+
+    let git_path = format!("{}/.git", canonical_path.trim_end_matches('/'));
     let is_git_repo = sftp.stat(&git_path).await.is_ok();
 
     let git_branch = if is_git_repo {
-        crate::commands::ide::get_git_branch_inner(&sftp, &path)
+        crate::commands::ide::get_git_branch_inner(&sftp, &canonical_path)
             .await
             .ok()
     } else {
         None
     };
 
-    let name = path.rsplit('/').next().unwrap_or("project").to_string();
+    let name = canonical_path.rsplit('/').next().unwrap_or("project").to_string();
 
     Ok(crate::commands::ide::ProjectInfo {
-        root_path: path,
+        root_path: canonical_path,
         name,
         is_git_repo,
         git_branch,

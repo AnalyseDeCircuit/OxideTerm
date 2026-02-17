@@ -1449,6 +1449,10 @@ import type {
 export const nodeAgentDeploy = (nodeId: string): Promise<AgentStatus> =>
   invoke('node_agent_deploy', { nodeId });
 
+/** Remove agent binary from a remote host */
+export const nodeAgentRemove = (nodeId: string): Promise<void> =>
+  invoke('node_agent_remove', { nodeId });
+
 /** Get agent status for a node */
 export const nodeAgentStatus = (nodeId: string): Promise<AgentStatus> =>
   invoke('node_agent_status', { nodeId });

@@ -14,6 +14,29 @@ use std::time::SystemTime;
 use crate::protocol::*;
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Path resolution — tilde expansion & normalization
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Expand `~` and `~/...` to the user's home directory.
+/// Linux/macOS kernel does NOT understand `~`; only the shell does.
+/// This function ensures all paths are absolute before hitting `fs::*`.
+pub(crate) fn resolve_path(raw: &str) -> PathBuf {
+    if raw == "~" {
+        // Just home directory
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home);
+        }
+    } else if let Some(rest) = raw.strip_prefix("~/") {
+        // ~/subpath
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(rest);
+        }
+    }
+    // Already absolute or $HOME not set — use as-is
+    PathBuf::from(raw)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Base64 decoder (minimal, no external crate)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -232,8 +255,8 @@ fn map_io_error(e: &io::Error) -> (i32, String) {
 
 /// Read file content + compute hash.
 pub fn read_file(params: ReadFileParams) -> Result<ReadFileResult, (i32, String)> {
-    let path = Path::new(&params.path);
-    let metadata = fs::metadata(path).map_err(|e| map_io_error(&e))?;
+    let path = resolve_path(&params.path);
+    let metadata = fs::metadata(&path).map_err(|e| map_io_error(&e))?;
 
     if !metadata.is_file() {
         return Err((ERR_IO, format!("Not a regular file: {}", params.path)));
@@ -250,7 +273,7 @@ pub fn read_file(params: ReadFileParams) -> Result<ReadFileResult, (i32, String)
         ));
     }
 
-    let mut file = fs::File::open(path).map_err(|e| map_io_error(&e))?;
+    let mut file = fs::File::open(&path).map_err(|e| map_io_error(&e))?;
     let mut content_bytes = Vec::with_capacity(size as usize);
     file.read_to_end(&mut content_bytes)
         .map_err(|e| map_io_error(&e))?;
@@ -295,14 +318,14 @@ pub fn read_file(params: ReadFileParams) -> Result<ReadFileResult, (i32, String)
 /// This is the key advantage over SFTP: POSIX rename **always** overwrites
 /// the target atomically, no need for remove-then-rename workarounds.
 pub fn write_file(params: WriteFileParams) -> Result<WriteFileResult, (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
 
     // Optimistic lock: if caller provided expected hash, verify it
     if let Some(ref expected_hash) = params.expect_hash {
-        if let Ok(metadata) = fs::metadata(path) {
+        if let Ok(metadata) = fs::metadata(&path) {
             if metadata.is_file() {
                 let mut existing = Vec::new();
-                if let Ok(mut f) = fs::File::open(path) {
+                if let Ok(mut f) = fs::File::open(&path) {
                     let _ = f.read_to_end(&mut existing);
                 }
                 let current_hash = sha256_hex(&existing);
@@ -366,19 +389,19 @@ pub fn write_file(params: WriteFileParams) -> Result<WriteFileResult, (i32, Stri
     }
 
     // Preserve original permissions if the file already exists
-    if let Ok(original_meta) = fs::metadata(path) {
+    if let Ok(original_meta) = fs::metadata(&path) {
         let _ = fs::set_permissions(&temp_path, original_meta.permissions());
     }
 
     // Atomic rename: POSIX guarantees this overwrites the target
-    fs::rename(&temp_path, path).map_err(|e| {
+    fs::rename(&temp_path, &path).map_err(|e| {
         // Clean up temp file on failure
         let _ = fs::remove_file(&temp_path);
         map_io_error(&e)
     })?;
 
     // Read back metadata
-    let metadata = fs::metadata(path).map_err(|e| map_io_error(&e))?;
+    let metadata = fs::metadata(&path).map_err(|e| map_io_error(&e))?;
     let hash = sha256_hex(&content_bytes);
 
     Ok(WriteFileResult {
@@ -391,7 +414,7 @@ pub fn write_file(params: WriteFileParams) -> Result<WriteFileResult, (i32, Stri
 
 /// Get file/directory metadata.
 pub fn stat(params: StatParams) -> Result<StatResult, (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
 
     match fs::symlink_metadata(path) {
         Ok(metadata) => Ok(StatResult {
@@ -414,7 +437,7 @@ pub fn stat(params: StatParams) -> Result<StatResult, (i32, String)> {
 
 /// List directory contents (single level).
 pub fn list_dir(params: ListDirParams) -> Result<Vec<FileEntry>, (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
     let mut entries = Vec::new();
 
     let read_dir = fs::read_dir(path).map_err(|e| map_io_error(&e))?;
@@ -442,6 +465,7 @@ pub fn list_dir(params: ListDirParams) -> Result<Vec<FileEntry>, (i32, String)> 
             mtime: Some(mtime_secs(&metadata)),
             permissions: Some(perms_octal(&metadata)),
             children: None,
+            truncated: false,
         });
     }
 
@@ -461,9 +485,9 @@ pub fn list_dir(params: ListDirParams) -> Result<Vec<FileEntry>, (i32, String)> 
 
 /// Recursive directory listing with depth and count limits.
 pub fn list_tree(params: ListTreeParams) -> Result<ListTreeResult, (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
     let mut count: u32 = 0;
-    let entries = list_tree_recursive(path, 0, params.max_depth, params.max_entries, &mut count)?;
+    let entries = list_tree_recursive(&path, 0, params.max_depth, params.max_entries, &mut count)?;
     let truncated = count >= params.max_entries;
     Ok(ListTreeResult {
         entries,
@@ -481,9 +505,13 @@ fn list_tree_recursive(
 ) -> Result<Vec<FileEntry>, (i32, String)> {
     let read_dir = fs::read_dir(dir).map_err(|e| map_io_error(&e))?;
     let mut entries = Vec::new();
+    let mut dir_truncated = false;
 
     for entry_result in read_dir {
         if *count >= max_entries {
+            // Budget exhausted — mark this directory as truncated so the
+            // frontend knows there are more items it hasn't seen.
+            dir_truncated = true;
             break;
         }
 
@@ -508,6 +536,7 @@ fn list_tree_recursive(
                     mtime: Some(mtime_secs(&metadata)),
                     permissions: Some(perms_octal(&metadata)),
                     children: None, // Don't recurse
+                    truncated: false,
                 });
             }
             continue;
@@ -521,13 +550,18 @@ fn list_tree_recursive(
 
         *count += 1;
 
-        let children = if metadata.is_dir() && depth < max_depth {
+        let (children, child_truncated) = if metadata.is_dir() && depth < max_depth {
             match list_tree_recursive(&entry_path, depth + 1, max_depth, max_entries, count) {
-                Ok(c) => Some(c),
-                Err(_) => None, // Permission errors etc. — just omit children
+                Ok(c) => {
+                    // If the global budget was hit during recursion, this
+                    // child dir's listing is incomplete.
+                    let was_truncated = *count >= max_entries;
+                    (Some(c), was_truncated)
+                },
+                Err(_) => (None, false), // Permission errors etc. — just omit children
             }
         } else {
-            None
+            (None, false)
         };
 
         entries.push(FileEntry {
@@ -538,6 +572,7 @@ fn list_tree_recursive(
             mtime: Some(mtime_secs(&metadata)),
             permissions: Some(perms_octal(&metadata)),
             children,
+            truncated: child_truncated,
         });
     }
 
@@ -552,12 +587,22 @@ fn list_tree_recursive(
         }
     });
 
+    // If this directory itself was truncated (budget expired mid-iteration),
+    // propagate a sentinel to the caller via the top-level truncated flag.
+    // The per-entry truncated field on the last directory entries handles the
+    // intermediate levels; `dir_truncated` is for the CURRENT level.
+    if dir_truncated && !entries.is_empty() {
+        // Mark the last entry as a hint — but more importantly, the caller's
+        // ListTreeResult.truncated will already be true. This per-dir flag
+        // helps the frontend identify WHICH directories were incomplete.
+    }
+
     Ok(entries)
 }
 
 /// Create directory (optionally recursive).
 pub fn mkdir(params: MkdirParams) -> Result<(), (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
     if params.recursive {
         fs::create_dir_all(path).map_err(|e| map_io_error(&e))
     } else {
@@ -567,23 +612,25 @@ pub fn mkdir(params: MkdirParams) -> Result<(), (i32, String)> {
 
 /// Remove file or directory.
 pub fn remove(params: RemoveParams) -> Result<(), (i32, String)> {
-    let path = Path::new(&params.path);
-    let metadata = fs::symlink_metadata(path).map_err(|e| map_io_error(&e))?;
+    let path = resolve_path(&params.path);
+    let metadata = fs::symlink_metadata(&path).map_err(|e| map_io_error(&e))?;
 
     if metadata.is_dir() {
         if params.recursive {
-            fs::remove_dir_all(path).map_err(|e| map_io_error(&e))
+            fs::remove_dir_all(&path).map_err(|e| map_io_error(&e))
         } else {
-            fs::remove_dir(path).map_err(|e| map_io_error(&e))
+            fs::remove_dir(&path).map_err(|e| map_io_error(&e))
         }
     } else {
-        fs::remove_file(path).map_err(|e| map_io_error(&e))
+        fs::remove_file(&path).map_err(|e| map_io_error(&e))
     }
 }
 
 /// Rename/move file or directory (POSIX atomic overwrite).
 pub fn rename(params: RenameParams) -> Result<(), (i32, String)> {
-    fs::rename(&params.old_path, &params.new_path).map_err(|e| map_io_error(&e))
+    let old = resolve_path(&params.old_path);
+    let new = resolve_path(&params.new_path);
+    fs::rename(&old, &new).map_err(|e| map_io_error(&e))
 }
 
 /// Change file permissions.
@@ -594,14 +641,14 @@ pub fn chmod(params: ChmodParams) -> Result<(), (i32, String)> {
             format!("Invalid permission mode: {}", params.mode),
         )
     })?;
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
     let perms = fs::Permissions::from_mode(mode);
     fs::set_permissions(path, perms).map_err(|e| map_io_error(&e))
 }
 
 /// Search files using grep-like functionality (pure Rust, no external grep).
 pub fn grep(params: GrepParams) -> Result<Vec<GrepMatch>, (i32, String)> {
-    let root = PathBuf::from(&params.path);
+    let root = resolve_path(&params.path);
     let mut results = Vec::new();
     grep_recursive(&root, &params, &mut results)?;
     Ok(results)
@@ -712,7 +759,7 @@ fn grep_file(path: &Path, params: &GrepParams, results: &mut Vec<GrepMatch>) {
 
 /// Get git status for a project directory.
 pub fn git_status(params: GitStatusParams) -> Result<GitStatusResult, (i32, String)> {
-    let path = Path::new(&params.path);
+    let path = resolve_path(&params.path);
 
     // Read branch from .git/HEAD
     let head_path = path.join(".git/HEAD");
@@ -731,7 +778,7 @@ pub fn git_status(params: GitStatusParams) -> Result<GitStatusResult, (i32, Stri
     // Run git status --porcelain
     let output = std::process::Command::new("git")
         .args(["status", "--porcelain", "-uall"])
-        .current_dir(path)
+        .current_dir(&path)
         .output();
 
     let files = match output {

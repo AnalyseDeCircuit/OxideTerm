@@ -55,10 +55,24 @@ pub fn is_absolute_local_path(path: &str) -> bool {
 
 /// Check if a remote SFTP path is absolute.
 ///
-/// Remote SFTP paths always use `/` as separator (per SFTP protocol).
-/// Even Windows SSH servers present paths in Unix style.
+/// Remote SFTP paths typically use `/` as separator (per SFTP protocol).
+/// However, Windows SSH servers (OpenSSH for Windows) may return paths
+/// with drive letters like `C:/Users/...` from canonicalize/realpath.
 pub fn is_absolute_remote_path(path: &str) -> bool {
-    path.starts_with('/')
+    if path.starts_with('/') {
+        return true;
+    }
+    // Windows drive letter: C:/ or C:\ (from Windows OpenSSH servers)
+    if path.len() >= 3 {
+        let bytes = path.as_bytes();
+        if bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'/' || bytes[2] == b'\\')
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Join local path components using platform-native separator.

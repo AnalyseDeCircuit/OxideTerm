@@ -280,8 +280,8 @@ fn dispatch(
         // ─── symbols/* ────────────────────────────────────────────
         "symbols/index" => match serde_json::from_value::<SymbolIndexParams>(req.params.clone()) {
             Ok(params) => {
-                let root = std::path::Path::new(&params.path);
-                let syms = symbols::index_directory(root, params.max_files);
+                let root = fs_ops::resolve_path(&params.path);
+                let syms = symbols::index_directory(&root, params.max_files);
                 let file_count = syms.len() as u32;
                 // Cache the index for subsequent complete/definitions calls
                 if let Ok(mut cache) = symbol_cache.lock() {
@@ -305,8 +305,8 @@ fn dispatch(
                 } else {
                     // Not indexed yet — index on demand
                     drop(cache);
-                    let root = std::path::Path::new(&params.path);
-                    let syms = symbols::index_directory(root, 500);
+                    let root = fs_ops::resolve_path(&params.path);
+                    let syms = symbols::index_directory(&root, 500);
                     let completions = symbols::complete(&syms, &params.prefix, params.limit);
                     if let Ok(mut cache) = symbol_cache.lock() {
                         cache.insert(params.path.clone(), syms);
@@ -325,8 +325,8 @@ fn dispatch(
                     Response::ok(req.id, serde_json::to_value(defs).unwrap())
                 } else {
                     drop(cache);
-                    let root = std::path::Path::new(&params.path);
-                    let syms = symbols::index_directory(root, 500);
+                    let root = fs_ops::resolve_path(&params.path);
+                    let syms = symbols::index_directory(&root, 500);
                     let defs = symbols::find_definitions(&syms, &params.name);
                     if let Ok(mut cache) = symbol_cache.lock() {
                         cache.insert(params.path.clone(), syms);

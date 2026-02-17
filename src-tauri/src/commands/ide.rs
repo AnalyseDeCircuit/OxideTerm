@@ -87,22 +87,27 @@ pub async fn ide_open_project(
         return Err("Path is not a directory".to_string());
     }
 
+    // Use the canonicalized path from stat() — this resolves ~, symlinks,
+    // and relative paths to an absolute path that the agent can use directly.
+    // Normalize path separators — Windows OpenSSH may return backslashes
+    let canonical_path = info.path.replace('\\', "/");
+
     // Check if it's a Git repository
-    let git_path = format!("{}/.git", path);
+    let git_path = format!("{}/.git", canonical_path.trim_end_matches('/'));
     let is_git_repo = sftp.stat(&git_path).await.is_ok();
 
     // Get Git branch if applicable
     let git_branch = if is_git_repo {
-        get_git_branch_inner(&sftp, &path).await.ok()
+        get_git_branch_inner(&sftp, &canonical_path).await.ok()
     } else {
         None
     };
 
     // Extract project name from path
-    let name = path.rsplit('/').next().unwrap_or("project").to_string();
+    let name = canonical_path.rsplit('/').next().unwrap_or("project").to_string();
 
     Ok(ProjectInfo {
-        root_path: path,
+        root_path: canonical_path,
         name,
         is_git_repo,
         git_branch,

@@ -131,6 +131,9 @@ pub struct FileEntry {
     pub mtime: Option<u64>,
     pub permissions: Option<String>,
     pub children: Option<Vec<FileEntry>>,
+    /// True if this directory's listing was cut short by the entry budget.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 /// fs/listTree result — entries + truncation metadata

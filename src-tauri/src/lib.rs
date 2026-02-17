@@ -652,6 +652,7 @@ pub fn run() {
         commands::node_list_saved_forwards,
         // Agent commands (remote agent deployment & operations)
         commands::node_agent_deploy,
+        commands::node_agent_remove,
         commands::node_agent_status,
         commands::node_agent_read_file,
         commands::node_agent_write_file,
@@ -910,6 +911,7 @@ pub fn run() {
         commands::node_list_saved_forwards,
         // Agent commands (remote agent deployment & operations)
         commands::node_agent_deploy,
+        commands::node_agent_remove,
         commands::node_agent_status,
         commands::node_agent_read_file,
         commands::node_agent_write_file,

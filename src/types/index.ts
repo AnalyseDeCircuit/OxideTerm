@@ -1285,6 +1285,8 @@ export type AgentFileEntry = {
   mtime?: number;
   permissions?: string;
   children?: AgentFileEntry[];
+  /** True if this directory's listing was cut short by the entry budget */
+  truncated?: boolean;
 };
 
 /** Agent fs/listTree result — entries + truncation metadata */

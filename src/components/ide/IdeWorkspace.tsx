@@ -50,8 +50,10 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
   }, []);
   
   // Agent opt-in handlers
-  const handleAgentEnable = useCallback(() => {
-    useSettingsStore.getState().updateIde('agentMode', 'enabled');
+  const handleAgentEnable = useCallback((remember: boolean) => {
+    if (remember) {
+      useSettingsStore.getState().updateIde('agentMode', 'enabled');
+    }
     setAgentOptInOpen(false);
     // Deploy agent now
     agentService.ensureAgent(nodeId).catch(() => {
@@ -59,8 +61,10 @@ export function IdeWorkspace({ nodeId, rootPath }: IdeWorkspaceProps) {
     });
   }, [nodeId]);
   
-  const handleAgentSftpOnly = useCallback(() => {
-    useSettingsStore.getState().updateIde('agentMode', 'disabled');
+  const handleAgentSftpOnly = useCallback((remember: boolean) => {
+    if (remember) {
+      useSettingsStore.getState().updateIde('agentMode', 'disabled');
+    }
     setAgentOptInOpen(false);
   }, []);
   

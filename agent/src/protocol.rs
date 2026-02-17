@@ -205,6 +205,14 @@ pub struct FileEntry {
     /// Children entries (only for directories in listTree).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileEntry>>,
+    /// True if this directory's listing was cut short by the entry budget.
+    /// Frontend should show a "load more" indicator instead of assuming empty.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub truncated: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !v
 }
 
 /// fs/mkdir params
