@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Terminal, FolderOpen, GitFork, RefreshCw, XCircle, WifiOff, Settings, Activity, Network, Plug, Square, HardDrive, LayoutList, Puzzle, Monitor } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
@@ -194,6 +194,7 @@ export const TabBar = () => {
     setActiveTab,
     closeTab,
     closeTerminalSession,
+    moveTab,
     sessions,
     networkOnline
   } = useAppStore();
@@ -201,6 +202,48 @@ export const TabBar = () => {
   const orchestratorScheduleReconnect = useReconnectOrchestratorStore((s) => s.scheduleReconnect);
   const orchestratorCancel = useReconnectOrchestratorStore((s) => s.cancel);
   const [closing, setClosing] = React.useState<string | null>(null);
+
+  // Drag-and-drop state
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    // Make drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDragIndex(null);
+    setDropIndex(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropIndex(index);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    const fromIndex = dragIndex;
+    if (fromIndex !== null && fromIndex !== toIndex) {
+      moveTab(fromIndex, toIndex);
+    }
+    setDragIndex(null);
+    setDropIndex(null);
+  }, [dragIndex, moveTab]);
+
+  const handleDragLeave = useCallback(() => {
+    setDropIndex(null);
+  }, []);
 
   // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -312,17 +355,27 @@ export const TabBar = () => {
             const isManualReconnecting = !!isOrchestratorActive;
             const showReconnectProgress = !!isOrchestratorActive;
 
+            const tabIndex = tabs.indexOf(tab);
+            const isDragOver = dropIndex === tabIndex && dragIndex !== null && dragIndex !== tabIndex;
+
             return (
               // 每个 Tab 必须 flex-shrink-0，防止被挤压
               <div
                 key={tab.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, tabIndex)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, tabIndex)}
+                onDrop={(e) => handleDrop(e, tabIndex)}
+                onDragLeave={handleDragLeave}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "flex-shrink-0 group flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[240px] border-r border-theme-border cursor-pointer select-none text-sm transition-colors",
                   isActive
                     ? "bg-theme-bg-panel text-theme-text border-t-2 border-t-theme-accent"
                     : "bg-theme-bg text-theme-text-muted hover:bg-theme-bg-hover border-t-2 border-t-transparent",
-                  showReconnectProgress && "border-t-amber-500"
+                  showReconnectProgress && "border-t-amber-500",
+                  isDragOver && "border-l-2 border-l-theme-accent"
                 )}
               >
                 {tab.type === 'plugin' && tab.icon ? <PluginTabIcon iconName={tab.icon} /> : <TabIcon type={tab.type} />}

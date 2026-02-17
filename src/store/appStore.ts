@@ -86,6 +86,7 @@ interface AppStore {
    */
   closeTab: (tabId: string) => Promise<void>;
   setActiveTab: (tabId: string) => void;
+  moveTab: (fromIndex: number, toIndex: number) => void;
   
   // Actions - Split Panes
   splitPane: (tabId: string, direction: SplitDirection, newSessionId: string, newTerminalType: PaneTerminalType) => void;
@@ -763,6 +764,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setActiveTab: (tabId) => {
     set({ activeTabId: tabId });
+  },
+
+  moveTab: (fromIndex, toIndex) => {
+    set((state) => {
+      if (fromIndex === toIndex) return state;
+      const newTabs = [...state.tabs];
+      const [moved] = newTabs.splice(fromIndex, 1);
+      newTabs.splice(toIndex, 0, moved);
+      return { tabs: newTabs };
+    });
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
