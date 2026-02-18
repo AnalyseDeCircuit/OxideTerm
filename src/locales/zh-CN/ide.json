@@ -70,6 +70,12 @@
     "agent_status_sftp": "SFTP 模式（无代理）",
     "agent_status_deploying": "正在部署代理…",
     "agent_status_checking": "正在检查代理…",
+    "agent_status_manual_upload": "需要手动上传",
+    "agent_manual_upload_hint": "不支持的架构。请下载对应架构的代理二进制文件并上传到远程主机。",
+    "agent_download_link": "从 GitHub 下载",
+    "agent_upload_to": "上传到：",
+    "agent_manual_upload_arch": "架构：{{arch}}",
+    "agent_retry_btn": "重试部署",
     "contextMenu": {
       "newFile": "新建文件",
       "newFolder": "新建文件夹",

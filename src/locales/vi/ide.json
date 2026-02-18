@@ -70,6 +70,12 @@
     "agent_status_sftp": "Chế độ SFTP (không có tác vụ)",
     "agent_status_deploying": "Đang triển khai tác vụ…",
     "agent_status_checking": "Đang kiểm tra tác vụ…",
+    "agent_status_manual_upload": "Cần tải lên thủ công",
+    "agent_manual_upload_hint": "Kiến trúc không được hỗ trợ. Tải xuống tệp nhị phân agent cho kiến trúc của bạn và tải lên máy chủ từ xa.",
+    "agent_download_link": "Tải từ GitHub",
+    "agent_upload_to": "Tải lên:",
+    "agent_manual_upload_arch": "Kiến trúc: {{arch}}",
+    "agent_retry_btn": "Thử lại triển khai",
     "contextMenu": {
       "newFile": "Tệp mới",
       "newFolder": "Thư mục mới",

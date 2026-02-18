@@ -36,6 +36,11 @@ impl AgentDeployer {
     /// Deploy and start the agent on a remote host.
     ///
     /// Returns a connected `AgentTransport` if successful.
+    ///
+    /// For unsupported architectures, this method will:
+    /// 1. Check if a manually uploaded agent binary exists at the remote path
+    /// 2. If it exists, proceed to start + handshake (allowing user-provided binaries)
+    /// 3. If not, return `DeployError::ManualUploadRequired` with the expected path
     pub async fn deploy_and_start(
         controller: &HandleController,
         sftp: &SftpSession,
@@ -45,48 +50,82 @@ impl AgentDeployer {
         let arch = Self::detect_arch(controller).await?;
         info!("[agent-deploy] Remote architecture: {}", arch);
 
-        // Step 2: Resolve the local binary for this architecture
-        let local_binary = Self::resolve_binary(&arch, app_handle)?;
-        info!(
-            "[agent-deploy] Using binary: {}",
-            local_binary.display()
-        );
-
-        // Step 3: Determine remote path
+        // Step 2: Determine remote path
         let remote_dir = format!("~/{}", AGENT_REMOTE_DIR);
         let remote_path = format!("{}/{}", remote_dir, AGENT_BINARY_NAME);
 
-        // Step 4: Check if agent is already deployed (check version)
-        let needs_upload = Self::needs_upload(controller, &remote_path).await;
+        // Step 3: Try to resolve the local binary for this architecture
+        let local_binary_result = Self::resolve_binary(&arch, app_handle);
 
-        if needs_upload {
-            // Step 5: Upload binary
-            info!("[agent-deploy] Uploading agent binary...");
+        match local_binary_result {
+            Ok(local_binary) => {
+                // Supported architecture — proceed with auto-deploy
+                info!(
+                    "[agent-deploy] Using binary: {}",
+                    local_binary.display()
+                );
 
-            // Ensure remote directory exists
-            Self::exec_simple(controller, &format!("mkdir -p {}", remote_dir)).await?;
+                // Step 4: Check if agent is already deployed (check version)
+                let needs_upload = Self::needs_upload(controller, &remote_path).await;
 
-            // Read the local binary
-            let binary_data = tokio::fs::read(&local_binary)
-                .await
-                .map_err(|e| DeployError::LocalIo(e.to_string()))?;
+                if needs_upload {
+                    // Step 5: Upload binary
+                    info!("[agent-deploy] Uploading agent binary...");
 
-            info!(
-                "[agent-deploy] Binary size: {} bytes",
-                binary_data.len()
-            );
+                    // Ensure remote directory exists
+                    Self::exec_simple(controller, &format!("mkdir -p {}", remote_dir)).await?;
 
-            // Upload via SFTP
-            sftp.write_content(&remote_path, &binary_data)
-                .await
-                .map_err(|e| DeployError::Upload(e.to_string()))?;
+                    // Read the local binary
+                    let binary_data = tokio::fs::read(&local_binary)
+                        .await
+                        .map_err(|e| DeployError::LocalIo(e.to_string()))?;
 
-            // chmod +x
-            Self::exec_simple(controller, &format!("chmod +x {}", remote_path)).await?;
+                    info!(
+                        "[agent-deploy] Binary size: {} bytes",
+                        binary_data.len()
+                    );
 
-            info!("[agent-deploy] Upload complete");
-        } else {
-            info!("[agent-deploy] Agent already deployed, skipping upload");
+                    // Upload via SFTP
+                    sftp.write_content(&remote_path, &binary_data)
+                        .await
+                        .map_err(|e| DeployError::Upload(e.to_string()))?;
+
+                    // chmod +x
+                    Self::exec_simple(controller, &format!("chmod +x {}", remote_path)).await?;
+
+                    info!("[agent-deploy] Upload complete");
+                } else {
+                    info!("[agent-deploy] Agent already deployed, skipping upload");
+                }
+            }
+            Err(DeployError::UnsupportedArch(ref unsupported_arch)) => {
+                // Unsupported architecture — check if user manually uploaded a binary
+                info!(
+                    "[agent-deploy] Unsupported architecture '{}', checking for manual upload at {}",
+                    unsupported_arch, remote_path
+                );
+
+                let needs_upload = Self::needs_upload(controller, &remote_path).await;
+
+                if needs_upload {
+                    // No usable binary found — inform user to manually upload
+                    info!(
+                        "[agent-deploy] No agent binary found for arch '{}', manual upload required",
+                        arch
+                    );
+                    return Err(DeployError::ManualUploadRequired {
+                        arch: arch.clone(),
+                        remote_path: remote_path.clone(),
+                    });
+                } else {
+                    // User has manually uploaded a binary — proceed
+                    info!(
+                        "[agent-deploy] Found manually uploaded agent for unsupported arch '{}'",
+                        arch
+                    );
+                }
+            }
+            Err(e) => return Err(e),
         }
 
         // Step 6: Start the agent
@@ -277,6 +316,9 @@ pub enum DeployError {
     #[error("Unsupported architecture: {0}")]
     UnsupportedArch(String),
 
+    #[error("Manual upload required for arch '{arch}': upload agent binary to {remote_path}")]
+    ManualUploadRequired { arch: String, remote_path: String },
+
     #[error("Agent binary not found: {0}")]
     BinaryNotFound(String),
 
@@ -306,6 +348,9 @@ impl std::fmt::Display for AgentStatus {
             }
             AgentStatus::Failed { reason } => write!(f, "Failed: {}", reason),
             AgentStatus::UnsupportedArch { arch } => write!(f, "Unsupported arch: {}", arch),
+            AgentStatus::ManualUploadRequired { arch, remote_path } => {
+                write!(f, "Manual upload required for {}: {}", arch, remote_path)
+            }
         }
     }
 }

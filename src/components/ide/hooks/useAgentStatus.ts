@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { nodeAgentStatus } from '../../../lib/api';
 import type { AgentStatus } from '../../../types';
 
-export type AgentMode = 'agent' | 'sftp' | 'checking' | 'deploying';
+export type AgentMode = 'agent' | 'sftp' | 'checking' | 'deploying' | 'manual-upload';
 
 interface AgentStatusInfo {
   /** Current operating mode */
@@ -46,6 +46,9 @@ export function useAgentStatus(nodeId: string | undefined): AgentStatusInfo {
         case 'deploying':
           setMode('deploying');
           break;
+        case 'manualUploadRequired':
+          setMode('manual-upload');
+          break;
         case 'notDeployed':
         case 'unsupportedArch':
         case 'failed':
@@ -72,9 +75,9 @@ export function useAgentStatus(nodeId: string | undefined): AgentStatusInfo {
 
   // Poll while the agent is not yet ready (checking, deploying, or sftp).
   // Once deployed, the agent may become ready after the background deploy
-  // finishes. Stop polling once we reach the 'agent' state.
+  // finishes. Stop polling once we reach the 'agent' state or 'manual-upload' state (requires user action).
   useEffect(() => {
-    if (!nodeId || mode === 'agent') return;
+    if (!nodeId || mode === 'agent' || mode === 'manual-upload') return;
 
     // Poll more aggressively while deploying/checking, slower for sftp
     const interval = mode === 'deploying' || mode === 'checking' ? 2000 : 5000;
@@ -103,6 +106,8 @@ export function useAgentStatus(nodeId: string | undefined): AgentStatusInfo {
         return 'Agent…';
       case 'checking':
         return '…';
+      case 'manual-upload':
+        return 'SFTP';  // Still SFTP mode, but with hint available
       case 'sftp':
       default:
         return 'SFTP';

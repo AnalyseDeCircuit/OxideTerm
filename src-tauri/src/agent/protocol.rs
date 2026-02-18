@@ -246,4 +246,10 @@ pub enum AgentStatus {
     Failed { reason: String },
     /// Architecture not supported (no binary available)
     UnsupportedArch { arch: String },
+    /// Manual upload required — user must upload the agent binary for unsupported arch
+    ManualUploadRequired {
+        arch: String,
+        /// Expected remote path for the manually uploaded binary
+        remote_path: String,
+    },
 }

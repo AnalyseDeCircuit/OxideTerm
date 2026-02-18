@@ -70,6 +70,12 @@
     "agent_status_sftp": "SFTP-Modus (kein Agent)",
     "agent_status_deploying": "Agent wird bereitgestellt…",
     "agent_status_checking": "Agent wird überprüft…",
+    "agent_status_manual_upload": "Manueller Upload erforderlich",
+    "agent_manual_upload_hint": "Nicht unterstützte Architektur. Laden Sie die Agent-Binärdatei für Ihre Architektur herunter und laden Sie sie auf den Remote-Host hoch.",
+    "agent_download_link": "Von GitHub herunterladen",
+    "agent_upload_to": "Hochladen nach:",
+    "agent_manual_upload_arch": "Architektur: {{arch}}",
+    "agent_retry_btn": "Erneut bereitstellen",
     "contextMenu": {
       "newFile": "Neue Datei",
       "newFolder": "Neuer Ordner",

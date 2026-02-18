@@ -70,6 +70,12 @@
     "agent_status_sftp": "Mode SFTP (sans agent)",
     "agent_status_deploying": "Déploiement de l'agent…",
     "agent_status_checking": "Vérification de l'agent…",
+    "agent_status_manual_upload": "Téléchargement manuel requis",
+    "agent_manual_upload_hint": "Architecture non prise en charge. Téléchargez le binaire de l'agent pour votre architecture et envoyez-le sur l'hôte distant.",
+    "agent_download_link": "Télécharger depuis GitHub",
+    "agent_upload_to": "Envoyer vers :",
+    "agent_manual_upload_arch": "Architecture : {{arch}}",
+    "agent_retry_btn": "Réessayer le déploiement",
     "contextMenu": {
       "newFile": "Nouveau fichier",
       "newFolder": "Nouveau dossier",

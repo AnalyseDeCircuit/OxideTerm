@@ -23,7 +23,7 @@ use tauri::{AppHandle, Emitter, State};
 use tracing::{debug, info, warn};
 
 use crate::agent::{
-    AgentDeployer, AgentRegistry, AgentSession, AgentStatus, GitStatusResult,
+    AgentDeployer, AgentRegistry, AgentSession, AgentStatus, DeployError, GitStatusResult,
     GrepMatch, ListTreeResult, ReadFileResult, SymbolIndexResult, SymbolInfo,
     WriteFileResult,
 };
@@ -79,6 +79,13 @@ pub async fn node_agent_deploy(
             let session = AgentSession::new(transport, info);
             agent_registry.register(resolved.connection_id.clone(), session);
             Ok(status)
+        }
+        Err(DeployError::ManualUploadRequired { arch, remote_path }) => {
+            info!(
+                "[node_agent_deploy] Manual upload required for arch '{}' at {}",
+                arch, remote_path
+            );
+            Ok(AgentStatus::ManualUploadRequired { arch, remote_path })
         }
         Err(e) => {
             warn!(

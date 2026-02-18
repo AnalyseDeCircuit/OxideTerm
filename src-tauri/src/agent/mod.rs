@@ -11,7 +11,7 @@ mod protocol;
 mod registry;
 mod transport;
 
-pub use deploy::AgentDeployer;
+pub use deploy::{AgentDeployer, DeployError};
 pub use protocol::*;
 pub use registry::{AgentRegistry, AgentSession};
 pub use transport::AgentTransport;

@@ -70,6 +70,12 @@
     "agent_status_sftp": "SFTP mode (no agent)",
     "agent_status_deploying": "Deploying agent…",
     "agent_status_checking": "Checking agent…",
+    "agent_status_manual_upload": "Manual upload required",
+    "agent_manual_upload_hint": "Unsupported architecture. Download the agent binary for your architecture and upload it to the remote host.",
+    "agent_download_link": "Download from GitHub",
+    "agent_upload_to": "Upload to:",
+    "agent_manual_upload_arch": "Architecture: {{arch}}",
+    "agent_retry_btn": "Retry Deploy",
     "contextMenu": {
       "newFile": "New File",
       "newFolder": "New Folder",

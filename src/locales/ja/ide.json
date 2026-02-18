@@ -70,6 +70,12 @@
     "agent_status_sftp": "SFTP モード（エージェントなし）",
     "agent_status_deploying": "エージェントをデプロイ中…",
     "agent_status_checking": "エージェントを確認中…",
+    "agent_status_manual_upload": "手動アップロードが必要",
+    "agent_manual_upload_hint": "サポートされていないアーキテクチャです。対応するエージェントバイナリをダウンロードしてリモートホストにアップロードしてください。",
+    "agent_download_link": "GitHub からダウンロード",
+    "agent_upload_to": "アップロード先：",
+    "agent_manual_upload_arch": "アーキテクチャ: {{arch}}",
+    "agent_retry_btn": "再デプロイ",
     "contextMenu": {
       "newFile": "新規ファイル",
       "newFolder": "新規フォルダ",

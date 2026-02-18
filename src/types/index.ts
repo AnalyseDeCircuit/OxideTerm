@@ -1256,7 +1256,8 @@ export type AgentStatus =
   | { type: 'deploying' }
   | { type: 'ready'; version: string; arch: string; pid: number }
   | { type: 'failed'; reason: string }
-  | { type: 'unsupportedArch'; arch: string };
+  | { type: 'unsupportedArch'; arch: string }
+  | { type: 'manualUploadRequired'; arch: string; remotePath: string };
 
 /** Agent fs/readFile result */
 export type AgentReadFileResult = {

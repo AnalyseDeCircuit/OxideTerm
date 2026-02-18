@@ -70,6 +70,12 @@
     "agent_status_sftp": "Modalità SFTP (nessun agente)",
     "agent_status_deploying": "Distribuzione dell'agente…",
     "agent_status_checking": "Verifica dell'agente…",
+    "agent_status_manual_upload": "Caricamento manuale richiesto",
+    "agent_manual_upload_hint": "Architettura non supportata. Scarica il binario dell'agente per la tua architettura e caricalo sull'host remoto.",
+    "agent_download_link": "Scarica da GitHub",
+    "agent_upload_to": "Carica su:",
+    "agent_manual_upload_arch": "Architettura: {{arch}}",
+    "agent_retry_btn": "Riprova distribuzione",
     "contextMenu": {
       "newFile": "Nuovo file",
       "newFolder": "Nuova cartella",
