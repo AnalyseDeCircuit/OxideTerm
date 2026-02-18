@@ -68,7 +68,11 @@
       "history": "Lịch sử",
       "pending": "Đầu vào",
       "total": "Tổng",
-      "warning_limit": "Sắp đạt giới hạn ngữ cảnh"
+      "warning_limit": "Sắp đạt giới hạn ngữ cảnh",
+      "approaching_limit": "Ngữ cảnh sắp đạt giới hạn. Hãy tóm tắt cuộc trò chuyện hoặc bắt đầu cuộc trò chuyện mới.",
+      "summarize": "Tóm tắt",
+      "summarize_confirm": "Nén lịch sử cuộc trò chuyện thành bản tóm tắt?",
+      "summary_prefix": "Tóm tắt {{count}} tin nhắn"
     },
     "model_selector": {
       "no_key": "Không có khóa",

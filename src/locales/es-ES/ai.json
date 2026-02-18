@@ -68,7 +68,12 @@
       "history": "Historial",
       "pending": "Entrada",
       "total": "Total",
-      "warning_limit": "Cerca del límite de contexto"    },
+      "warning_limit": "Cerca del límite de contexto",
+      "approaching_limit": "El contexto se acerca al límite. Resuma la conversación o inicie un nuevo chat.",
+      "summarize": "Resumir",
+      "summarize_confirm": "¿Comprimir el historial de conversación en un resumen?",
+      "summary_prefix": "Resumen de {{count}} mensajes"
+    },
     "model_selector": {
       "no_key": "Sin clave",
       "no_key_warning": "Por favor, configure la API Key primero",

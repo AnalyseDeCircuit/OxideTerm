@@ -3,36 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { Info } from 'lucide-react';
 import { useAiChatStore } from '../../store/aiChatStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { estimateTokens, getModelContextWindow } from '../../lib/ai/tokenUtils';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Token Estimation
+// Constants
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Hardcoded system prompt (matches aiChatStore.ts)
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful terminal assistant. You help users with shell commands, scripts, and terminal operations. Be concise and direct. When providing commands, format them clearly. You can use markdown for formatting.`;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Token Estimation
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Rough token estimation (1 token ≈ 4 chars for English, ~2 for CJK)
- * This is a heuristic - actual tokenization varies by model
- */
-function estimateTokens(text: string): number {
-  if (!text) return 0;
-  
-  // Count CJK characters (Chinese, Japanese, Korean)
-  const cjkRegex = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g;
-  const cjkMatches = text.match(cjkRegex);
-  const cjkCount = cjkMatches?.length || 0;
-  
-  // Non-CJK characters
-  const nonCjkLength = text.length - cjkCount;
-  
-  // CJK: ~1.5 tokens per char, Latin: ~0.25 tokens per char (1 token ≈ 4 chars)
-  return Math.ceil(cjkCount * 1.5 + nonCjkLength * 0.25);
-}
 
 interface TokenBreakdown {
   system: number;
@@ -56,17 +34,22 @@ export function ContextIndicator({ pendingInput = '' }: ContextIndicatorProps) {
   
   // Get active conversation
   const conversation = conversations.find((c) => c.id === activeConversationId);
+
+  // Resolve active model name
+  const activeModel = aiSettings.activeModel
+    || aiSettings.providers?.find(p => p.id === aiSettings.activeProviderId)?.defaultModel
+    || aiSettings.model
+    || '';
   
   // Calculate token breakdown
   const breakdown = useMemo<TokenBreakdown>(() => {
     // System prompt tokens (using default, actual may vary with context)
     const systemTokens = estimateTokens(DEFAULT_SYSTEM_PROMPT);
     
-    // History tokens (last N messages sent to API)
+    // History tokens (all messages — the API layer trims dynamically)
     let historyTokens = 0;
     if (conversation) {
-      const recentMessages = conversation.messages.slice(-10); // Match API logic
-      for (const msg of recentMessages) {
+      for (const msg of conversation.messages) {
         if (msg.role === 'user' || msg.role === 'assistant') {
           historyTokens += estimateTokens(msg.content);
         }
@@ -84,25 +67,10 @@ export function ContextIndicator({ pendingInput = '' }: ContextIndicatorProps) {
     };
   }, [conversation?.messages, pendingInput]);
   
-  // Context window limits by model family (rough estimates)
+  // Context window from cached provider data or fallback pattern matching
   const maxTokens = useMemo(() => {
-    const model = aiSettings.model.toLowerCase();
-    if (model.includes('gpt-4-turbo') || model.includes('gpt-4o')) return 128000;
-    if (model.includes('gpt-4-32k')) return 32000;
-    if (model.includes('gpt-4')) return 8192;
-    if (model.includes('gpt-3.5-turbo-16k')) return 16000;
-    if (model.includes('gpt-3.5')) return 4096;
-    if (model.includes('claude-3')) return 200000;
-    if (model.includes('claude-2')) return 100000;
-    if (model.includes('claude')) return 100000;
-    if (model.includes('gemini')) return 128000;
-    if (model.includes('llama-3')) return 8192;
-    if (model.includes('mistral')) return 32000;
-    if (model.includes('qwen')) return 32000;
-    if (model.includes('deepseek')) return 128000;
-    // Default for unknown models
-    return 8192;
-  }, [aiSettings.model]);
+    return getModelContextWindow(activeModel, aiSettings.modelContextWindows, aiSettings.activeProviderId ?? undefined);
+  }, [activeModel, aiSettings.modelContextWindows, aiSettings.activeProviderId]);
   
   const percentage = Math.min((breakdown.total / maxTokens) * 100, 100);
   const isWarning = percentage > 70;

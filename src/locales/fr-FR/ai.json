@@ -68,7 +68,11 @@
       "history": "Historique",
       "pending": "Entrée",
       "total": "Total",
-      "warning_limit": "Limite de contexte proche"
+      "warning_limit": "Limite de contexte proche",
+      "approaching_limit": "Le contexte approche de la limite. Résumez la conversation ou démarrez un nouveau chat.",
+      "summarize": "Résumer",
+      "summarize_confirm": "Compresser l'historique de conversation en un résumé ?",
+      "summary_prefix": "Résumé de {{count}} messages"
     },
     "model_selector": {
       "no_key": "Pas de clé",

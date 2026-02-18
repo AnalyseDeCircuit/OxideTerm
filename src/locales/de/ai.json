@@ -68,7 +68,12 @@
       "history": "Verlauf",
       "pending": "Eingabe",
       "total": "Gesamt",
-      "warning_limit": "Kontextlimit fast erreicht"    },
+      "warning_limit": "Kontextlimit fast erreicht",
+      "approaching_limit": "Kontextlimit fast erreicht. Fassen Sie die Konversation zusammen oder starten Sie einen neuen Chat.",
+      "summarize": "Zusammenfassen",
+      "summarize_confirm": "Gesprächsverlauf in eine Zusammenfassung komprimieren?",
+      "summary_prefix": "Zusammenfassung von {{count}} Nachrichten"
+    },
     "model_selector": {
       "no_key": "Kein Schlüssel",
       "no_key_warning": "Bitte zuerst API Key konfigurieren",

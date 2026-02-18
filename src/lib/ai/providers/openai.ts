@@ -112,6 +112,25 @@ export const openaiProvider: AiStreamProvider = {
       ? chatModels
       : data.data.map((m: { id: string }) => m.id).sort();
   },
+
+  async fetchModelDetails(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>> {
+    const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
+    const resp = await fetch(`${cleanBaseUrl}/models`, {
+      headers: { 'Authorization': `Bearer ${config.apiKey}` },
+    });
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    if (!Array.isArray(data.data)) return {};
+    const result: Record<string, number> = {};
+    for (const m of data.data) {
+      // OpenAI returns context_window on some endpoints, or we can infer from id
+      const ctx = m.context_window ?? m.context_length;
+      if (typeof ctx === 'number' && ctx > 0) {
+        result[m.id] = ctx;
+      }
+    }
+    return result;
+  },
 };
 
 /**
@@ -131,5 +150,23 @@ export const openaiCompatibleProvider: AiStreamProvider = {
     const data = await resp.json();
     if (!Array.isArray(data.data)) return [];
     return data.data.map((m: { id: string }) => m.id).sort();
+  },
+
+  async fetchModelDetails(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>> {
+    const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
+    const resp = await fetch(`${cleanBaseUrl}/models`, {
+      headers: config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {},
+    });
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    if (!Array.isArray(data.data)) return {};
+    const result: Record<string, number> = {};
+    for (const m of data.data) {
+      const ctx = m.context_window ?? m.context_length;
+      if (typeof ctx === 'number' && ctx > 0) {
+        result[m.id] = ctx;
+      }
+    }
+    return result;
   },
 };

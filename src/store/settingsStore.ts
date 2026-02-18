@@ -164,6 +164,11 @@ export interface AiSettings {
   thinkingStyle: AiThinkingStyle;
   /** Whether thinking blocks are expanded by default */
   thinkingDefaultExpanded: boolean;
+  /** Cached model context window sizes from provider APIs.
+   * Scoped by provider id to prevent collisions when two providers share model names.
+   * Shape: { [providerId]: { [modelId]: tokenCount } }
+   */
+  modelContextWindows?: Record<string, Record<string, number>>;
 }
 
 /** Local terminal settings */
@@ -892,15 +897,34 @@ export const useSettingsStore = create<SettingsStore>()(
 
       const models = await impl.fetchModels({ baseUrl: provider.baseUrl, apiKey });
 
-      // Update store
+      // Fetch context window sizes if provider supports it
+      let contextWindows: Record<string, number> = {};
+      if (impl.fetchModelDetails) {
+        try {
+          contextWindows = await impl.fetchModelDetails({ baseUrl: provider.baseUrl, apiKey });
+        } catch (e) {
+          console.warn('[Settings] Failed to fetch model details:', e);
+        }
+      }
+
+      // Update store — store context windows scoped under providerId to avoid
+      // cross-provider collisions when different providers share model names.
       set((s) => {
         const ai = s.settings.ai;
         const updatedProviders = ai.providers.map(p =>
           p.id === providerId ? { ...p, models } : p
         );
+        const existingWindows = ai.modelContextWindows ?? {};
+        const mergedContextWindows: Record<string, Record<string, number>> = {
+          ...existingWindows,
+          [providerId]: {
+            ...(existingWindows[providerId] ?? {}),
+            ...contextWindows,
+          },
+        };
         const newSettings: PersistedSettingsV2 = {
           ...s.settings,
-          ai: { ...ai, providers: updatedProviders },
+          ai: { ...ai, providers: updatedProviders, modelContextWindows: mergedContextWindows },
         };
         persistSettings(newSettings);
         return { settings: newSettings };

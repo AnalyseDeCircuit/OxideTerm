@@ -68,7 +68,12 @@
       "history": "기록",
       "pending": "입력",
       "total": "총계",
-      "warning_limit": "컨텍스트 한도에 근접"    },
+      "warning_limit": "컨텍스트 한도에 근접",
+      "approaching_limit": "컨텍스트가 한도에 근접하고 있습니다. 대화를 요약하거나 새 채팅을 시작하세요.",
+      "summarize": "요약",
+      "summarize_confirm": "대화 기록을 요약으로 압축하시겠습니까?",
+      "summary_prefix": "{{count}}개 메시지 요약"
+    },
     "model_selector": {
       "no_key": "키 없음",
       "no_key_warning": "먼저 API Key를 설정하세요",

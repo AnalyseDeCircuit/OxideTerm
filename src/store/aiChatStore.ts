@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useSettingsStore } from './settingsStore';
 import { gatherSidebarContext, type SidebarContext } from '../lib/sidebarContextProvider';
 import { getProvider } from '../lib/ai/providerRegistry';
+import { estimateTokens, trimHistoryToTokenBudget, getModelContextWindow } from '../lib/ai/tokenUtils';
 import type { ChatMessage as ProviderChatMessage } from '../lib/ai/providers';
 import type { AiChatMessage, AiConversation } from '../types';
 import i18n from '../i18n';
@@ -83,6 +84,7 @@ interface AiChatStore {
   sendMessage: (content: string, context?: string) => Promise<void>;
   stopGeneration: () => void;
   regenerateLastResponse: () => Promise<void>;
+  summarizeConversation: () => Promise<void>;
 
   // Internal (persist to backend)
   _addMessage: (conversationId: string, message: AiChatMessage, sidebarContext?: SidebarContext | null) => Promise<void>;
@@ -474,10 +476,20 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
       });
     }
 
-    // Add conversation history (limited)
+    // ════════════════════════════════════════════════════════════════════
+    // Token-Aware History Trimming
+    // ════════════════════════════════════════════════════════════════════
+
+    const systemTokens = estimateTokens(systemPrompt) + estimateTokens(effectiveContext);
+    const contextWindow = getModelContextWindow(
+      providerModel,
+      aiSettings.modelContextWindows,
+      providerId,
+    );
+
     const historyMessages = get().conversations.find((c) => c.id === convId)?.messages || [];
-    const recentHistory = historyMessages.slice(-10);
-    for (const msg of recentHistory) {
+    const trimmed = trimHistoryToTokenBudget(historyMessages, contextWindow, systemTokens, 0);
+    for (const msg of trimmed) {
       if ((msg.role === 'user' || msg.role === 'assistant') && msg.content.trim() !== '') {
         apiMessages.push({ role: msg.role, content: msg.content });
       }
@@ -671,6 +683,120 @@ export const useAiChatStore = create<AiChatStore>()((set, get) => ({
 
     // Resend
     await sendMessage(lastUserMessage.content, lastUserMessage.context);
+  },
+
+  // Summarize conversation — compress history into a single summary message
+  summarizeConversation: async () => {
+    const { activeConversationId, conversations } = get();
+    if (!activeConversationId) return;
+
+    const conversation = conversations.find((c) => c.id === activeConversationId);
+    if (!conversation || conversation.messages.length < 4) return;
+
+    // Get AI settings for provider
+    const aiSettings = useSettingsStore.getState().settings.ai;
+    if (!aiSettings.enabled) return;
+
+    const activeProvider = aiSettings.providers?.find(p => p.id === aiSettings.activeProviderId);
+    const providerType = activeProvider?.type || 'openai';
+    const providerBaseUrl = activeProvider?.baseUrl || aiSettings.baseUrl;
+    const providerModel = aiSettings.activeModel || activeProvider?.defaultModel || aiSettings.model;
+    const providerId = activeProvider?.id;
+
+    if (!providerModel) return;
+
+    // Get API key
+    let apiKey: string | null = null;
+    try {
+      if (providerId) {
+        apiKey = await api.getAiProviderApiKey(providerId);
+      }
+      if (!apiKey && providerType !== 'ollama') return;
+    } catch {
+      if (providerType !== 'ollama') return;
+    }
+
+    // Build summary request
+    const historyText = conversation.messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n');
+
+    const summaryPrompt: ChatCompletionMessage[] = [
+      {
+        role: 'system',
+        content: 'Summarize the following conversation in a concise paragraph. Capture the key topics, questions asked, solutions provided, and any important context. Write in the same language as the conversation. Keep it under 200 words.',
+      },
+      {
+        role: 'user',
+        content: historyText,
+      },
+    ];
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const provider = getProvider(providerType);
+      let summaryContent = '';
+      const abortController = new AbortController();
+      set({ abortController });
+
+      for await (const event of provider.streamCompletion(
+        { baseUrl: providerBaseUrl, model: providerModel, apiKey: apiKey || '' },
+        summaryPrompt,
+        abortController.signal,
+      )) {
+        if (event.type === 'content') {
+          summaryContent += event.content;
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      }
+
+      if (!summaryContent.trim()) return;
+
+      // Replace all messages with a single summary message pair
+      const originalCount = conversation.messages.length;
+      const summaryMessage: AiChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: `📋 **${i18n.t('ai.context.summary_prefix', { count: originalCount })}**\n\n${summaryContent}`,
+        timestamp: Date.now(),
+      };
+
+      // Atomically replace all messages in a single backend transaction.
+      // If the command fails, local state is untouched and the error bubbles
+      // to the outer catch which sets the user-visible error state.
+      await invoke('ai_chat_replace_conversation_messages', {
+        request: {
+          conversationId: activeConversationId,
+          title: conversation.title,
+          message: {
+            id: summaryMessage.id,
+            conversationId: activeConversationId,
+            role: summaryMessage.role,
+            content: summaryMessage.content,
+            timestamp: summaryMessage.timestamp,
+            contextSnapshot: null,
+          },
+        },
+      });
+
+      // Persistence succeeded — now update local state
+      set((state) => ({
+        conversations: state.conversations.map((c) => {
+          if (c.id !== activeConversationId) return c;
+          return { ...c, messages: [summaryMessage], updatedAt: Date.now() };
+        }),
+      }));
+    } catch (e) {
+      if (!(e instanceof Error && e.name === 'AbortError')) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        set({ error: errorMessage });
+      }
+    } finally {
+      set({ isLoading: false, abortController: null });
+    }
   },
 
   // Internal: Add message to conversation and persist

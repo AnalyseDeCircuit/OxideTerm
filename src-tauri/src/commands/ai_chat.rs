@@ -36,6 +36,15 @@ pub struct SaveMessageRequest {
     pub context_snapshot: Option<ContextSnapshotRequest>,
 }
 
+/// Request to atomically replace all messages in a conversation
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceConversationMessagesRequest {
+    pub conversation_id: String,
+    pub title: String,
+    pub message: SaveMessageRequest,
+}
+
 /// Context snapshot from frontend
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -280,6 +289,39 @@ pub async fn ai_chat_delete_messages_after(
 #[tauri::command]
 pub async fn ai_chat_clear_all(store: State<'_, Arc<AiChatStore>>) -> Result<(), String> {
     store.clear_all().map_err(|e| e.to_string())
+}
+
+/// Atomically replace all messages in a conversation with a single summary
+/// message. Runs inside one redb write transaction — either all changes commit
+/// or the original data is preserved.
+#[tauri::command]
+pub async fn ai_chat_replace_conversation_messages(
+    store: State<'_, Arc<AiChatStore>>,
+    request: ReplaceConversationMessagesRequest,
+) -> Result<(), String> {
+    let message = PersistedMessage {
+        id: request.message.id,
+        // Always use the top-level conversation_id so the message record
+        // cannot drift from the target conversation even if the frontend
+        // sends mismatched fields.
+        conversation_id: request.conversation_id.clone(),
+        role: request.message.role,
+        content: request.message.content,
+        timestamp: request.message.timestamp,
+        context_snapshot: request.message.context_snapshot.map(|c| ContextSnapshot {
+            cwd: c.cwd,
+            selection: c.selection,
+            buffer_tail: c.buffer_tail,
+            buffer_compressed: false,
+            local_os: c.local_os,
+            connection_info: c.connection_info,
+            terminal_type: c.terminal_type,
+        }),
+    };
+
+    store
+        .replace_conversation_messages(&request.conversation_id, &request.title, message)
+        .map_err(|e| e.to_string())
 }
 
 /// Get database statistics

@@ -562,6 +562,80 @@ impl AiChatStore {
         Ok(())
     }
 
+    /// Atomically replace all messages in a conversation with a single new message.
+    ///
+    /// This is used by the summarize feature to compress history into one summary
+    /// message. The entire operation (delete old messages, update metadata, save new
+    /// message) happens inside a single redb write transaction — if any step fails
+    /// the whole thing rolls back and the original data is preserved.
+    pub fn replace_conversation_messages(
+        &self,
+        conversation_id: &str,
+        title: &str,
+        new_message: PersistedMessage,
+    ) -> Result<(), AiChatError> {
+        let write_txn = self.db.begin_write()?;
+
+        {
+            let mut conv_table = write_txn.open_table(CONVERSATIONS_TABLE)?;
+            let mut msg_table = write_txn.open_table(MESSAGES_TABLE)?;
+            let mut msg_index_table = write_txn.open_table(CONV_MESSAGES_TABLE)?;
+
+            // 1. Delete all existing messages for this conversation
+            if let Some(list_bytes) = msg_index_table.get(conversation_id)? {
+                let message_ids: Vec<String> = rmp_serde::from_slice(list_bytes.value())?;
+                for msg_id in message_ids {
+                    // Propagate errors so a delete failure aborts the whole
+                    // transaction and preserves the original data.
+                    msg_table.remove(msg_id.as_str())?;
+                }
+            }
+
+            // 2. Save the new summary message
+            let msg_bytes = rmp_serde::to_vec(&new_message)?;
+            msg_table.insert(new_message.id.as_str(), msg_bytes.as_slice())?;
+
+            // 3. Replace message index with just the new message id
+            let new_ids = vec![new_message.id.clone()];
+            let list_bytes = rmp_serde::to_vec(&new_ids)?;
+            msg_index_table.insert(conversation_id, list_bytes.as_slice())?;
+
+            // 4. Update conversation metadata
+            let existing_meta: Option<ConversationMeta> = conv_table
+                .get(conversation_id)?
+                .map(|meta_bytes| rmp_serde::from_slice(meta_bytes.value()).ok())
+                .flatten();
+
+            let now = chrono::Utc::now().timestamp_millis();
+            let meta = if let Some(mut m) = existing_meta {
+                m.title = title.to_string();
+                m.updated_at = now;
+                m.message_count = 1;
+                m
+            } else {
+                // Conversation was somehow missing — recreate metadata
+                ConversationMeta {
+                    id: conversation_id.to_string(),
+                    title: title.to_string(),
+                    created_at: now,
+                    updated_at: now,
+                    message_count: 1,
+                    session_id: None,
+                }
+            };
+
+            let meta_bytes = rmp_serde::to_vec(&meta)?;
+            conv_table.insert(conversation_id, meta_bytes.as_slice())?;
+        }
+
+        write_txn.commit()?;
+        info!(
+            "Atomically replaced conversation {} messages with summary {}",
+            conversation_id, new_message.id
+        );
+        Ok(())
+    }
+
     /// Delete messages after a certain message (for regeneration)
     pub fn delete_messages_after(
         &self,

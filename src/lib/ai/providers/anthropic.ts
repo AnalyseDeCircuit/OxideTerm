@@ -189,4 +189,28 @@ export const anthropicProvider: AiStreamProvider = {
       .map((m: { id: string }) => m.id)
       .filter((id: string) => id.startsWith('claude-'))
       .sort();
-  },};
+  },
+
+  async fetchModelDetails(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>> {
+    const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
+    const resp = await fetch(`${cleanBaseUrl}/v1/models`, {
+      headers: {
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+    });
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    if (!Array.isArray(data.data)) return {};
+    const result: Record<string, number> = {};
+    for (const m of data.data) {
+      // Anthropic returns context_window or input_token_limit
+      const ctx = m.context_window ?? m.input_token_limit;
+      if (typeof ctx === 'number' && ctx > 0) {
+        result[m.id] = ctx;
+      }
+    }
+    return result;
+  },
+};

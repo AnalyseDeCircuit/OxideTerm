@@ -73,6 +73,15 @@ export type AiStreamProvider = {
    * @returns Array of model ID strings
    */
   fetchModels?(config: { baseUrl: string; apiKey: string }): Promise<string[]>;
+
+  /**
+   * Fetch model details including context window sizes.
+   * Optional — returns a map of model ID to context window token count.
+   *
+   * @param config - baseUrl and apiKey for auth
+   * @returns Record mapping model IDs to their context window sizes
+   */
+  fetchModelDetails?(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>>;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

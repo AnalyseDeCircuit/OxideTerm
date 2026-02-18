@@ -68,7 +68,11 @@
       "history": "Cronologia",
       "pending": "Input",
       "total": "Totale",
-      "warning_limit": "Limite contesto vicino"
+      "warning_limit": "Limite contesto vicino",
+      "approaching_limit": "Il contesto si avvicina al limite. Riassumi la conversazione o avvia una nuova chat.",
+      "summarize": "Riassumi",
+      "summarize_confirm": "Comprimere la cronologia della conversazione in un riassunto?",
+      "summary_prefix": "Riassunto di {{count}} messaggi"
     },
     "model_selector": {
       "no_key": "Nessuna chiave",

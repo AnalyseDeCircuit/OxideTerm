@@ -128,4 +128,45 @@ export const ollamaProvider: AiStreamProvider = {
       .map((m: { name: string }) => m.name)
       .sort();
   },
+
+  async fetchModelDetails(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>> {
+    const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
+    // First get all model names
+    let resp: Response;
+    try {
+      resp = await fetch(`${cleanBaseUrl}/api/tags`, {
+        headers: config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {},
+      });
+    } catch {
+      return {};
+    }
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    if (!Array.isArray(data.models)) return {};
+
+    const result: Record<string, number> = {};
+    // Query each model for its context size via /api/show
+    for (const m of data.models) {
+      try {
+        const showResp = await fetch(`${cleanBaseUrl}/api/show`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: m.name }),
+        });
+        if (showResp.ok) {
+          const showData = await showResp.json();
+          // Ollama returns model_info with context_length, or parameters with num_ctx
+          const ctx = showData.model_info?.['general.context_length']
+            ?? showData.model_info?.context_length
+            ?? showData.parameters?.num_ctx;
+          if (typeof ctx === 'number' && ctx > 0) {
+            result[m.name] = ctx;
+          }
+        }
+      } catch {
+        // Skip individual model errors
+      }
+    }
+    return result;
+  },
 };

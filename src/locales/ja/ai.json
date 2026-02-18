@@ -68,7 +68,12 @@
       "history": "履歴",
       "pending": "入力",
       "total": "合計",
-      "warning_limit": "コンテキスト上限に近付いています"    },
+      "warning_limit": "コンテキスト上限に近付いています",
+      "approaching_limit": "コンテキストが上限に近付いています。要約するか新しいチャットを開始してください。",
+      "summarize": "要約",
+      "summarize_confirm": "会話履歴を要約に圧縮しますか？",
+      "summary_prefix": "{{count}} 件のメッセージの要約"
+    },
     "model_selector": {
       "no_key": "キーなし",
       "no_key_warning": "先に API Key を設定してください",

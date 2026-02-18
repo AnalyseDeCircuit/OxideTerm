@@ -68,7 +68,11 @@
       "history": "History",
       "pending": "Input",
       "total": "Total",
-      "warning_limit": "Approaching context limit"
+      "warning_limit": "Approaching context limit",
+      "approaching_limit": "Context approaching limit. Consider summarizing or starting a new chat.",
+      "summarize": "Summarize",
+      "summarize_confirm": "Compress conversation history into a summary?",
+      "summary_prefix": "Summary of {{count}} messages"
     },
     "model_selector": {
       "no_key": "No Key",

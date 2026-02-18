@@ -142,4 +142,24 @@ export const geminiProvider: AiStreamProvider = {
       .map((m: { name: string }) => m.name.replace('models/', ''))
       .sort();
   },
+
+  async fetchModelDetails(config: { baseUrl: string; apiKey: string }): Promise<Record<string, number>> {
+    const cleanBaseUrl = config.baseUrl.replace(/\/+$/, '');
+    const resp = await fetch(
+      `${cleanBaseUrl}/v1beta/models?key=${config.apiKey}`
+    );
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    if (!Array.isArray(data.models)) return {};
+    const result: Record<string, number> = {};
+    for (const m of data.models) {
+      // Gemini returns inputTokenLimit
+      const ctx = m.inputTokenLimit;
+      const id = m.name?.replace('models/', '') || '';
+      if (typeof ctx === 'number' && ctx > 0 && id) {
+        result[id] = ctx;
+      }
+    }
+    return result;
+  },
 };
