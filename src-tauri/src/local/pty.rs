@@ -258,6 +258,39 @@ impl PtyHandle {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
+        // Ensure LANG is set for proper locale support.
+        // macOS apps launched from Finder/Dock do NOT inherit the login shell's
+        // LANG, causing locale to fall back to "C" (no Unicode, wrong collation).
+        // Detect the user's preferred locale from macOS system preferences.
+        #[cfg(target_os = "macos")]
+        {
+            let lang = std::env::var("LANG").unwrap_or_default();
+            if lang.is_empty() || lang == "C" || lang == "POSIX" {
+                let detected = std::process::Command::new("defaults")
+                    .args(["read", ".GlobalPreferences", "AppleLocale"])
+                    .output()
+                    .ok()
+                    .and_then(|o| {
+                        if o.status.success() {
+                            let locale = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                            if !locale.is_empty() {
+                                Some(format!("{}.UTF-8", locale))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| "en_US.UTF-8".to_string());
+
+                tracing::info!("LANG not set (Finder launch), using detected locale: {}", detected);
+                cmd.env("LANG", &detected);
+                // Also set LC_ALL to ensure consistent locale across all categories
+                cmd.env("LC_ALL", &detected);
+            }
+        }
+
         // Windows-specific environment variables
         #[cfg(target_os = "windows")]
         {
